@@ -35,7 +35,7 @@ Every backlog item is scored on 5 dimensions (1-5 scale):
 ## Current State
 
 - **Backend**: 38 REST endpoints, 39 MCP tools, 10 SQLite tables, 3-model eval engine
-- **Frontend**: 7 pages — ~25% of backend exposed
+- **Frontend**: 14 pages — Dashboard, Evals, Model Stats, Weights, Journal, Executions, Orders, Account, Collab
 - **Tests**: 201 passing (16 test files) — Vitest + in-memory SQLite
 - **SDK versions**: @anthropic-ai/sdk 0.74, openai 6.21, @google/genai 1.0, @stoqey/ib 1.5.3
 - **Hardening**: Input validation on order routes, symbol regex, crash handlers, safe JSON parsing
@@ -82,14 +82,14 @@ See what's happening. Required before edge experiments can be measured.
 | Item | EI | Status | Agent | Notes |
 |------|----|--------|-------|-------|
 | **Outcome recording form** | 2 | **Done** | Copilot | PR #32 |
-| **Journal entry form** | 2 | Assigned | Copilot | #45 — pre-trade reasoning capture |
-| **Journal history + detail** | 2 | Assigned | Copilot | #46 — searchable, outcome updates |
+| **Journal entry form** | 2 | **Done** | Copilot | PR #53 — pre-trade reasoning capture |
+| **Journal history + detail** | 2 | **Done** | Copilot | PR #54 — searchable, outcome updates |
 | **Score scatter chart** | 2 | **Done** | Copilot | PR #11 |
 | **Eval outcomes endpoint** | 2 | **Done** | Claude Code | `GET /api/eval/outcomes` + `eval_outcomes` MCP tool. Evals joined with outcomes — unblocks calibration + regime analytics. |
 | **Score distribution histogram** | 2 | Not started | Codex | 3-model overlay in 10-point buckets |
 | **Calibration curve UI** | 2 | Not started | Codex | Predicted confidence vs actual win rate |
 | **Run Comparer** | 2 | Not started | Copilot | Select 2-5 evals, side-by-side comparison |
-| **Collab channel feed** | 2 | Assigned | Copilot | #47 — human visibility into AI-to-AI chat |
+| **Collab channel feed** | 2 | **Done** | Copilot | PR #55 — human visibility into AI-to-AI chat |
 
 ---
 
@@ -102,10 +102,10 @@ Keep the system running. Don't over-invest here.
 | **Testing foundation** | 1 | **Done** | Copilot | 201 tests, 16 files |
 | **SDK migrations** | 1 | **Done** | Mixed | Anthropic 0.74, OpenAI 6, Google genai 1.0 |
 | **yahoo-finance2 v3 prep** | 1 | **Done** | Claude Code | Pinned ~3.13.0 |
-| **Account summary page** | 1 | Assigned | Copilot | #39 |
-| **Positions table** | 1 | Assigned | Copilot | #40 |
-| **Order management page** | 1 | Assigned | Copilot | #41 |
-| **Executions log** | 1 | Assigned | Copilot | #42 |
+| **Account summary page** | 1 | **Done** | Copilot | PR #50 |
+| **Positions table** | 1 | **Done** | Copilot | PR #49 |
+| **Order management page** | 1 | **Done** | Copilot | PR #52 |
+| **Executions log** | 1 | **Done** | Copilot | PR #51 |
 | WebSocket real-time updates | 1 | Not started | Claude Code | Replaces polling |
 | Production build | 1 | Not started | Claude Code | Static export served from Express |
 | OpenAPI spec update | 1 | Not started | Codex | Keep in sync |
@@ -176,6 +176,27 @@ Next.js 14 scaffolding, 7 pages, typed API client, React Query hooks, sidebar na
 | Outcome recording | #32 | Merged |
 | Eval filters | #37 | Merged |
 | Model stats page | #38 | Merged |
+</details>
+
+<details>
+<summary>Phase 3: Trading Workflow (COMPLETE)</summary>
+
+| Component | PR | Status |
+|-----------|----|--------|
+| Account summary + P&L | #50 | Merged |
+| Positions table | #49 | Merged |
+| Order management | #52 | Merged |
+| Executions log | #51 | Merged |
+</details>
+
+<details>
+<summary>Phase 4: Journal & Collaboration (COMPLETE)</summary>
+
+| Component | PR | Status |
+|-----------|----|--------|
+| Journal entry form | #53 | Merged |
+| Journal history table | #54 | Merged |
+| Collab channel feed | #55 | Merged |
 </details>
 
 ---
