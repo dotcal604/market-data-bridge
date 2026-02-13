@@ -34,7 +34,7 @@ Every backlog item is scored on 5 dimensions (1-5 scale):
 
 ## Current State
 
-- **Backend**: 35 REST endpoints, 34 MCP tools, 10 SQLite tables, 3-model eval engine
+- **Backend**: 38 REST endpoints, 38 MCP tools, 10 SQLite tables, 3-model eval engine
 - **Frontend**: 7 pages — ~25% of backend exposed
 - **Tests**: 201 passing (16 test files) — Vitest + in-memory SQLite
 - **SDK versions**: @anthropic-ai/sdk 0.74, openai 6.21, @google/genai 1.0, @stoqey/ib 1.5.3
@@ -84,7 +84,7 @@ See what's happening. Required before edge experiments can be measured.
 | **Journal entry form** | 2 | Assigned | Copilot | #45 — pre-trade reasoning capture |
 | **Journal history + detail** | 2 | Assigned | Copilot | #46 — searchable, outcome updates |
 | **Score scatter chart** | 2 | **Done** | Copilot | PR #11 |
-| **Eval outcomes endpoint** | 2 | Not started | Claude Code | `GET /api/eval/outcomes` — evals joined with outcomes for scatter/calibration |
+| **Eval outcomes endpoint** | 2 | **Done** | Claude Code | `GET /api/eval/outcomes` + `eval_outcomes` MCP tool. Evals joined with outcomes — unblocks calibration + regime analytics. |
 | **Score distribution histogram** | 2 | Not started | Codex | 3-model overlay in 10-point buckets |
 | **Calibration curve UI** | 2 | Not started | Codex | Predicted confidence vs actual win rate |
 | **Run Comparer** | 2 | Not started | Copilot | Select 2-5 evals, side-by-side comparison |

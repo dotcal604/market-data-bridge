@@ -696,6 +696,81 @@ export function getEvalStats(): Record<string, unknown> {
   };
 }
 
+// ── Eval Outcomes (evals joined with outcomes for analytics) ──────────────
+
+export interface EvalOutcomeRow {
+  evaluation_id: string;
+  symbol: string;
+  direction: string;
+  timestamp: string;
+  ensemble_trade_score: number;
+  ensemble_should_trade: number;
+  ensemble_confidence: number;
+  ensemble_expected_rr: number;
+  time_of_day: string;
+  volatility_regime: string;
+  liquidity_bucket: string;
+  rvol: number;
+  trade_taken: number;
+  r_multiple: number | null;
+  exit_reason: string | null;
+  recorded_at: string;
+}
+
+/**
+ * Get evaluations joined with outcomes — the core data for calibration,
+ * regime analysis, and weight recalibration analytics.
+ */
+export function getEvalOutcomes(opts: {
+  limit?: number;
+  symbol?: string;
+  days?: number;
+  tradesTakenOnly?: boolean;
+} = {}): EvalOutcomeRow[] {
+  const limit = Math.min(opts.limit ?? 500, 2000);
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+
+  if (opts.tradesTakenOnly !== false) {
+    conditions.push("o.trade_taken = 1");
+  }
+  if (opts.symbol) {
+    conditions.push("e.symbol = ?");
+    params.push(opts.symbol);
+  }
+  if (opts.days) {
+    conditions.push("e.timestamp >= datetime('now', ? || ' days')");
+    params.push(`-${opts.days}`);
+  }
+
+  const where = conditions.length > 0 ? "WHERE " + conditions.join(" AND ") : "";
+
+  return db.prepare(`
+    SELECT
+      e.id as evaluation_id,
+      e.symbol,
+      e.direction,
+      e.timestamp,
+      e.ensemble_trade_score,
+      e.ensemble_should_trade,
+      e.ensemble_confidence,
+      e.ensemble_expected_rr,
+      e.time_of_day,
+      e.volatility_regime,
+      e.liquidity_bucket,
+      e.rvol,
+      o.trade_taken,
+      o.r_multiple,
+      o.exit_reason,
+      o.recorded_at
+    FROM evaluations e
+    JOIN outcomes o ON o.evaluation_id = e.id
+    ${where}
+    ORDER BY e.timestamp DESC
+    LIMIT ?
+  `).all(...params, limit) as EvalOutcomeRow[];
+}
+
 // ── Weight Simulation Data ────────────────────────────────────────────────
 
 export interface SimulationEvalRow {

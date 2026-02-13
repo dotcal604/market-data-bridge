@@ -22,6 +22,7 @@ import {
   getDailySummaries,
   getTodaysTrades,
   getEvalsForSimulation,
+  getEvalOutcomes,
 } from "../db/database.js";
 import { logger } from "../logging.js";
 
@@ -465,6 +466,29 @@ evalRouter.get("/daily-summary", (req, res) => {
     });
   } catch (e: any) {
     logger.error({ err: e }, "[Eval] daily-summary failed");
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /outcomes — evals joined with outcomes (for calibration, scatter, analytics)
+// Query params: ?limit=500&symbol=AAPL&days=90&all=true (include non-trades)
+evalRouter.get("/outcomes", (req, res) => {
+  try {
+    const limit = typeof req.query.limit === "string" ? parseInt(req.query.limit, 10) : undefined;
+    const symbol = typeof req.query.symbol === "string" ? req.query.symbol : undefined;
+    const days = typeof req.query.days === "string" ? parseInt(req.query.days, 10) : undefined;
+    const tradesTakenOnly = req.query.all !== "true";
+
+    const outcomes = getEvalOutcomes({
+      limit: isNaN(limit as number) ? undefined : limit,
+      symbol,
+      days: isNaN(days as number) ? undefined : days,
+      tradesTakenOnly,
+    });
+
+    res.json({ count: outcomes.length, outcomes });
+  } catch (e: any) {
+    logger.error({ err: e }, "[Eval] outcomes failed");
     res.status(500).json({ error: e.message });
   }
 });

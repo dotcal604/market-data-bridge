@@ -34,6 +34,7 @@ import {
   getTodaysTrades,
   getEvalStats,
   getEvalsForSimulation,
+  getEvalOutcomes,
 } from "../db/database.js";
 import { computeEnsembleWithWeights } from "../eval/ensemble/scorer.js";
 import { getWeights } from "../eval/ensemble/weights.js";
@@ -984,6 +985,31 @@ export function createMcpServer(): McpServer {
         };
 
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: eval_outcomes ---
+  server.tool(
+    "eval_outcomes",
+    "Get evaluations joined with their trade outcomes. Core data for calibration curves, regime analysis, and scatter plots. Returns ensemble scores + R-multiples + regime metadata.",
+    {
+      limit: z.number().optional().describe("Max rows (default 500, max 2000)"),
+      symbol: z.string().optional().describe("Filter by symbol"),
+      days: z.number().optional().describe("Last N days"),
+      all: z.boolean().optional().describe("Include non-traded outcomes (default: trades only)"),
+    },
+    async (params) => {
+      try {
+        const outcomes = getEvalOutcomes({
+          limit: params.limit,
+          symbol: params.symbol,
+          days: params.days,
+          tradesTakenOnly: !params.all,
+        });
+        return { content: [{ type: "text", text: JSON.stringify({ count: outcomes.length, outcomes }, null, 2) }] };
       } catch (e: any) {
         return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
       }
