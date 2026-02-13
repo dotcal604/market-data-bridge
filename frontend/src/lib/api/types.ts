@@ -173,6 +173,7 @@ export interface EvalResponse {
   latency_ms: Record<string, number>;
 }
 
+// Collaboration types
 export interface CollabMessage {
   id: string;
   author: "claude" | "chatgpt" | "user";
@@ -190,4 +191,159 @@ export interface CollabStats {
 export interface PostMessageInput {
   content: string;
   tags?: string;
+}
+
+// Account types
+export interface IBKRStatus {
+  connected: boolean;
+  host: string;
+  port: number;
+  clientId: number;
+  note: string;
+}
+
+export interface StatusResponse {
+  status: string;
+  easternTime: string;
+  marketSession: string;
+  marketData: string;
+  screener: string;
+  ibkr: IBKRStatus;
+  timestamp: string;
+}
+
+export interface AccountSummary {
+  account: string;
+  netLiquidation: number | null;
+  totalCashValue: number | null;
+  settledCash: number | null;
+  buyingPower: number | null;
+  grossPositionValue: number | null;
+  maintMarginReq: number | null;
+  excessLiquidity: number | null;
+  availableFunds: number | null;
+  currency: string;
+  timestamp: string;
+}
+
+export interface PnLData {
+  account: string;
+  dailyPnL: number | null;
+  unrealizedPnL: number | null;
+  realizedPnL: number | null;
+  timestamp: string;
+}
+
+export interface Position {
+  account: string;
+  symbol: string;
+  secType: string;
+  exchange: string;
+  currency: string;
+  position: number;
+  avgCost: number;
+}
+
+export interface PositionsResponse {
+  count: number;
+  positions: Position[];
+  error?: string;
+}
+
+export interface AccountSummaryResponse {
+  summary?: AccountSummary;
+  error?: string;
+}
+
+// Journal types
+export interface JournalEntry {
+  id: number;
+  symbol: string | null;
+  strategy_version: string | null;
+  reasoning: string;
+  ai_recommendations: string | null;
+  tags: string | null;
+  outcome_tags: string | null;
+  notes: string | null;
+  spy_price: number | null;
+  vix_level: number | null;
+  gap_pct: number | null;
+  relative_volume: number | null;
+  time_of_day: string | null;
+  session_type: string | null;
+  spread_pct: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface JournalHistoryResponse {
+  count: number;
+  entries: JournalEntry[];
+}
+
+// Order types
+export interface OpenOrder {
+  orderId: number;
+  symbol: string;
+  action: "BUY" | "SELL";
+  orderType: "MKT" | "LMT" | "STP" | "STP LMT";
+  totalQuantity: number;
+  lmtPrice: number | null;
+  auxPrice: number | null;
+  status: string;
+  remaining: number;
+  tif: string;
+}
+
+export interface CompletedOrder {
+  orderId: number;
+  symbol: string;
+  action: "BUY" | "SELL";
+  orderType: "MKT" | "LMT" | "STP" | "STP LMT";
+  totalQuantity: number;
+  filledQuantity: number;
+  avgFillPrice: number | null;
+  status: string;
+  completedTime: string;
+}
+
+export interface OrdersResponse {
+  count: number;
+  orders: OpenOrder[];
+}
+
+export interface CompletedOrdersResponse {
+  count: number;
+  orders: CompletedOrder[];
+}
+
+export interface CancelOrderResponse {
+  orderId: number;
+  status: string;
+}
+
+export interface CancelAllOrdersResponse {
+  status: string;
+}
+
+// Executions API types
+export interface Execution {
+  execId: string;
+  orderId: number;
+  symbol: string;
+  secType: string;
+  side: string;
+  shares: number;
+  price: number;
+  cumQty: number;
+  avgPrice: number;
+  time: string;
+  commission: number;
+  realizedPnL: number;
+}
+
+export interface ExecutionHistoryResponse {
+  count: number;
+  executions: Execution[];
+  error?: string;
 }
