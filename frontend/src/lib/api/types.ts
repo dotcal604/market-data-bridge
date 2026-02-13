@@ -214,6 +214,27 @@ export interface PnLData {
   timestamp: string;
 }
 
+export interface Position {
+  account: string;
+  symbol: string;
+  secType: string;
+  exchange: string;
+  currency: string;
+  position: number;
+  avgCost: number;
+}
+
+export interface PositionsResponse {
+  count: number;
+  positions: Position[];
+  error?: string;
+}
+
+export interface AccountSummaryResponse {
+  summary?: AccountSummary;
+  error?: string;
+}
+
 // Journal types
 export interface JournalEntry {
   id: number;

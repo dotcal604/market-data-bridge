@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { accountClient } from "../api/account-client";
 import type { StatusResponse, AccountSummary, PnLData } from "../api/types";
 
 const API_BASE = "/api";
@@ -47,6 +48,14 @@ export function usePnL(refetchInterval?: number) {
   return useQuery({
     queryKey: ["account-pnl"],
     queryFn: fetchPnL,
+    refetchInterval,
+  });
+}
+
+export function usePositions(refetchInterval = 10_000) {
+  return useQuery({
+    queryKey: ["account-positions"],
+    queryFn: () => accountClient.getPositions(),
     refetchInterval,
   });
 }
