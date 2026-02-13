@@ -217,3 +217,25 @@ export interface CancelOrderResponse {
 export interface CancelAllOrdersResponse {
   status: string;
 }
+
+// Executions API types
+export interface Execution {
+  execId: string;
+  orderId: number;
+  symbol: string;
+  secType: string;
+  side: string;
+  shares: number;
+  price: number;
+  cumQty: number;
+  avgPrice: number;
+  time: string;
+  commission: number;
+  realizedPnL: number;
+}
+
+export interface ExecutionHistoryResponse {
+  count: number;
+  executions: Execution[];
+  error?: string;
+}

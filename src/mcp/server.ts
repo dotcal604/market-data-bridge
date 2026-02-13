@@ -22,7 +22,7 @@ import { getOpenOrders, getCompletedOrders, getExecutions, placeOrder, placeBrac
 import { getContractDetails } from "../ibkr/contracts.js";
 import { getIBKRQuote } from "../ibkr/marketdata.js";
 import { readMessages, postMessage, clearMessages, getStats } from "../collab/store.js";
-import { checkRisk } from "../ibkr/risk-gate.js";
+import { checkRisk, getSessionState, recordTradeResult, lockSession, unlockSession, resetSession } from "../ibkr/risk-gate.js";
 import {
   queryOrders,
   queryExecutions,
@@ -35,6 +35,8 @@ import {
   getEvalStats,
   getEvalsForSimulation,
   getEvalOutcomes,
+  insertOutcome,
+  getEvaluationById,
 } from "../db/database.js";
 import { computeEnsembleWithWeights } from "../eval/ensemble/scorer.js";
 import { getWeights } from "../eval/ensemble/weights.js";
@@ -722,6 +724,84 @@ export function createMcpServer(): McpServer {
   );
 
   // =====================================================================
+  // SESSION GUARDRAILS
+  // =====================================================================
+
+  server.tool(
+    "session_state",
+    "Get current trading session state: daily P&L, trade count, consecutive losses, cooldown status, and all session limits. Check this before placing trades.",
+    {},
+    async () => {
+      try {
+        const state = getSessionState();
+        return { content: [{ type: "text", text: JSON.stringify(state, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "session_record_trade",
+    "Record a completed trade result to update session guardrails. Feed this after every trade closes.",
+    {
+      realized_pnl: z.number().describe("P&L of the completed trade (positive = win, negative = loss)"),
+    },
+    async (params) => {
+      try {
+        recordTradeResult(params.realized_pnl);
+        return { content: [{ type: "text", text: JSON.stringify(getSessionState(), null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "session_lock",
+    "Manually lock the session to prevent any new trades. Use when tilting or stepping away.",
+    {
+      reason: z.string().optional().describe("Why you're locking (e.g., 'tilting', 'lunch break', 'done for day')"),
+    },
+    async (params) => {
+      try {
+        lockSession(params.reason);
+        return { content: [{ type: "text", text: JSON.stringify(getSessionState(), null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "session_unlock",
+    "Unlock a manually locked session to resume trading.",
+    {},
+    async () => {
+      try {
+        unlockSession();
+        return { content: [{ type: "text", text: JSON.stringify(getSessionState(), null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "session_reset",
+    "Reset session state. Use at start of day or after a break to clear all counters.",
+    {},
+    async () => {
+      try {
+        resetSession();
+        return { content: [{ type: "text", text: JSON.stringify(getSessionState(), null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // =====================================================================
   // TRADE JOURNAL + HISTORY (from SQLite)
   // =====================================================================
 
@@ -755,6 +835,9 @@ export function createMcpServer(): McpServer {
       tags: z.array(z.string()).optional().describe("Categorization tags"),
       outcome_tags: z.array(z.string()).optional().describe("Post-trade outcome tags (for updates)"),
       notes: z.string().optional().describe("Post-trade notes (for updates)"),
+      confidence_rating: z.number().min(1).max(3).optional().describe("Trader confidence: 1=low, 2=medium, 3=high"),
+      rule_followed: z.boolean().optional().describe("Did trader follow their own rules?"),
+      setup_type: z.string().optional().describe("Setup type: breakout, pullback, reversal, gap_fill, momentum"),
       spy_price: z.number().optional().describe("SPY price at entry"),
       vix_level: z.number().optional().describe("VIX level at entry"),
     },
@@ -1010,6 +1093,53 @@ export function createMcpServer(): McpServer {
           tradesTakenOnly: !params.all,
         });
         return { content: [{ type: "text", text: JSON.stringify({ count: outcomes.length, outcomes }, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: record_outcome ---
+  server.tool(
+    "record_outcome",
+    "Record a trade outcome for an evaluation. Tag behavioral fields (confidence, rule_followed, setup_type) alongside the outcome for edge analytics. Supports passed setups as negative examples (decision_type='passed_setup').",
+    {
+      evaluation_id: z.string().describe("Evaluation ID to record outcome for"),
+      trade_taken: z.boolean().optional().describe("Whether the trade was executed (default: false)"),
+      decision_type: z.enum(["took_trade", "passed_setup", "ensemble_no", "risk_gate_blocked"]).optional()
+        .describe("Why this outcome exists: took_trade (executed), passed_setup (saw it, chose not to), ensemble_no (model said no), risk_gate_blocked"),
+      confidence_rating: z.number().min(1).max(3).optional().describe("Trader confidence: 1=low, 2=medium, 3=high"),
+      rule_followed: z.boolean().optional().describe("Did trader follow their own rules?"),
+      setup_type: z.string().optional().describe("Setup type: breakout, pullback, reversal, gap_fill, momentum"),
+      actual_entry_price: z.number().optional().describe("Actual entry price"),
+      actual_exit_price: z.number().optional().describe("Actual exit price"),
+      r_multiple: z.number().optional().describe("Risk-reward outcome (positive = win)"),
+      exit_reason: z.string().optional().describe("Why the trade was exited"),
+      notes: z.string().optional().describe("Post-trade notes"),
+    },
+    async (params) => {
+      try {
+        const existing = getEvaluationById(params.evaluation_id);
+        if (!existing) {
+          return { content: [{ type: "text", text: JSON.stringify({ error: `Evaluation ${params.evaluation_id} not found` }) }], isError: true };
+        }
+
+        insertOutcome({
+          evaluation_id: params.evaluation_id,
+          trade_taken: params.trade_taken ? 1 : 0,
+          decision_type: params.decision_type ?? null,
+          confidence_rating: params.confidence_rating ?? null,
+          rule_followed: params.rule_followed != null ? (params.rule_followed ? 1 : 0) : null,
+          setup_type: params.setup_type ?? null,
+          actual_entry_price: params.actual_entry_price ?? null,
+          actual_exit_price: params.actual_exit_price ?? null,
+          r_multiple: params.r_multiple ?? null,
+          exit_reason: params.exit_reason ?? null,
+          notes: params.notes ?? null,
+          recorded_at: new Date().toISOString(),
+        });
+
+        return { content: [{ type: "text", text: JSON.stringify({ success: true, evaluation_id: params.evaluation_id, decision_type: params.decision_type ?? "took_trade" }, null, 2) }] };
       } catch (e: any) {
         return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
       }

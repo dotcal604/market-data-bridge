@@ -21,7 +21,7 @@ import { getOpenOrders, getCompletedOrders, getExecutions, placeOrder, placeBrac
 import { getContractDetails } from "../ibkr/contracts.js";
 import { getIBKRQuote } from "../ibkr/marketdata.js";
 import { readMessages, postMessage, clearMessages, getStats } from "../collab/store.js";
-import { checkRisk } from "../ibkr/risk-gate.js";
+import { checkRisk, getSessionState, recordTradeResult, lockSession, unlockSession, resetSession } from "../ibkr/risk-gate.js";
 import {
   queryOrders,
   queryExecutions,
@@ -485,6 +485,45 @@ router.delete("/orders/all", async (_req, res) => {
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// =====================================================================
+// SESSION GUARDRAILS
+// =====================================================================
+
+// GET /api/session — current session state (P&L, trade count, consecutive losses, limits)
+router.get("/session", (_req, res) => {
+  res.json(getSessionState());
+});
+
+// POST /api/session/trade — record a completed trade result (feeds session state)
+router.post("/session/trade", (req, res) => {
+  const { realized_pnl } = req.body ?? {};
+  if (typeof realized_pnl !== "number" || !Number.isFinite(realized_pnl)) {
+    res.status(400).json({ error: "realized_pnl must be a finite number" });
+    return;
+  }
+  recordTradeResult(realized_pnl);
+  res.json(getSessionState());
+});
+
+// POST /api/session/lock — manually lock the session ("I'm tilting")
+router.post("/session/lock", (req, res) => {
+  const { reason } = req.body ?? {};
+  lockSession(reason);
+  res.json(getSessionState());
+});
+
+// POST /api/session/unlock — unlock the session
+router.post("/session/unlock", (_req, res) => {
+  unlockSession();
+  res.json(getSessionState());
+});
+
+// POST /api/session/reset — reset session state (new day or manual)
+router.post("/session/reset", (_req, res) => {
+  resetSession();
+  res.json(getSessionState());
 });
 
 // =====================================================================
