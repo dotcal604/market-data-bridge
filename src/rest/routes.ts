@@ -65,6 +65,8 @@ function safeLimit(raw: string | undefined, defaultVal: number, max: number = 10
   return Math.min(n, max);
 }
 
+const DEFAULT_HISTORICAL_TICKS_COUNT = 100;
+
 export const router = Router();
 const log = logger.child({ subsystem: "rest-portfolio" });
 
@@ -429,7 +431,7 @@ router.get("/data/historical-ticks/:symbol", async (req, res) => {
     const startTime = qs(req.query.startTime, "");
     const endTime = qs(req.query.endTime, "");
     const type = qs(req.query.type, "TRADES").toUpperCase();
-    const countRaw = qs(req.query.count, "100");
+    const countRaw = qs(req.query.count, String(DEFAULT_HISTORICAL_TICKS_COUNT));
 
     if (!startTime || !endTime) {
       res.status(400).json({
@@ -445,7 +447,7 @@ router.get("/data/historical-ticks/:symbol", async (req, res) => {
       return;
     }
 
-    const count = safeLimit(countRaw, 100, 1000);
+    const count = safeLimit(countRaw, DEFAULT_HISTORICAL_TICKS_COUNT, 1000);
 
     const data = await getHistoricalTicks({
       symbol,

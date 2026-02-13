@@ -151,6 +151,7 @@ export async function getHistoricalTicks(params: {
     currency: params.currency ?? "USD",
   };
 
+  // WhatToShow enum values match our HistoricalTickType exactly: "TRADES", "BID_ASK", "MIDPOINT"
   const whatToShow: WhatToShow = params.type as WhatToShow;
 
   return new Promise((resolve, reject) => {
