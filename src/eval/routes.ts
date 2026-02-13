@@ -13,6 +13,8 @@ import {
   insertModelOutput,
   insertOutcome,
   getEvaluationById,
+  getModelOutputsForEval,
+  getOutcomeForEval,
   getRecentEvaluations,
   getRecentOutcomes,
   getEvalStats,
@@ -252,6 +254,22 @@ evalRouter.get("/stats", (_req, res) => {
 // GET /weights — current ensemble weights
 evalRouter.get("/weights", (_req, res) => {
   res.json(getWeights());
+});
+
+// GET /:id — single evaluation with model outputs and outcome
+evalRouter.get("/:id", (req, res) => {
+  try {
+    const evaluation = getEvaluationById(req.params.id);
+    if (!evaluation) {
+      res.status(404).json({ error: "Evaluation not found" });
+      return;
+    }
+    const modelOutputs = getModelOutputsForEval(req.params.id);
+    const outcome = getOutcomeForEval(req.params.id) ?? null;
+    res.json({ evaluation, modelOutputs, outcome });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // --- Helper ---

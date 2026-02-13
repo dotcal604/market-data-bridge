@@ -1,0 +1,174 @@
+// Types mirroring backend eval engine schemas
+
+export interface FeatureVector {
+  symbol: string;
+  timestamp: string;
+  last: number;
+  bid: number;
+  ask: number;
+  volume: number;
+  avg_volume: number;
+  rvol: number;
+  vwap: number;
+  vwap_deviation_pct: number;
+  spread_pct: number;
+  float_shares: number | null;
+  float_rotation_est: number;
+  volume_acceleration: number;
+  atr: number;
+  atr_pct: number;
+  high_of_day: number;
+  low_of_day: number;
+  prev_close: number;
+  price_extension_pct: number;
+  gap_pct: number;
+  range_position_pct: number;
+  volatility_regime: "low" | "normal" | "high" | "extreme";
+  liquidity_bucket: "micro" | "small" | "mid" | "large";
+  spy_change_pct: number;
+  qqq_change_pct: number;
+  market_alignment: "aligned" | "neutral" | "divergent";
+  time_of_day: "premarket" | "open_15" | "morning" | "midday" | "afternoon" | "close_15" | "afterhours";
+  minutes_since_open: number;
+}
+
+export interface ModelOutput {
+  trade_score: number;
+  extension_risk: number;
+  exhaustion_risk: number;
+  float_rotation_risk: number;
+  market_alignment: number;
+  expected_rr: number;
+  confidence: number;
+  should_trade: boolean;
+  reasoning: string;
+}
+
+export interface ModelEvaluation {
+  id: number;
+  evaluation_id: string;
+  model_id: string;
+  trade_score: number | null;
+  extension_risk: number | null;
+  exhaustion_risk: number | null;
+  float_rotation_risk: number | null;
+  market_alignment_score: number | null;
+  expected_rr: number | null;
+  confidence: number | null;
+  should_trade: number | null;
+  reasoning: string | null;
+  raw_response: string | null;
+  compliant: number;
+  error: string | null;
+  latency_ms: number;
+  model_version: string | null;
+  prompt_hash: string | null;
+  token_count: number | null;
+  api_response_id: string | null;
+  timestamp: string;
+}
+
+export interface Evaluation {
+  id: string;
+  symbol: string;
+  direction: string;
+  entry_price: number | null;
+  stop_price: number | null;
+  user_notes: string | null;
+  timestamp: string;
+  features_json: string;
+  ensemble_trade_score: number;
+  ensemble_trade_score_median: number;
+  ensemble_expected_rr: number;
+  ensemble_confidence: number;
+  ensemble_should_trade: number;
+  ensemble_unanimous: number;
+  ensemble_majority_trade: number;
+  ensemble_score_spread: number;
+  ensemble_disagreement_penalty: number;
+  weights_json: string;
+  guardrail_allowed: number;
+  guardrail_flags_json: string;
+  prefilter_passed: number;
+  feature_latency_ms: number;
+  total_latency_ms: number;
+  last_price: number;
+  rvol: number;
+  vwap_deviation_pct: number;
+  spread_pct: number;
+  float_rotation_est: number;
+  volume_acceleration: number;
+  atr_pct: number;
+  price_extension_pct: number;
+  gap_pct: number;
+  range_position_pct: number;
+  volatility_regime: string;
+  liquidity_bucket: string;
+  spy_change_pct: number;
+  qqq_change_pct: number;
+  market_alignment: string;
+  time_of_day: string;
+  minutes_since_open: number;
+  created_at: string;
+}
+
+export interface Outcome {
+  id: number;
+  evaluation_id: string;
+  trade_taken: number;
+  actual_entry_price: number | null;
+  actual_exit_price: number | null;
+  r_multiple: number | null;
+  exit_reason: string | null;
+  notes: string | null;
+  recorded_at: string;
+}
+
+export interface EvalDetail {
+  evaluation: Evaluation;
+  modelOutputs: ModelEvaluation[];
+  outcome: Outcome | null;
+}
+
+export interface EvalHistoryResponse {
+  count: number;
+  evaluations: Evaluation[];
+}
+
+export interface EvalStats {
+  total_evaluations: number;
+  avg_score: number;
+  avg_latency_ms: number;
+  trade_rate: number;
+  guardrail_block_rate: number;
+  model_compliance: Record<string, number>;
+  outcomes_recorded: number;
+  avg_r_multiple: number | null;
+}
+
+export interface EnsembleWeights {
+  [modelId: string]: number;
+}
+
+export interface EvalResponse {
+  id: string;
+  symbol: string;
+  timestamp: string;
+  prefilter: { passed: boolean; flags: string[] };
+  features: FeatureVector;
+  models: Record<string, ModelOutput & { latency_ms: number } | { error: string; latency_ms: number }>;
+  ensemble: {
+    trade_score: number;
+    trade_score_median: number;
+    expected_rr: number;
+    confidence: number;
+    should_trade: boolean;
+    unanimous: boolean;
+    majority_trade: boolean;
+    score_spread: number;
+    disagreement_penalty: number;
+    weights_used: EnsembleWeights;
+  } | null;
+  guardrail: { allowed: boolean; flags: string[] };
+  latency_ms: Record<string, number>;
+}

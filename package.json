@@ -6,10 +6,13 @@
   "main": "build/index.js",
   "scripts": {
     "build": "tsc",
+    "build:frontend": "cd frontend && npm run build",
     "start": "node build/index.js",
     "start:mcp": "node build/index.js --mode mcp",
     "start:rest": "node build/index.js --mode rest",
-    "dev": "tsc --watch"
+    "dev": "concurrently -n api,ui -c blue,magenta \"node build/index.js\" \"cd frontend && npm run dev -- -p 3001\"",
+    "dev:api": "node build/index.js",
+    "dev:ui": "cd frontend && npm run dev -- -p 3001"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
@@ -32,6 +35,7 @@
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/node": "^22.12.0",
+    "concurrently": "^9.2.1",
     "typescript": "^5.7.3"
   }
 }

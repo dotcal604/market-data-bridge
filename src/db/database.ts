@@ -614,6 +614,14 @@ export function getRecentOutcomes(limit: number = 20): Array<Record<string, unkn
   return stmts.queryRecentOutcomes.all(limit) as Array<Record<string, unknown>>;
 }
 
+export function getModelOutputsForEval(evaluationId: string): Record<string, unknown>[] {
+  return stmts.queryModelOutputsByEval.all(evaluationId) as Record<string, unknown>[];
+}
+
+export function getOutcomeForEval(evaluationId: string): Record<string, unknown> | undefined {
+  return stmts.getOutcomeByEval.get(evaluationId) as Record<string, unknown> | undefined;
+}
+
 export function getEvalStats(): Record<string, unknown> {
   const totalEvals = (stmts.countEvaluations.get() as any)?.n ?? 0;
   const totalOutcomes = (stmts.countOutcomes.get() as any)?.n ?? 0;
