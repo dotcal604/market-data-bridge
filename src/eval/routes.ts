@@ -629,9 +629,9 @@ evalRouter.get("/calibration", (req, res) => {
     const days = typeof req.query.days === "string" ? parseInt(req.query.days, 10) : undefined;
 
     const calibrationData = getModelOutcomesForCalibration({
-      limit: isNaN(limit as number) ? undefined : limit,
+      limit,
       symbol,
-      days: isNaN(days as number) ? undefined : days,
+      days,
     });
 
     res.json({ count: calibrationData.length, data: calibrationData });

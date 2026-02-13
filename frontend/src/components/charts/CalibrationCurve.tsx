@@ -15,6 +15,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { modelColor } from "@/lib/utils/colors";
 import type { CalibrationDataPoint } from "@/lib/api/types";
 
+const ENSEMBLE_COLOR = "#888888";
+
 interface CalibrationCurveProps {
   data: CalibrationDataPoint[];
 }
@@ -98,6 +100,7 @@ function processCalibrationData(data: CalibrationDataPoint[]): {
   // Group by model_id
   const byModel = new Map<string, Array<{ confidence: number; r_multiple: number }>>();
   const ensembleData: Array<{ confidence: number; r_multiple: number }> = [];
+  const seenEvaluations = new Set<string>();
 
   for (const point of data) {
     // Add to model-specific data
@@ -110,7 +113,8 @@ function processCalibrationData(data: CalibrationDataPoint[]): {
     });
 
     // Also add to ensemble (deduplicate by evaluation_id)
-    if (!ensembleData.find(e => e.confidence === point.ensemble_confidence)) {
+    if (!seenEvaluations.has(point.evaluation_id)) {
+      seenEvaluations.add(point.evaluation_id);
       ensembleData.push({
         confidence: point.ensemble_confidence,
         r_multiple: point.r_multiple,
@@ -205,7 +209,7 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
 
         return (
           <div key={idx}>
-            <p className="text-sm" style={{ color: entry.dataKey === "ensemble" ? "#888" : modelColor(entry.dataKey) }}>
+            <p className="text-sm" style={{ color: entry.dataKey === "ensemble" ? ENSEMBLE_COLOR : modelColor(entry.dataKey) }}>
               {modelName}: {entry.value.toFixed(1)}%
             </p>
             {count != null && (
@@ -303,9 +307,9 @@ export function CalibrationCurve({ data }: CalibrationCurveProps) {
               type="monotone"
               dataKey="ensemble"
               name="Ensemble"
-              stroke="#888888"
+              stroke={ENSEMBLE_COLOR}
               strokeWidth={3}
-              dot={{ r: 6, fill: "#888888" }}
+              dot={{ r: 6, fill: ENSEMBLE_COLOR }}
               activeDot={{ r: 8 }}
             />
             {/* Individual model lines */}

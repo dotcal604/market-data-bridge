@@ -50,7 +50,7 @@ export default function ModelStatsPage() {
         <div className="space-y-6">
           <StatsSummary stats={stats.data} />
           <ModelComparison stats={stats.data} />
-          
+
           {/* Calibration Curve Section */}
           <div>
             <h2 className="mb-4 text-xl font-semibold">Calibration Analysis</h2>
