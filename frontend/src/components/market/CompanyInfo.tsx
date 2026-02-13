@@ -132,8 +132,6 @@ export function CompanyInfo({
             <div className="mt-1 font-mono text-sm font-semibold">
               {details.trailingPE != null 
                 ? details.trailingPE.toFixed(2) 
-                : financials?.targetMeanPrice != null
-                ? (financials.targetMeanPrice / (financials.currentPrice || 1)).toFixed(2)
                 : "—"}
             </div>
           </div>
@@ -159,7 +157,7 @@ export function CompanyInfo({
             <div className="rounded-lg border border-border bg-card p-3">
               <div className="text-xs text-muted-foreground">Dividend Yield</div>
               <div className="mt-1 font-mono text-sm font-semibold">
-                {formatDecimalPercent(details.dividendYield * 100)}
+                {formatDecimalPercent(details.dividendYield)}
               </div>
             </div>
           )}
