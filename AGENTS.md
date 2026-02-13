@@ -272,15 +272,12 @@ cd frontend && npx tsc --noEmit
 - Do not auto-merge any PR — human review required
 - Do not store API keys in code — `.env` only
 
-## Google Jules (Autonomous Agent)
+## Agent-Specific Notes
 
-> Jules replaced OpenAI Codex as of Feb 2026. Jules clones the repo, installs deps, builds, and verifies in a secure cloud VM.
+> All agents (Copilot, Codex, Jules) read this `AGENTS.md` file automatically. The conventions above apply to all.
+> Orchestration is managed via **GitHub Agent HQ** — see `ORCHESTRATION.md` and `.github/agents/` for custom agent profiles.
 
-### How Jules Reads This File
-
-Jules automatically reads `AGENTS.md` from the repo root when starting a task. All conventions above apply.
-
-### Key Points for Jules
+### Key Points for All Agents
 
 - **Two package.json files** — root is backend (Express/TypeScript), `frontend/` is Next.js. Install both with `npm install && cd frontend && npm install`.
 - **ESM imports** — backend uses `.js` extensions in imports (`import { foo } from "./bar.js"`). Frontend uses bare paths.
@@ -289,6 +286,37 @@ Jules automatically reads `AGENTS.md` from the repo root when starting a task. A
 - **Recharts** — already installed in frontend. Import from `recharts`.
 - **Dark theme always** — use `bg-card`, `text-muted-foreground`, semantic Tailwind classes. No white backgrounds.
 - **Named exports only** — `export function Foo()`, not `export default function Foo()`
+
+### OpenAI Codex (Cloud Agent)
+
+Codex runs tasks in cloud sandboxes at [chatgpt.com/codex](https://chatgpt.com/codex). It reads this `AGENTS.md` file automatically via its discovery chain.
+
+**Environment setup** (configured at chatgpt.com/codex/settings/environments):
+```bash
+npm install && cd frontend && npm install && cd ..
+```
+
+**Strengths:** Long-running tasks (7+ hours), parallel task execution, GPT-5.2-Codex model, GitHub integration (@codex on issues/PRs).
+
+**Historical note:** Early Codex (PRs #3, #23) had broken PR bodies and missing env setup. Current Codex reads AGENTS.md, supports custom setup scripts, and uses GPT-5.2-Codex.
+
+### Google Jules (Autonomous Agent)
+
+Jules clones the repo into a secure cloud VM, installs deps, builds, and verifies. Reads this `AGENTS.md` automatically.
+
+**Trigger:** Add `jules` label to a GitHub issue, or paste issue link in [jules.google](https://jules.google) dashboard.
+
+**Strengths:** Cloud VM sandbox, plan-then-execute workflow, Python scripts (Gemini-native), reads AGENTS.md automatically.
+
+**Free tier:** Beta — free during beta, subject to daily task limits. Plan approval required before execution.
+
+### GitHub Copilot (Coding Agent)
+
+Copilot creates draft PRs from assigned issues. Works best with detailed issue specs (exact file paths, props interfaces, acceptance criteria).
+
+**Trigger:** Assign Copilot to an issue via GitHub web UI, or use custom agents via `@copilot/{agent-name}`.
+
+**Note:** Copilot's GitHub Actions firewall blocks `fonts.googleapis.com` — cosmetic only, builds succeed.
 
 ### Verification Commands
 

@@ -209,8 +209,9 @@ Automated weekly audit via `.github/workflows/api-audit.yml` + `scripts/api-audi
 
 | Agent | Issues | Strength |
 |-------|--------|----------|
-| **Copilot** | ~25 | Self-contained UI components, clear props/API specs, multi-file refactors |
+| **Copilot** | ~20 | Self-contained UI components, clear props/API specs, multi-file refactors |
+| **Codex** | ~8 | Long-running features, parallel execution, complex backend/frontend tasks |
 | **Jules** | ~8 | Analytical/visualization tasks, Python scripts, single-file utilities |
 | **Claude Code** | ~5 | Cross-file wiring, backend routes, architecture, planning |
 
-Decision tree: See `ORCHESTRATION.md`
+Orchestrated via **GitHub Agent HQ**. Decision tree and agent profiles: See `ORCHESTRATION.md` and `.github/agents/`.
