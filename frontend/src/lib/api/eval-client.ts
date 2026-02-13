@@ -5,7 +5,6 @@ import type {
   EvalStats,
   EnsembleWeights,
   EvalResponse,
-  EvalOutcomesResponse,
 } from "./types";
 import { fetchJson } from "./fetch-json";
 
@@ -42,11 +41,6 @@ export const evalClient = {
 
   getWeights() {
     return fetchJson<EnsembleWeights>(`${BASE}/weights`);
-  },
-
-  getOutcomes(limit = 500) {
-    const params = new URLSearchParams({ limit: String(limit), all: "true" });
-    return fetchJson<EvalOutcomesResponse>(`${BASE}/outcomes?${params}`);
   },
 
   recordOutcome(evaluationId: string, data: {

@@ -433,3 +433,19 @@ export interface FlattenResult {
   skipped: Array<{ symbol: string; reason: string }>;
   error?: string;
 }
+
+// Market data types
+export interface BarData {
+  time: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+export interface HistoricalBarsResponse {
+  symbol: string;
+  count: number;
+  bars: BarData[];
+}
