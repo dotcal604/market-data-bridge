@@ -256,6 +256,53 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_reasoning_eval_id ON eval_reasoning(evaluation_id);
   CREATE INDEX IF NOT EXISTS idx_reasoning_model_id ON eval_reasoning(model_id);
+
+  -- TraderSync imported trades (actual trade history for calibration + analytics)
+  CREATE TABLE IF NOT EXISTS tradersync_trades (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    status TEXT NOT NULL,           -- WIN / LOSS
+    symbol TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    open_date TEXT NOT NULL,
+    close_date TEXT NOT NULL,
+    open_time TEXT NOT NULL,
+    close_time TEXT NOT NULL,
+    setups TEXT,                    -- semicolon-separated tags
+    mistakes TEXT,                  -- semicolon-separated tags
+    entry_price REAL NOT NULL,
+    exit_price REAL NOT NULL,
+    return_dollars REAL NOT NULL,
+    return_pct REAL NOT NULL,
+    avg_buy REAL,
+    avg_sell REAL,
+    net_return REAL,
+    commission REAL,
+    notes TEXT,
+    type TEXT DEFAULT 'SHARE',
+    side TEXT NOT NULL,             -- LONG / SHORT
+    spread TEXT DEFAULT 'SINGLE',
+    cost REAL,
+    executions INTEGER,
+    holdtime TEXT,
+    portfolio TEXT,
+    r_multiple REAL,
+    mae REAL,                      -- max adverse excursion
+    mfe REAL,                      -- max favorable excursion
+    expectancy REAL,
+    risk REAL,
+    target1 REAL,
+    profit_aim1 REAL,
+    stop1 REAL,
+    risk1 REAL,
+    import_batch TEXT,             -- batch ID to track imports
+    imported_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(symbol, open_date, open_time, side)
+  );
+  CREATE INDEX IF NOT EXISTS idx_ts_symbol ON tradersync_trades(symbol);
+  CREATE INDEX IF NOT EXISTS idx_ts_open_date ON tradersync_trades(open_date);
+  CREATE INDEX IF NOT EXISTS idx_ts_status ON tradersync_trades(status);
+  CREATE INDEX IF NOT EXISTS idx_ts_side ON tradersync_trades(side);
+  CREATE INDEX IF NOT EXISTS idx_ts_batch ON tradersync_trades(import_batch);
 `);
 
 // ── Column Migrations (safe for existing DBs — silently ignored if column exists) ──
@@ -272,6 +319,9 @@ function addColumnIfMissing(table: string, column: string, type: string): void {
 addColumnIfMissing("trade_journal", "confidence_rating", "INTEGER");
 addColumnIfMissing("trade_journal", "rule_followed", "INTEGER");
 addColumnIfMissing("trade_journal", "setup_type", "TEXT");
+
+// v3: TraderSync signal source (parsed from notes — e.g. "holly", "manual")
+addColumnIfMissing("tradersync_trades", "signal_source", "TEXT");
 
 // v2: Decision type + behavioral fields on outcomes (primary location)
 addColumnIfMissing("outcomes", "decision_type", "TEXT");
@@ -1024,6 +1074,117 @@ export function getTodaysTrades(): Array<Record<string, unknown>> {
       AND DATE(o.recorded_at) = DATE('now')
     ORDER BY o.recorded_at DESC
   `).all() as Array<Record<string, unknown>>;
+}
+
+// ── Drift Detection Query ─────────────────────────────────────────────────
+
+/**
+ * Get per-model confidence + r_multiple for drift calibration.
+ * Joins model_outputs with outcomes for trades that have both.
+ */
+export function getModelOutcomesForDrift(days: number = 90): Array<Record<string, unknown>> {
+  return db.prepare(`
+    SELECT
+      m.model_id,
+      m.confidence,
+      o.r_multiple
+    FROM model_outputs m
+    JOIN evaluations e ON m.evaluation_id = e.id
+    JOIN outcomes o ON o.evaluation_id = e.id
+    WHERE m.compliant = 1
+      AND o.trade_taken = 1
+      AND o.r_multiple IS NOT NULL
+      AND m.confidence IS NOT NULL
+      AND e.timestamp >= datetime('now', ? || ' days')
+    ORDER BY e.timestamp DESC
+  `).all(`-${days}`) as Array<Record<string, unknown>>;
+}
+
+// ── TraderSync Import Helpers ─────────────────────────────────────────────
+
+export function insertTraderSyncTrade(row: Record<string, unknown>): void {
+  runEvalInsert("tradersync_trades", row);
+}
+
+export function bulkInsertTraderSyncTrades(rows: Array<Record<string, unknown>>): { inserted: number; skipped: number } {
+  let inserted = 0;
+  let skipped = 0;
+  const insert = db.transaction((trades: Array<Record<string, unknown>>) => {
+    for (const row of trades) {
+      try {
+        runEvalInsert("tradersync_trades", row);
+        inserted++;
+      } catch (e: any) {
+        if (e.message?.includes("UNIQUE constraint")) {
+          skipped++;
+        } else {
+          throw e;
+        }
+      }
+    }
+  });
+  insert(rows);
+  return { inserted, skipped };
+}
+
+export function getTraderSyncTrades(opts: {
+  symbol?: string;
+  side?: string;
+  status?: string;
+  days?: number;
+  limit?: number;
+} = {}): Array<Record<string, unknown>> {
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+
+  if (opts.symbol) {
+    conditions.push("symbol = ?");
+    params.push(opts.symbol);
+  }
+  if (opts.side) {
+    conditions.push("side = ?");
+    params.push(opts.side);
+  }
+  if (opts.status) {
+    conditions.push("status = ?");
+    params.push(opts.status);
+  }
+  if (opts.days) {
+    conditions.push("open_date >= date('now', ? || ' days')");
+    params.push(`-${opts.days}`);
+  }
+
+  const where = conditions.length > 0 ? "WHERE " + conditions.join(" AND ") : "";
+  const limit = opts.limit ?? 500;
+
+  return db.prepare(`
+    SELECT * FROM tradersync_trades ${where} ORDER BY open_date DESC, open_time DESC LIMIT ?
+  `).all(...params, limit) as Array<Record<string, unknown>>;
+}
+
+export function getTraderSyncStats(): Record<string, unknown> {
+  return db.prepare(`
+    SELECT
+      COUNT(*) as total_trades,
+      SUM(CASE WHEN status = 'WIN' THEN 1 ELSE 0 END) as wins,
+      SUM(CASE WHEN status = 'LOSS' THEN 1 ELSE 0 END) as losses,
+      CAST(SUM(CASE WHEN status = 'WIN' THEN 1 ELSE 0 END) AS FLOAT) / NULLIF(COUNT(*), 0) as win_rate,
+      AVG(r_multiple) as avg_r,
+      SUM(return_dollars) as total_pnl,
+      AVG(return_dollars) as avg_pnl,
+      SUM(net_return) as total_net,
+      COUNT(DISTINCT symbol) as unique_symbols,
+      MIN(open_date) as first_trade,
+      MAX(open_date) as last_trade,
+      COUNT(DISTINCT import_batch) as import_batches
+    FROM tradersync_trades
+  `).get() as Record<string, unknown>;
+}
+
+export function getTraderSyncByDate(date: string): Array<Record<string, unknown>> {
+  return db.prepare(`
+    SELECT * FROM tradersync_trades WHERE open_date = ? ORDER BY open_time ASC
+  `).all(date) as Array<Record<string, unknown>>;
 }
 
 export function isDbWritable(): boolean {

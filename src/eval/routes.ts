@@ -25,7 +25,11 @@ import {
   getTodaysTrades,
   getEvalsForSimulation,
   getEvalOutcomes,
+  getTraderSyncTrades,
+  getTraderSyncStats,
 } from "../db/database.js";
+import { importTraderSyncCSV } from "../tradersync/importer.js";
+import { generateDriftReport } from "./drift-detector.js";
 import { extractStructuredReasoning } from "./reasoning/extractor.js";
 import { logger } from "../logging.js";
 
@@ -532,6 +536,62 @@ evalRouter.get("/outcomes", (req, res) => {
     res.json({ count: outcomes.length, outcomes });
   } catch (e: any) {
     logger.error({ err: e }, "[Eval] outcomes failed");
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Drift Detection ──────────────────────────────────────────────────────
+
+// GET /drift-report — model calibration drift report
+evalRouter.get("/drift-report", (req, res) => {
+  try {
+    const days = Number(req.query.days) || 90;
+    const report = generateDriftReport(days);
+    res.json(report);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── TraderSync ───────────────────────────────────────────────────────────
+
+// POST /tradersync/import — import TraderSync CSV
+evalRouter.post("/tradersync/import", (req, res) => {
+  try {
+    const csv = req.body?.csv;
+    if (!csv || typeof csv !== "string") {
+      res.status(400).json({ error: "Request body must include 'csv' string field with CSV content" });
+      return;
+    }
+    const result = importTraderSyncCSV(csv);
+    logger.info({ batch: result.batch_id, inserted: result.inserted, skipped: result.skipped }, "[TraderSync] Import complete");
+    res.json(result);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /tradersync/stats — aggregate stats
+evalRouter.get("/tradersync/stats", (_req, res) => {
+  try {
+    res.json(getTraderSyncStats());
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /tradersync/trades — query trades
+evalRouter.get("/tradersync/trades", (req, res) => {
+  try {
+    const trades = getTraderSyncTrades({
+      symbol: typeof req.query.symbol === "string" ? req.query.symbol : undefined,
+      side: typeof req.query.side === "string" ? req.query.side : undefined,
+      status: typeof req.query.status === "string" ? req.query.status : undefined,
+      days: req.query.days ? Number(req.query.days) : undefined,
+      limit: req.query.limit ? Number(req.query.limit) : undefined,
+    });
+    res.json({ count: trades.length, trades });
+  } catch (e: any) {
     res.status(500).json({ error: e.message });
   }
 });

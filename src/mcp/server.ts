@@ -38,7 +38,11 @@ import {
   insertOutcome,
   getEvaluationById,
   getReasoningForEval,
+  getTraderSyncTrades,
+  getTraderSyncStats,
 } from "../db/database.js";
+import { generateDriftReport } from "../eval/drift-detector.js";
+import { importTraderSyncCSV } from "../tradersync/importer.js";
 import { computeEnsembleWithWeights } from "../eval/ensemble/scorer.js";
 import { getWeights } from "../eval/ensemble/weights.js";
 import type { ModelEvaluation } from "../eval/models/types.js";
@@ -1171,6 +1175,82 @@ export function createMcpServer(): McpServer {
           };
         }
         return { content: [{ type: "text", text: JSON.stringify({ evaluation_id: params.evaluation_id, models }, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: drift_report ---
+  server.tool(
+    "drift_report",
+    "Generate model calibration drift report. Compares per-model confidence buckets (0-25, 25-50, 50-75, 75-100) against actual win rates. Flags models where any bucket deviates >15% from expected. Use to detect when models need recalibration.",
+    {
+      days: z.number().optional().default(90).describe("Lookback period in days (default: 90)"),
+    },
+    async (params) => {
+      try {
+        const report = generateDriftReport(params.days);
+        return { content: [{ type: "text", text: JSON.stringify(report, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: tradersync_import ---
+  server.tool(
+    "tradersync_import",
+    "Import TraderSync trade_data CSV content into the database. Pass the full CSV content as a string. Returns batch ID, inserted count, skipped duplicates, and any parse errors.",
+    {
+      csv: z.string().describe("Full CSV content from TraderSync trade_data export"),
+    },
+    async (params) => {
+      try {
+        const result = importTraderSyncCSV(params.csv);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: tradersync_stats ---
+  server.tool(
+    "tradersync_stats",
+    "Get aggregate stats from imported TraderSync trades: total trades, win rate, avg R, total P&L, unique symbols, date range.",
+    {},
+    async () => {
+      try {
+        const stats = getTraderSyncStats();
+        return { content: [{ type: "text", text: JSON.stringify(stats, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: tradersync_trades ---
+  server.tool(
+    "tradersync_trades",
+    "Query imported TraderSync trades. Filter by symbol, side (LONG/SHORT), status (WIN/LOSS), and lookback days.",
+    {
+      symbol: z.string().optional().describe("Filter by ticker symbol"),
+      side: z.enum(["LONG", "SHORT"]).optional().describe("Filter by trade side"),
+      status: z.enum(["WIN", "LOSS"]).optional().describe("Filter by outcome"),
+      days: z.number().optional().describe("Lookback period in days"),
+      limit: z.number().optional().default(100).describe("Max results (default: 100)"),
+    },
+    async (params) => {
+      try {
+        const trades = getTraderSyncTrades({
+          symbol: params.symbol,
+          side: params.side,
+          status: params.status,
+          days: params.days,
+          limit: params.limit,
+        });
+        return { content: [{ type: "text", text: JSON.stringify({ count: trades.length, trades }, null, 2) }] };
       } catch (e: any) {
         return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
       }
