@@ -83,13 +83,16 @@ export function attachWebSocketBroadcasters(): void {
 
 /**
  * Detach WebSocket broadcasters (for cleanup)
+ * 
+ * Note: In production, we intentionally don't remove these event listeners
+ * because they are shared with persistent DB listeners (attachPersistentOrderListeners).
+ * Both systems need the same events, so we keep a single set of listeners active.
+ * If WebSocket functionality is disabled in the future, the DB listeners will
+ * still function normally. This function exists for API consistency and future use
+ * if we need to support dynamic WebSocket enable/disable.
  */
 export function detachWebSocketBroadcasters(): void {
   if (!listenersAttached) return;
-
-  // Note: In production, we don't actually remove these listeners
-  // because they're shared with the persistent DB listeners.
-  // This function is here for symmetry and future use.
   
   listenersAttached = false;
   logBroadcast.info("WebSocket broadcasters detached");
@@ -101,7 +104,8 @@ export function detachWebSocketBroadcasters(): void {
  */
 async function broadcastPositionsUpdate(): Promise<void> {
   try {
-    // Small delay to let IBKR process the change
+    // Wait for IBKR to process the position change and make it available via reqPositions
+    // 100ms is conservative for local IBKR Gateway/TWS communication
     await new Promise((resolve) => setTimeout(resolve, 100));
     
     const positions = await getPositions();

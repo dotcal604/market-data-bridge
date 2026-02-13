@@ -240,15 +240,18 @@ export function useWebSocket<T = any>(options: UseWebSocketOptions): UseWebSocke
  * Falls back to localhost:3000 if not in browser
  */
 function getWebSocketUrl(): string {
+  // API server port - should match backend config (REST_PORT env var, default 3000)
+  const API_PORT = "3000";
+  
   if (typeof window === "undefined") {
-    return "ws://localhost:3000";
+    return `ws://localhost:${API_PORT}`;
   }
 
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   const host = window.location.hostname;
   
   // In development, frontend is on :3001 but API is on :3000
-  const port = process.env.NODE_ENV === "development" ? "3000" : window.location.port || "3000";
+  const port = process.env.NODE_ENV === "development" ? API_PORT : window.location.port || API_PORT;
   
   return `${protocol}//${host}:${port}`;
 }

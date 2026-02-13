@@ -32,7 +32,10 @@ export function useOpenOrders(refreshInterval = 5000) {
   return useQuery({
     queryKey: ["open-orders"],
     queryFn: () => ordersClient.getOpenOrders(),
-    // Use longer interval when WebSocket is connected, faster when polling
+    // Use longer interval when WebSocket is connected (30s backup poll)
+    // Use shorter interval when polling actively (5s for responsiveness)
+    // The 30s interval ensures we catch any missed WebSocket messages
+    // while minimizing server load when real-time updates are working
     refetchInterval: connected && useWebSocketData ? 30_000 : refreshInterval,
   });
 }
