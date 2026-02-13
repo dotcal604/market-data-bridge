@@ -1,6 +1,8 @@
 # Market Data Bridge — Agent Orchestration
 
-> How work gets delegated across Claude Code, GitHub Copilot, and OpenAI Codex.
+> How work gets delegated across Claude Code, GitHub Copilot, and Google Jules.
+>
+> **Note:** OpenAI Codex was used for PRs #3 and #23 but proved unreliable (broken PR bodies, missing env setup). Jules replaced Codex as of Feb 2026.
 
 ## Decision Tree
 
@@ -14,7 +16,7 @@ New task arrives
   │   └─ YES → GitHub Copilot (via issue)
   │
   ├─ Single-file utility, chart, or Python script?
-  │   └─ YES → OpenAI Codex (via chatgpt.com/codex)
+  │   └─ YES → Google Jules (via jules.google or `jules` label)
   │
   ├─ Backend route + frontend page + DB migration?
   │   └─ Claude Code builds backend, creates Copilot issue for frontend
@@ -29,7 +31,7 @@ New task arrives
 |-------|-----------|-------------|-----------|
 | **Claude Code** | Cross-file wiring, architecture, backend routes, planning, code review | Slower for large batches of isolated components | CLI (local) |
 | **GitHub Copilot** | Self-contained components, multi-file refactors, follows issue specs precisely | Needs detailed issue specs, can't make architectural decisions, firewall blocks external fonts | GitHub Issues → Draft PRs |
-| **OpenAI Codex** | Single-file tasks, multi-file edits, Python scripts, analytical utilities | PR body generation buggy (placeholder text), needs environment setup for dual package.json, slower feedback loop | chatgpt.com/codex → Draft PR |
+| **Google Jules** | Single-file tasks, multi-file edits, Python scripts, analytical utilities, runs in cloud VM (clones repo, installs deps, runs builds) | Beta — usage limits apply, plan approval required before execution | jules.google dashboard or `jules` label on GitHub issues |
 
 ## Issue Template: Copilot
 
@@ -99,9 +101,9 @@ From PRs #11 (score scatter), #12 (weight sliders), #13 (time-of-day chart):
 - Copilot doesn't read AGENTS.md unless told to — put all conventions in the issue itself
 - Don't assume Copilot knows the data shape — include the full TypeScript interface
 
-## Issue Template: Codex
+## Issue Template: Jules
 
-Codex works best with **single-file tasks** that have clear input/output contracts.
+Jules works best with **single-file tasks** or **isolated features** that have clear input/output contracts. Jules clones the repo, installs deps, and builds in a cloud VM — no local env issues.
 
 ```markdown
 ## Task: {file path or utility name}
@@ -124,6 +126,14 @@ Codex works best with **single-file tasks** that have clear input/output contrac
 {Command to verify the output}
 \`\`\`
 ```
+
+### Triggering Jules
+
+1. **Via label:** Add the `jules` label to any GitHub issue → Jules picks it up automatically
+2. **Via dashboard:** Go to [jules.google](https://jules.google), select `market-data-bridge`, paste issue link
+3. **Via GitHub Action:** (optional) `google-labs-code/jules-action` for event-driven triggers
+
+Jules reads `AGENTS.md` automatically from repo root.
 
 ## Phase Orchestration Pattern
 
@@ -168,11 +178,13 @@ Tracking issue for all {Phase Name} work.
 
 | Label | Purpose |
 |-------|---------|
-| `agent-task` | Copilot/Codex delegated work |
+| `agent-task` | Copilot/Jules delegated work |
 | `phase-0` through `phase-8` | Roadmap phase tracking |
 | `copilot` | Assigned to GitHub Copilot |
-| `codex` | Assigned to OpenAI Codex |
+| `jules` | Assigned to Google Jules |
 | `claude-code` | Done by Claude Code directly |
+| `api-migration` | API dependency migration tasks |
+| `api-audit` | Automated API audit findings |
 | `blocked` | Waiting on dependency |
 | `needs-review` | PR ready for review |
 
@@ -199,46 +211,46 @@ Copilot's GitHub Actions environment blocks external network by default. To allo
 
 Currently not blocking builds — the `fonts.googleapis.com` warning in PRs #11-13 is cosmetic (Next.js tries to optimize Google Fonts at build time but falls back gracefully).
 
-## Codex Cloud Setup
+## Jules Setup
 
-### Environment Configuration
+### Initial Configuration
 
-Go to **chatgpt.com/codex → Settings → Environments** and configure:
+1. Go to [jules.google](https://jules.google) → **Try Jules** → sign in with Google
+2. **Connect GitHub** → authorize access to `dotcal604/market-data-bridge`
+3. Jules auto-reads `AGENTS.md` from repo root — no additional env config needed
+4. Jules clones the repo into a secure cloud VM, runs `npm install` in both root and `frontend/`
 
-**Setup script:**
-```bash
-npm install
-cd frontend && npm install
-```
+### How Jules Works
 
-This is critical — the project has two `package.json` files (root backend + `frontend/` Next.js). Without both installs, Codex can't verify TypeScript compilation.
+1. **Assign:** Add `jules` label to a GitHub issue, or paste issue link in Jules dashboard
+2. **Plan:** Jules analyzes the codebase and generates a plan → you review and approve
+3. **Execute:** Jules implements in a cloud VM, builds, and verifies
+4. **PR:** Jules creates a pull request with diff → you review and merge
 
-### Known Codex Issues
+### Jules vs Copilot: When to Use Which
 
-| Issue | Impact | Workaround |
-|-------|--------|------------|
-| PR body says "encountered an unexpected error" | Cosmetic — code is fine, PR description is placeholder | Review the diff, not the body. Manually edit PR description if needed. |
-| Doesn't add "Fixes #N" to PRs | Issues don't auto-close on merge | Manually close issues after merging, or edit PR body to add `Fixes #N` |
-| Doesn't read AGENTS.md automatically in Cloud mode | May miss conventions | Put all critical conventions in the issue body itself |
-| Can't self-approve PRs | PR appears under your account, GitHub blocks self-approval | Merge directly with `gh pr merge` |
-
-### How to Submit Work to Codex
-
-1. Go to **chatgpt.com/codex**
-2. Select the **market-data-bridge** repo
-3. Paste the task — either:
-   - Link to a GitHub issue: "Implement issue #N"
-   - Or paste the full issue body directly
-4. Codex creates a branch and draft PR when done
-5. Review the PR diff, merge with `gh pr merge --merge --delete-branch`
-
-### Codex vs Copilot: When to Use Which
-
-| Scenario | Use Codex | Use Copilot |
+| Scenario | Use Jules | Use Copilot |
 |----------|-----------|-------------|
 | Single-file utility (e.g. `export.ts`) | Yes | Yes |
-| Multi-file component + page wiring | Yes (proved in PR #23) | Yes (proved in PRs #11-13) |
-| Needs exact issue spec format | No — handles natural language | Yes — verbatim spec works best |
-| Needs verification in CI | No — runs in Codex sandbox | Yes — runs in GitHub Actions |
-| Python scripts | Yes (preferred) | Possible but less natural |
-| Batch of similar components | No — one task at a time | Yes — can do sequentially via issues |
+| Multi-file component + page wiring | Yes | Yes (proved in PRs #11-13) |
+| Needs exact issue spec format | No — handles natural language + reads AGENTS.md | Yes — verbatim spec works best |
+| Python scripts | Yes (preferred — Gemini-native) | Possible but less natural |
+| Batch of similar components | One task at a time | Yes — can do sequentially via issues |
+| Needs build verification in sandbox | Yes — runs in cloud VM | Yes — runs in GitHub Actions |
+
+### Jules Free Tier Limits
+
+- **Beta (current):** Free during beta, subject to daily task limits
+- Plan approval required before each execution (no auto-execution)
+- Monitor usage at [jules.google/settings](https://jules.google/settings)
+
+### Historical: Why Codex Was Replaced
+
+OpenAI Codex (via chatgpt.com/codex) was used for PRs #3 and #23. Issues encountered:
+- PR body generation consistently broken ("encountered an unexpected error" placeholder)
+- Required manual environment setup for dual `package.json` (never completed)
+- Didn't read `AGENTS.md` automatically
+- PRs opened under user's account (can't self-approve)
+- Issue #10 (CSV export) never delivered
+
+Jules resolves all of these: reads AGENTS.md, runs in a proper VM, generates real PR descriptions, and auto-detects project structure.

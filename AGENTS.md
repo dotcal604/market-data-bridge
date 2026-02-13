@@ -7,7 +7,7 @@ Single-process Node.js/TypeScript server (port 3000) + Next.js dashboard (port 3
 - Trade execution via IBKR TWS/Gateway
 - Multi-model trade evaluation engine (Claude + GPT-4o + Gemini)
 - AI-to-AI collaboration channel
-- MCP server (Claude) + REST API (ChatGPT/Codex)
+- MCP server (Claude) + REST API (ChatGPT/external agents)
 - Admin dashboard (Next.js 14, App Router) in `frontend/`
 
 ## Architecture Constraints
@@ -272,22 +272,27 @@ cd frontend && npx tsc --noEmit
 - Do not auto-merge any PR — human review required
 - Do not store API keys in code — `.env` only
 
-## Codex Cloud Environment
+## Google Jules (Autonomous Agent)
 
-> This section is for OpenAI Codex (chatgpt.com/codex) running tasks against this repo.
+> Jules replaced OpenAI Codex as of Feb 2026. Jules clones the repo, installs deps, builds, and verifies in a secure cloud VM.
 
-### Setup Script (configure at chatgpt.com/codex → Settings → Environments)
+### How Jules Reads This File
 
-```bash
-npm install
-cd frontend && npm install
-```
+Jules automatically reads `AGENTS.md` from the repo root when starting a task. All conventions above apply.
 
-Both the root (backend) and `frontend/` (Next.js dashboard) need `npm install` before any work.
+### Key Points for Jules
+
+- **Two package.json files** — root is backend (Express/TypeScript), `frontend/` is Next.js. Install both with `npm install && cd frontend && npm install`.
+- **ESM imports** — backend uses `.js` extensions in imports (`import { foo } from "./bar.js"`). Frontend uses bare paths.
+- **Frontend paths** — components live in `frontend/src/components/`, not `src/components/`
+- **shadcn/ui** — already installed. Import from `@/components/ui/*`. Don't re-install.
+- **Recharts** — already installed in frontend. Import from `recharts`.
+- **Dark theme always** — use `bg-card`, `text-muted-foreground`, semantic Tailwind classes. No white backgrounds.
+- **Named exports only** — `export function Foo()`, not `export default function Foo()`
 
 ### Verification Commands
 
-After writing code, Codex should verify with:
+After writing code, verify with:
 
 ```bash
 # Frontend components
@@ -302,14 +307,4 @@ npx tsc --noEmit
 When creating PRs, include in the body:
 - **What changed**: files created/modified
 - **Fixes #N**: link to the issue being resolved
-- **Verification**: paste the output of `tsc --noEmit` showing clean compile
-
-### Common Pitfalls
-
-- **Two package.json files** — root is backend (Express/TypeScript), `frontend/` is Next.js. Install both.
-- **ESM imports** — backend uses `.js` extensions in imports (`import { foo } from "./bar.js"`). Frontend uses bare paths.
-- **Frontend paths** — components live in `frontend/src/components/`, not `src/components/`
-- **shadcn/ui** — already installed. Import from `@/components/ui/*`. Don't re-install.
-- **Recharts** — already installed in frontend. Import from `recharts`.
-- **Dark theme always** — use `bg-card`, `text-muted-foreground`, semantic Tailwind classes. No white backgrounds.
-- **Named exports only** — `export function Foo()`, not `export default function Foo()`
+- **Verification**: output of `tsc --noEmit` showing clean compile
