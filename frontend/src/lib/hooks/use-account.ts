@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { accountClient } from "../api/account-client";
 import type { StatusResponse, AccountSummary, PnLData } from "../api/types";
 
@@ -57,5 +57,34 @@ export function usePositions(refetchInterval = 10_000) {
     queryKey: ["account-positions"],
     queryFn: () => accountClient.getPositions(),
     refetchInterval,
+  });
+}
+
+export function useFlattenConfig(refetchInterval = 30_000) {
+  return useQuery({
+    queryKey: ["flatten-config"],
+    queryFn: () => accountClient.getFlattenConfig(),
+    refetchInterval,
+  });
+}
+
+export function useSetFlattenEnabled() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (enabled: boolean) => accountClient.setFlattenEnabled(enabled),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["flatten-config"] });
+    },
+  });
+}
+
+export function useFlattenAllPositions() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => accountClient.flattenAllPositions(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["account-positions"] });
+      queryClient.invalidateQueries({ queryKey: ["flatten-config"] });
+    },
   });
 }
