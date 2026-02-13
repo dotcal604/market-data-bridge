@@ -36,6 +36,41 @@ node build/index.js --mode mcp
 
 The server starts even if TWS isn't running yet — auto-reconnect retries every 5 seconds.
 
+## Real-Time WebSocket Updates
+
+The server includes WebSocket support for live data streaming. Connect to `ws://localhost:3000` and subscribe to channels:
+
+- **`positions`** — Position updates when trades execute
+- **`orders`** — Order status changes (Submitted, Filled, Cancelled, etc.)
+- **`account`** — Account value updates
+- **`executions`** — Execution details as fills occur
+
+### WebSocket Protocol
+
+```javascript
+// Connect with API key (if configured)
+const ws = new WebSocket('ws://localhost:3000?apiKey=YOUR_API_KEY');
+
+// Subscribe to a channel
+ws.send(JSON.stringify({ type: 'subscribe', channel: 'orders' }));
+
+// Receive real-time updates
+ws.onmessage = (event) => {
+  const message = JSON.parse(event.data);
+  if (message.type === 'data') {
+    console.log(`[${message.channel}]`, message.data);
+  }
+};
+
+// Unsubscribe
+ws.send(JSON.stringify({ type: 'unsubscribe', channel: 'orders' }));
+
+// Heartbeat
+ws.send(JSON.stringify({ type: 'ping' })); // Server responds with pong
+```
+
+The frontend dashboard uses WebSocket by default and falls back to polling if the connection is lost (auto-reconnect with exponential backoff).
+
 ## Available Tools / Endpoints
 
 | Tool | REST Endpoint | Description |
