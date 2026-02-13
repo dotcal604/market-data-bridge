@@ -51,3 +51,11 @@ export function formatTimeAgo(ts: string): string {
   const days = Math.floor(hours / 24);
   return `${days}d ago`;
 }
+
+export function formatCurrency(value: number | null): string {
+  if (value == null) return "—";
+  return `$${value.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}

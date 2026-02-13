@@ -1,105 +1,162 @@
 "use client";
 
-import { useAccountSummary } from "@/lib/hooks/use-account";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { DollarSign, TrendingUp, Wallet, Shield } from "lucide-react";
+import { useStatus, useAccountSummary, usePnL } from "@/lib/hooks/use-account";
 import { formatCurrency } from "@/lib/utils/formatters";
+import { pnlColor } from "@/lib/utils/colors";
+import { Wallet, TrendingUp, DollarSign, Activity, AlertCircle } from "lucide-react";
 
-export function AccountSummary() {
-  const { data, isLoading, error } = useAccountSummary();
+interface AccountSummaryProps {
+  refreshInterval?: number;
+}
+
+export function AccountSummary({ refreshInterval = 10000 }: AccountSummaryProps) {
+  const status = useStatus(refreshInterval);
+  const summary = useAccountSummary(refreshInterval);
+  const pnl = usePnL(refreshInterval);
+
+  const isConnected = status.data?.ibkr?.connected ?? false;
+  const isLoading = status.isLoading || summary.isLoading || pnl.isLoading;
 
   if (isLoading) {
     return (
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {[...Array(4)].map((_, i) => (
-          <Card key={i}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <Skeleton className="h-4 w-24" />
-              <Skeleton className="h-4 w-4 rounded" />
-            </CardHeader>
-            <CardContent>
-              <Skeleton className="h-8 w-32 mb-1" />
-              <Skeleton className="h-3 w-24" />
-            </CardContent>
-          </Card>
-        ))}
+      <div className="space-y-6">
+        <Skeleton className="h-10 w-48" />
+        <div className="grid grid-cols-4 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-32 rounded-lg" />
+          ))}
+        </div>
       </div>
     );
   }
 
-  if (error || data?.error) {
-    return (
-      <Card>
-        <CardContent className="pt-6">
-          <div className="text-sm text-red-400">
-            {data?.error || (error as Error)?.message || "Failed to load account summary"}
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (!data?.summary) {
-    return (
-      <Card>
-        <CardContent className="pt-6">
-          <div className="text-sm text-muted-foreground">
-            No account data available
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  const { summary } = data;
-
-  const cards = [
-    {
-      title: "Net Liquidation",
-      value: summary.netLiquidation,
-      subtitle: `Account: ${summary.account}`,
-      icon: DollarSign,
-    },
-    {
-      title: "Buying Power",
-      value: summary.buyingPower,
-      subtitle: "Available to trade",
-      icon: TrendingUp,
-    },
-    {
-      title: "Cash",
-      value: summary.totalCashValue,
-      subtitle: `Settled: ${summary.settledCash !== null ? formatCurrency(summary.settledCash) : "—"}`,
-      icon: Wallet,
-    },
-    {
-      title: "Excess Liquidity",
-      value: summary.excessLiquidity,
-      subtitle: "Above margin req",
-      icon: Shield,
-    },
-  ];
-
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-      {cards.map((card) => {
-        const Icon = card.icon;
-        return (
-          <Card key={card.title}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">{card.title}</CardTitle>
-              <Icon className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold font-mono">
-                {card.value !== null ? formatCurrency(card.value) : "—"}
-              </div>
-              <p className="text-xs text-muted-foreground">{card.subtitle}</p>
-            </CardContent>
-          </Card>
-        );
-      })}
+    <div className="space-y-6">
+      {/* Header with connection status */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Account Summary</h1>
+          <p className="text-sm text-muted-foreground">
+            IBKR account overview and P&L
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <div
+            className={`h-2 w-2 rounded-full ${
+              isConnected ? "bg-emerald-400" : "bg-red-400"
+            }`}
+          />
+          <span className="text-sm font-medium">
+            {isConnected ? "Connected" : "Disconnected"}
+          </span>
+        </div>
+      </div>
+
+      {/* Not connected warning */}
+      {!isConnected && (
+        <Card className="border-orange-500/50 bg-orange-500/10">
+          <CardContent className="flex items-center gap-3 py-4">
+            <AlertCircle className="h-5 w-5 text-orange-400" />
+            <div>
+              <p className="text-sm font-medium text-orange-400">IBKR Not Connected</p>
+              <p className="text-xs text-orange-400/80">
+                Start TWS/Gateway to view account data
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Stat cards */}
+      <div className="grid grid-cols-4 gap-4">
+        {/* Net Liquidation */}
+        <Card className="bg-card">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Net Liquidation
+            </CardTitle>
+            <Wallet className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold font-mono">
+              {isConnected && summary.data
+                ? formatCurrency(summary.data.netLiquidation)
+                : "—"}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {summary.data?.currency ?? "USD"}
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Buying Power */}
+        <Card className="bg-card">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Buying Power
+            </CardTitle>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold font-mono">
+              {isConnected && summary.data
+                ? formatCurrency(summary.data.buyingPower)
+                : "—"}
+            </div>
+            <p className="text-xs text-muted-foreground">Available</p>
+          </CardContent>
+        </Card>
+
+        {/* Daily P&L */}
+        <Card className="bg-card">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Daily P&L
+            </CardTitle>
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div
+              className={`text-2xl font-bold font-mono ${
+                isConnected && pnl.data
+                  ? pnlColor(pnl.data.dailyPnL)
+                  : "text-muted-foreground"
+              }`}
+            >
+              {isConnected && pnl.data
+                ? formatCurrency(pnl.data.dailyPnL)
+                : "—"}
+            </div>
+            <p className="text-xs text-muted-foreground">Today</p>
+          </CardContent>
+        </Card>
+
+        {/* Unrealized P&L */}
+        <Card className="bg-card">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Unrealized P&L
+            </CardTitle>
+            <Activity className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div
+              className={`text-2xl font-bold font-mono ${
+                isConnected && pnl.data
+                  ? pnlColor(pnl.data.unrealizedPnL)
+                  : "text-muted-foreground"
+              }`}
+            >
+              {isConnected && pnl.data
+                ? formatCurrency(pnl.data.unrealizedPnL)
+                : "—"}
+            </div>
+            <p className="text-xs text-muted-foreground">Open positions</p>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

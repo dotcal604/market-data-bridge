@@ -14,7 +14,7 @@ export default function AccountPage() {
       </div>
 
       <AccountSummary />
-      
+
       <PositionsTable />
     </div>
   );
