@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { Suspense, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 import { useEvalHistory } from "@/lib/hooks/use-evals";
@@ -18,6 +18,14 @@ import type { EvalResponse, Evaluation } from "@/lib/api/types";
 import type { EvalFilterState } from "@/lib/stores/eval-filters";
 
 export default function EvalsPage() {
+  return (
+    <Suspense fallback={<Skeleton className="h-96 w-full" />}>
+      <EvalsContent />
+    </Suspense>
+  );
+}
+
+function EvalsContent() {
   const router = useRouter();
   const { data, isLoading } = useEvalHistory(100);
   const [dialogOpen, setDialogOpen] = useState(false);

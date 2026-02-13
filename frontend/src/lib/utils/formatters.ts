@@ -15,8 +15,12 @@ export function formatPrice(price: number | null): string {
   return `$${price.toFixed(2)}`;
 }
 
-export function formatCurrency(value: number): string {
-  return `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+export function formatCurrency(value: number | null): string {
+  if (value == null) return "—";
+  return `$${value.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 export function formatMs(ms: number): string {
@@ -50,12 +54,4 @@ export function formatTimeAgo(ts: string): string {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   return `${days}d ago`;
-}
-
-export function formatCurrency(value: number | null): string {
-  if (value == null) return "—";
-  return `$${value.toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
 }
