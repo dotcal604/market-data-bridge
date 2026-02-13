@@ -13,3 +13,7 @@ data/logs/
 # Artifacts / junk
 NUL
 *.zip
+
+# Test coverage
+coverage/
+.vitest/

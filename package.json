@@ -13,7 +13,10 @@
     "dev": "concurrently -n api,ui -c blue,magenta \"node build/index.js\" \"cd frontend && npm run dev -- -p 3001\"",
     "dev:api": "node build/index.js",
     "dev:ui": "cd frontend && npm run dev -- -p 3001",
-    "audit:api": "node scripts/api-audit.mjs"
+    "audit:api": "node scripts/api-audit.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
@@ -36,7 +39,9 @@
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/node": "^22.12.0",
+    "@vitest/coverage-v8": "^3.0.0",
     "concurrently": "^9.2.1",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.0"
   }
 }
