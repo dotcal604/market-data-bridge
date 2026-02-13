@@ -34,6 +34,7 @@ df = load_model_outcomes(days=90)
 | `regime.py` | Win rate by volatility x time x liquidity | EI=5, Thesis C |
 | `recalibrate_weights.py` | Auto-tune model weights from outcomes | EI=4, Thesis B |
 | `agreement.py` | Model agreement vs outcome correlation | EI=4, Thesis B |
+| `agreement_analysis.py` | Agreement buckets from score directions + win rates | EI=4, Thesis B |
 
 ## DB Loader Functions
 

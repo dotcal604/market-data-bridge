@@ -1,7 +1,7 @@
 """
 Database loader for Market Data Bridge analytics.
 
-Connects to the SQLite database (data/bridge.db) and returns DataFrames
+Connects to the SQLite database (data/market-data-bridge.db) and returns DataFrames
 ready for analysis. All analytics scripts should import from here.
 
 Usage:
@@ -19,18 +19,29 @@ import pandas as pd
 ANALYTICS_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = ANALYTICS_DIR.parent
 DATA_DIR = PROJECT_ROOT / "data"
-DB_PATH = DATA_DIR / "bridge.db"
+DB_PATH = DATA_DIR / "market-data-bridge.db"
+LEGACY_DB_PATH = DATA_DIR / "bridge.db"
 WEIGHTS_PATH = DATA_DIR / "weights.json"
 
 
+def _resolve_db_path() -> Path:
+    """Resolve analytics DB path, preferring market-data-bridge.db."""
+    if DB_PATH.exists():
+        return DB_PATH
+    if LEGACY_DB_PATH.exists():
+        return LEGACY_DB_PATH
+    return DB_PATH
+
+
 def _connect() -> sqlite3.Connection:
-    """Open a read-only connection to bridge.db."""
-    if not DB_PATH.exists():
+    """Open a read-only connection to the analytics SQLite DB."""
+    db_path = _resolve_db_path()
+    if not db_path.exists():
         raise FileNotFoundError(
-            f"Database not found at {DB_PATH}. "
+            f"Database not found at {db_path}. "
             "Start the server at least once to create it."
         )
-    conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
+    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -289,10 +300,11 @@ def summary() -> dict:
 
 
 if __name__ == "__main__":
+    resolved = _resolve_db_path()
     print("Market Data Bridge — Analytics DB Loader")
-    print(f"DB path: {DB_PATH}")
-    print(f"DB exists: {DB_PATH.exists()}")
-    if DB_PATH.exists():
+    print(f"DB path: {resolved}")
+    print(f"DB exists: {resolved.exists()}")
+    if resolved.exists():
         print(f"\nTable counts: {summary()}")
         w = load_weights()
         print(f"Current weights: claude={w['claude']}, gpt4o={w['gpt4o']}, gemini={w['gemini']}, k={w['k']}")
