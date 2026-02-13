@@ -1,179 +1,180 @@
-# Market Data Bridge — Roadmap
+# Market Data Bridge — Edge Roadmap
 
-> Populated via codebase scanning, competitive research (Bloomberg/TradingView/W&B/MLflow), usage-driven gap analysis, and AI synthesis. See `ORCHESTRATION.md` for agent delegation workflow.
+> This is an **edge roadmap**, not a product roadmap. Every item is scored against trading edge impact. Features that don't serve edge discovery, measurement, or protection wait.
+
+## Thesis Alignment
+
+Every feature must serve at least one leg of the thesis:
+
+- **A) Structure Edge** — capture market microstructure (spreads, RVOL, float rotation, gap%) that informed humans miss
+- **B) Probability Weighting** — 3-model ensemble scoring with calibrated confidence, not point predictions
+- **C) Regime Conditioning** — adjust behavior by volatility regime, time-of-day, and liquidity state
+
+Before shipping anything: *"Does this help A, B, or C?"* If not, it waits.
+
+---
+
+## Scoring Framework
+
+Every backlog item is scored on 5 dimensions (1-5 scale):
+
+| Dimension | Question | Scale |
+|-----------|----------|-------|
+| **Edge Impact (EI)** | Does this increase or protect trading edge? | 0=cosmetic, 1=QoL, 2=observability, 3=risk protection, 4=edge measurement, 5=edge generation |
+| **Value** | How much does this improve the system? | 1=nice-to-have → 5=blocks progress |
+| **Effort** | How much work? | 1=trivial → 5=multi-week |
+| **Delegability** | Can an AI agent safely build this? | 1=must architect yourself → 5=pure CRUD/boilerplate |
+| **Dependency** | Does it block other work? | 1=standalone → 5=critical path |
+
+**Composite score**: `(EI × 2 + Value + Dependency) / Effort`
+
+**Delegability warning**: High delegability ≠ "ship fast." AI agents are dangerous at cross-cutting risk logic, capital constraints, state reconciliation, and execution path mods. Low delegability = must be architected by you, not "slower."
+
+---
 
 ## Current State
 
 - **Backend**: 35 REST endpoints, 34 MCP tools, 10 SQLite tables, 3-model eval engine
-- **Frontend**: 7 pages (dashboard, evals, eval detail, weights, weights demo, model stats, + eval filters) — **~25% of backend exposed**
+- **Frontend**: 7 pages — ~25% of backend exposed
 - **Tests**: 201 passing (16 test files) — Vitest + in-memory SQLite
-- **Agent PRs merged**: #11, #12, #13, #23, #29-38, #44 (16 total)
 - **SDK versions**: @anthropic-ai/sdk 0.74, openai 6.21, @google/genai 1.0, @stoqey/ib 1.5.3
-- **IBKR API gap**: @stoqey/ib targets TWS API 10.32; current is 10.42. Backwards compatible — no action needed until library updates.
-
-## Priority Framework
-
-- **P0**: Testing foundation (blocks quality for everything else)
-- **P1**: Trading workflow completeness (evaluate → trade → record → analyze)
-- **P2**: Research tools, analytics, UX polish
-- **P3**: Offline analytics, production deployment
+- **Hardening**: Input validation on order routes, symbol regex, crash handlers, safe JSON parsing
 
 ---
 
-## Phase 0: Foundation (P0 — COMPLETE)
+## Edge Experiments (EI ≥ 4)
 
-Testing infrastructure. 201 tests passing across 16 test files.
+These directly increase or measure trading edge. **Priority over everything else.**
 
-| Task | Agent | PR | Status |
-|------|-------|-----|--------|
-| Vitest + in-memory SQLite setup | Copilot | #30 | **Merged** |
-| Feature engine unit tests (14 modules) | Copilot | #31 | **Merged** |
-| Ensemble scorer unit tests | Copilot | #34 | **Merged** |
-| Risk gate unit tests | Copilot | #36 | **Merged** |
-| Infrastructure tests | Copilot | #30 | **Merged** |
-
----
-
-## Phase 1: Core Dashboard (COMPLETE)
-
-- [x] Backend: `GET /api/eval/:id` endpoint
-- [x] Next.js 14 scaffolding (App Router, shadcn/ui, Tailwind v4, TanStack, proxy config)
-- [x] Lib layer: typed API client, React Query hooks, formatters, color utilities
-- [x] Layout: sidebar nav, top bar with backend connection status
-- [x] Dashboard home (`/`) — stats cards + recent evals
-- [x] Eval history (`/evals`) — sortable TanStack Table
-- [x] Eval detail (`/evals/[id]`) — 3-model side-by-side, ensemble summary, guardrails, features, outcome
-- [x] Weights page (`/weights`) — current ensemble weights display
-- [x] Dev workflow: `npm run dev` starts backend + frontend via concurrently
+| Item | EI | Thesis | Status | Agent | Notes |
+|------|----|--------|--------|-------|-------|
+| **Confidence calibration tracking** | 5 | B | Not started | Codex | Brier score per model, calibration curve. Requires 50+ outcomes. `analytics/calibration.py` |
+| **Structured reasoning log** | 5 | A,B | Not started | Claude Code | `eval_reasoning` table — per-model key_drivers, risk_factors, uncertainties as JSON. Enables drift detection + disagreement diagnosis. ~50 LOC in eval pipeline |
+| **Regime-conditioned accuracy** | 5 | C | Not started | Codex | Win rate by volatility_regime × time_of_day × liquidity_bucket. `analytics/regime.py` |
+| **Weight recalibration script** | 4 | B | Not started | Codex | Compute performance scores from outcomes, normalize weights, write `data/weights.json`. Automated edge tuning. |
+| **Drift reconciliation** | 4 | B,C | Not started | Claude Code | Detect when model predictions diverge from recent outcomes. Alert when ensemble is miscalibrated. |
+| **Model agreement analysis** | 4 | B | Not started | Codex | Unanimous/majority/split classification. Track: does agreement predict outcome? |
+| **Risk gate tuning** | 4 | A | Not started | Claude Code | Parameterize risk limits from data (max position size by regime, volatility-adjusted sizing) |
+| **Weight simulation endpoint** | 4 | B | Not started | Claude Code | `POST /api/eval/weights/simulate` — re-score historical evals with custom weights. "What if" before committing. |
 
 ---
 
-## Phase 2: Complete Eval UI (COMPLETE)
+## Risk Protection (EI = 3)
 
-Eval loop closed — trigger evaluations and record outcomes from the browser.
+Protect capital and prevent silent failures.
 
-### Agent-delegated components
-
-| Issue | Component | Agent | PR | Status |
-|-------|-----------|-------|----|--------|
-| #6 | Score scatter chart | Copilot | #11 | **Merged** |
-| #7 | Feature radar chart | Codex | #23 | **Merged** |
-| #8 | Time-of-day bar chart | Copilot | #13 | **Merged** |
-| #9 | Weight sliders | Copilot | #12 | **Merged** |
-| #10 | CSV/JSON export utility | Codex | #33 | **Merged** |
-| — | Evaluation trigger form | Copilot | #29 | **Merged** |
-| — | Outcome recording form | Copilot | #32 | **Merged** |
-| #19 | Eval history filters (Zustand + URL sync) | Copilot | #37 | **Merged** |
-| #20 | Model performance stats page | Copilot | #38 | **Merged** |
-
-### Backend additions (Claude Code)
-
-- [ ] `GET /api/eval/outcomes` — evals joined with outcomes (for scatter plots)
-- [ ] `POST /api/eval/weights/simulate` — re-score evals with custom weights
-- [ ] `/analytics` page wiring — mount scatter, time-of-day, feature radar into layout
-- [ ] `/weights` upgrade — wire sliders to simulate endpoint + "what if" preview
+| Item | EI | Status | Agent | Notes |
+|------|----|--------|-------|-------|
+| **Input validation hardening** | 3 | **Done** | Claude Code | Symbol regex, order price validation, limit capping, crash handlers |
+| **Risk gate unit tests** | 3 | **Done** | Copilot | PR #36 — 34 tests |
+| **Weight history tracking** | 3 | Not started | Claude Code | INSERT into existing weight_history table on each recalibration. Audit trail. |
+| **Min TWS version check** | 3 | Not started | Claude Code | Startup warning if connected TWS < 10.30 |
+| **One-message bracket orders** | 3 | Blocked | — | Depends on @stoqey/ib update for TWS 10.42. Reduces race conditions. |
 
 ---
 
-## Phase 3: Trading Workflow (P1 — IN PROGRESS)
+## Observability (EI = 2)
 
-Expose IBKR account data and order management. All backend endpoints exist — this is pure frontend work. Issues #39-42 assigned, awaiting Copilot PRs.
+See what's happening. Required before edge experiments can be measured.
 
-| Task | Agent | Issue | Status |
-|------|-------|-------|--------|
-| **Account summary + P&L page** | Copilot | #39 | Assigned |
-| **Positions table** (auto-refresh 10s) | Copilot | #40 | Assigned |
-| **Order management** (open/completed tabs, cancel w/ confirm) | Copilot | #41 | Assigned |
-| **Executions log** (filterable table) | Copilot | #42 | Assigned |
-| **Order entry form** (single + bracket, risk preview) | Copilot | — | Not yet created |
-
----
-
-## Phase 4: Journal & Collaboration (P1 — QUEUED)
-
-Record trade reasoning before execution, review after. Enable human visibility into AI-to-AI chat. Issues #45-47 created, awaiting Copilot PRs.
-
-| Task | Agent | Issue | Status |
-|------|-------|-------|--------|
-| **Journal entry form** — symbol, reasoning, tags, auto market context (SPY/VIX/gap%) | Copilot | #45 | Assigned |
-| **Journal history + detail** — searchable table, detail view, outcome update form | Copilot | #46 | Assigned |
-| **Collab channel feed** — author badges, markdown, post form, auto-refresh, clear | Copilot | #47 | Assigned |
+| Item | EI | Status | Agent | Notes |
+|------|----|--------|-------|-------|
+| **Outcome recording form** | 2 | **Done** | Copilot | PR #32 |
+| **Journal entry form** | 2 | Assigned | Copilot | #45 — pre-trade reasoning capture |
+| **Journal history + detail** | 2 | Assigned | Copilot | #46 — searchable, outcome updates |
+| **Score scatter chart** | 2 | **Done** | Copilot | PR #11 |
+| **Eval outcomes endpoint** | 2 | Not started | Claude Code | `GET /api/eval/outcomes` — evals joined with outcomes for scatter/calibration |
+| **Score distribution histogram** | 2 | Not started | Codex | 3-model overlay in 10-point buckets |
+| **Calibration curve UI** | 2 | Not started | Codex | Predicted confidence vs actual win rate |
+| **Run Comparer** | 2 | Not started | Copilot | Select 2-5 evals, side-by-side comparison |
+| **Collab channel feed** | 2 | Assigned | Copilot | #47 — human visibility into AI-to-AI chat |
 
 ---
 
-## Phase 5: Market Data Tools (P2)
+## Infrastructure Stability (EI = 1)
 
-Research tools — look up symbols, view charts, run screeners. All endpoints exist.
+Keep the system running. Don't over-invest here.
 
-| Task | Agent | Endpoints used |
-|------|-------|----------------|
-| **Symbol lookup + quote display** — search autocomplete, bid/ask/last/OHLCV card, company details (sector, PE, 52wk), "Evaluate Trade" button | Copilot | GET /api/search, GET /api/quote/:symbol, GET /api/details/:symbol |
-| **Price chart** — candlestick with volume bars, timeframe/interval selectors (1d-YTD) | Copilot | GET /api/history/:symbol |
-| **Stock screener** — dropdown for screener type, results table with symbol/price/change/volume/sector | Copilot | GET /api/screener/filters, POST /api/screener/run-with-quotes |
-| **News feed + earnings** — news articles for symbol, earnings history chart (actual vs estimate with surprise %) | Codex | GET /api/news/:query, GET /api/earnings/:symbol |
-
----
-
-## Phase 6: Advanced Analytics (P2)
-
-Data visualization for pattern discovery. Inspired by W&B run comparer and Bloomberg analytics.
-
-| Task | Agent | Notes |
-|------|-------|-------|
-| **Score distribution histogram** — overlay 3 models in 10-point buckets, filter by date range | Codex | Recharts BarChart with 3 series |
-| **Model agreement heatmap** — visualize unanimous/majority/split across evals, tooltip with example IDs | Codex | Custom grid component |
-| **Time-of-day performance** — win rate + avg R-multiple by market session bucket | Copilot | PR #13 exists, extend with outcome data |
-| **Run Comparer** — select 2-5 evals, scrollable horizontal table comparing all features/scores/outcomes side-by-side | Copilot | W&B-inspired, TanStack Table |
-| **Calibration curve** — model predicted confidence vs actual win rate in 5 buckets | Codex | Recharts LineChart |
-| **Structured reasoning log** — `eval_reasoning` table capturing per-model key_drivers, risk_factors, uncertainties as JSON. Query via `/api/eval/:id/reasoning`. Enables drift detection + disagreement diagnosis after 50+ outcomes | Claude Code | Minimal "Windsurf" — reasoning harness, not a layer. Add to eval pipeline between features and model calls. ~50 LOC |
+| Item | EI | Status | Agent | Notes |
+|------|----|--------|-------|-------|
+| **Testing foundation** | 1 | **Done** | Copilot | 201 tests, 16 files |
+| **SDK migrations** | 1 | **Done** | Mixed | Anthropic 0.74, OpenAI 6, Google genai 1.0 |
+| **yahoo-finance2 v3 prep** | 1 | **Done** | Claude Code | Pinned ~3.13.0 |
+| **Account summary page** | 1 | Assigned | Copilot | #39 |
+| **Positions table** | 1 | Assigned | Copilot | #40 |
+| **Order management page** | 1 | Assigned | Copilot | #41 |
+| **Executions log** | 1 | Assigned | Copilot | #42 |
+| WebSocket real-time updates | 1 | Not started | Claude Code | Replaces polling |
+| Production build | 1 | Not started | Claude Code | Static export served from Express |
+| OpenAPI spec update | 1 | Not started | Codex | Keep in sync |
 
 ---
 
-## Phase 7: UX Polish (P2)
-
-Power user features that compound productivity.
-
-| Task | Agent | Notes |
-|------|-------|-------|
-| **Command palette (Cmd+K)** — fuzzy search pages, recent symbols, actions (Record Outcome, Place Order, New Journal) | Copilot | shadcn/ui cmdk dialog |
-| **Universal CSV export** — reusable `exportToCSV()` utility, add Export button to every table | Copilot | Single utility + button per table |
-| **Permalink/shareable state** — encode filter state in URL query params, "Copy Link" button | Copilot | useSearchParams + clipboard API |
-| **Keyboard shortcuts** — table navigation (j/k), refresh (r), new eval (n) | Copilot | Global key handler hook |
-
----
-
-## Phase 8: Python Analytics (P3)
-
-Offline batch analytics for weight recalibration. Runs after 50+ outcomes collected.
-
-| Task | Agent | Notes |
-|------|-------|-------|
-| **Analytics scaffold** — requirements.txt (pandas, numpy, matplotlib, scikit-learn), utils.py (DB loader), README | Claude Code | Sets up analytics/ directory |
-| **Calibration analysis** — Brier score per model, calibration curve PNG, terminal summary | Codex | analytics/calibration.py |
-| **Regime analysis** — accuracy by time_of_day, volatility_regime, liquidity_bucket | Codex | analytics/regime.py |
-| **Weight update script** — compute performance scores, normalize weights, write data/weights.json | Codex | analytics/update_weights.py |
-| **Full report generator** — run all scripts, output markdown report to analytics/reports/ | Codex | analytics/analyze.py |
-
----
-
-## Backlog (unprioritized)
+## Cosmetic (EI = 0) — Ship Only If Free
 
 | Item | Notes |
 |------|-------|
-| WebSocket server for real-time updates (eval:new, outcome:recorded) | Replaces polling, needs `ws` dep |
-| Production build: static export served from Express | Currently dev-only |
-| Mobile-responsive layout | Low priority — desktop tool |
-| OpenAPI spec update for new eval endpoints | Keep in sync |
-| Weight history tracking (INSERT into weight_history table) | Schema exists, no write logic |
-| Populate ai_confidence field on orders from eval scores | DB field exists, never used |
-| ~~Fix silent catch in ibkr/connection.ts:64~~ | **DONE** (commit 1845305) |
-| Expose getRiskLimits() in dashboard (risk gate config viewer) | Exported but unused |
-| Options chain viewer | GET /api/options/:symbol exists |
-| Financials page | GET /api/financials/:symbol exists |
-| **@stoqey/ib upgrade to 10.40+ support** | Order recovery on reconnect, one-message brackets, errorTime, Submitter field. Watch [stoqey/ib](https://github.com/stoqey/ib) for releases. |
-| **One-message bracket orders** (TWS API 10.42) | Replace 3-call bracket with single `placeOrder` using `slOrderId`/`ptOrderId` attributes. Depends on @stoqey/ib update. |
-| **Min TWS version check** | IBKR dropped <10.30 support (Mar 2025). Add startup warning if connected TWS version is too old. |
-| **Decimal tick size handling** (TWS API 10.44, Feb 2026) | `Last_Size`/`Delayed_Last_Size` become Decimal. No action until @stoqey/ib updates. |
+| Mobile responsive layout | Desktop tool. Skip. |
+| Command palette (Cmd+K) | Nice but zero edge. |
+| Keyboard shortcuts (j/k/r/n) | QoL only. |
+| Permalink/shareable state | Already partially done (URL sync in filters). |
+| Options chain viewer | Endpoint exists, low priority. |
+| Financials page | Endpoint exists, low priority. |
+
+---
+
+## Kill List
+
+Items that have been evaluated and explicitly rejected or pruned. Prevents re-proposing dead ideas.
+
+| Item | Reason | Date |
+|------|--------|------|
+| *(empty — first quarter)* | | |
+
+**Kill criteria** — add items here when:
+- Feature did not increase expectancy after N trades
+- Feature increased variance without improving mean
+- Feature added complexity without measurable lift
+- Feature was cosmetic and consumed edge-experiment time
+
+**Review cadence**: Quarterly. Prune anything that's been "Not started" for 2+ quarters without a thesis justification.
+
+---
+
+## Completed Phases (Changelog)
+
+<details>
+<summary>Phase 0: Testing Foundation (COMPLETE)</summary>
+
+| Task | PR | Status |
+|------|----|--------|
+| Vitest + in-memory SQLite | #30 | Merged |
+| Feature engine unit tests (14 modules) | #31 | Merged |
+| Ensemble scorer unit tests | #34 | Merged |
+| Risk gate unit tests | #36 | Merged |
+</details>
+
+<details>
+<summary>Phase 1: Core Dashboard (COMPLETE)</summary>
+
+Next.js 14 scaffolding, 7 pages, typed API client, React Query hooks, sidebar nav, eval history table, eval detail with 3-model side-by-side.
+</details>
+
+<details>
+<summary>Phase 2: Complete Eval UI (COMPLETE)</summary>
+
+| Component | PR | Status |
+|-----------|----|--------|
+| Score scatter | #11 | Merged |
+| Feature radar | #23 | Merged |
+| Time-of-day chart | #13 | Merged |
+| Weight sliders | #12 | Merged |
+| CSV/JSON export | #33 | Merged |
+| Eval trigger form | #29 | Merged |
+| Outcome recording | #32 | Merged |
+| Eval filters | #37 | Merged |
+| Model stats page | #38 | Merged |
+</details>
 
 ---
 
@@ -181,34 +182,36 @@ Offline batch analytics for weight recalibration. Runs after 50+ outcomes collec
 
 Automated weekly audit via `.github/workflows/api-audit.yml` + `scripts/api-audit.mjs`.
 
-**What it checks:**
-- npm package drift for all tracked deps (`npm outdated`)
-- AI model deprecation (hardcoded model names in `src/eval/config.ts`)
-- Deprecation calendar with countdown timers
+**Schedule:** Every Monday 9:00 AM ET.
 
-**Schedule:** Every Monday 9:00 AM ET. Creates/updates a GitHub issue labeled `api-audit` when warnings or critical findings detected.
-
-**Manual run:** `node scripts/api-audit.mjs` or trigger via GitHub Actions UI.
-
-**Current deprecation timeline:**
-
-| Deadline | Item | Severity | Action |
-|----------|------|----------|--------|
-| 2026-03-31 | gemini-2.0-flash shutdown | ~~Done~~ | Migrated to `gemini-2.5-flash` |
-| 2026-06-24 | @google/generative-ai SDK deprecated | ~~Done~~ | Migrated to `@google/genai` (PR #44) |
-| ~~TBD~~ | openai SDK v4→v6 major | ~~Done~~ | Upgraded to openai 6.21, zero code changes |
-| ~~TBD~~ | @anthropic-ai/sdk 0.39→0.74 | ~~Done~~ | Upgraded in commit 012b145. Zero code changes. |
-| 2026-06-30 | yahoo-finance2 v3 breaking changes | ~~Pinned~~ | Version pinned to ~3.13.0 (#27). Monitor for v3 release. |
-| TBD | @stoqey/ib 10.42 features | Info | Watch releases for one-message brackets |
+| Deadline | Item | Status |
+|----------|------|--------|
+| ~~2026-03-31~~ | gemini-2.0-flash shutdown | Done — migrated to gemini-2.5-flash |
+| ~~2026-06-24~~ | @google/generative-ai deprecated | Done — migrated to @google/genai (PR #44) |
+| ~~TBD~~ | openai v4→v6 | Done — upgraded to 6.21 |
+| ~~TBD~~ | @anthropic-ai/sdk 0.39→0.74 | Done — commit 012b145 |
+| 2026-06-30 | yahoo-finance2 v3 | Pinned ~3.13.0. Monitor for release. |
+| TBD | @stoqey/ib 10.42 | Watch for one-message brackets |
 
 ---
 
 ## Agent Delegation Summary
 
-| Agent | Issues | Strength |
-|-------|--------|----------|
-| **Copilot** | ~20 | Self-contained UI components, clear props/API specs, multi-file refactors |
-| **Codex** | ~15 | Long-running features, parallel execution, analytics, Python scripts |
-| **Claude Code** | ~5 | Cross-file wiring, backend routes, architecture, planning |
+| Agent | Strength | Danger Zone |
+|-------|----------|-------------|
+| **Copilot** | Self-contained UI, clear props/API specs, CRUD | Cross-cutting risk logic, state reconciliation |
+| **Codex** | Long-running features, analytics, Python scripts | Execution path modifications, capital constraints |
+| **Claude Code** | Architecture, backend routes, cross-file wiring | Over-automating edge-critical decisions |
 
-Orchestrated via **GitHub Agent HQ**. Decision tree and agent profiles: See `ORCHESTRATION.md` and `.github/agents/`.
+---
+
+## Weekly Triage Cycle
+
+1. **Thesis check**: Does any active work serve A (structure edge), B (probability weighting), or C (regime conditioning)?
+2. **Check issues + PRs**: Review agent PRs, merge or reject
+3. **Surface new items**: Usage gaps, dependency alerts, post-trade insights
+4. **Score**: Apply 5-dimension scoring (EI × 2 + Value + Dependency) / Effort
+5. **Ship / backlog / kill**: High EI ships. Low EI backlogs. Dead ideas go to kill list.
+6. **Update roadmap**: Keep this file directional, not a changelog.
+
+**Guardrail**: If edge experiments are < 40% of active work, you're drifting.
