@@ -173,6 +173,47 @@ export interface EvalResponse {
   latency_ms: Record<string, number>;
 }
 
+// Account types
+export interface IBKRStatus {
+  connected: boolean;
+  host: string;
+  port: number;
+  clientId: number;
+  note: string;
+}
+
+export interface StatusResponse {
+  status: string;
+  easternTime: string;
+  marketSession: string;
+  marketData: string;
+  screener: string;
+  ibkr: IBKRStatus;
+  timestamp: string;
+}
+
+export interface AccountSummary {
+  account: string;
+  netLiquidation: number | null;
+  totalCashValue: number | null;
+  settledCash: number | null;
+  buyingPower: number | null;
+  grossPositionValue: number | null;
+  maintMarginReq: number | null;
+  excessLiquidity: number | null;
+  availableFunds: number | null;
+  currency: string;
+  timestamp: string;
+}
+
+export interface PnLData {
+  account: string;
+  dailyPnL: number | null;
+  unrealizedPnL: number | null;
+  realizedPnL: number | null;
+  timestamp: string;
+}
+
 // Journal types
 export interface JournalEntry {
   id: number;
