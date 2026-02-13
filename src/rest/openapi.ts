@@ -747,6 +747,40 @@ export const openApiSpec = {
         },
       },
     },
+    "/api/portfolio/exposure": {
+      get: {
+        operationId: "getPortfolioExposure",
+        summary: "Compute portfolio exposure metrics: gross/net exposure, % deployed, largest position, sector breakdown, beta-weighted exposure, portfolio heat. Requires TWS/Gateway.",
+        responses: {
+          "200": {
+            description: "Portfolio exposure analytics (or error if IBKR not connected)",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    grossExposure: { type: "number", description: "Sum of absolute values of all position market values" },
+                    netExposure: { type: "number", description: "Sum of signed market values (long positive, short negative)" },
+                    percentDeployed: { type: "number", description: "Gross exposure as % of net liquidation" },
+                    largestPositionPercent: { type: "number", description: "Largest single position as % of net liquidation" },
+                    largestPosition: { type: "string", nullable: true, description: "Symbol of largest position" },
+                    sectorBreakdown: {
+                      type: "object",
+                      additionalProperties: { type: "number" },
+                      description: "Sector allocations as % of gross exposure",
+                    },
+                    betaWeightedExposure: { type: "number", description: "Sum of (position value * beta) where beta is correlation with SPY" },
+                    portfolioHeat: { type: "number", description: "Sum of (position size * 2x ATR) as estimated risk" },
+                    positionCount: { type: "integer", description: "Number of open positions" },
+                    netLiquidation: { type: "number", description: "Total account net liquidation value" },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
     "/api/account/orders": {
       get: {
         operationId: "getOpenOrders",

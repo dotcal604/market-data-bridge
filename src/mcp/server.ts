@@ -19,6 +19,7 @@ import {
 import { isConnected } from "../ibkr/connection.js";
 import { getAccountSummary, getPositions, getPnL } from "../ibkr/account.js";
 import { getOpenOrders, getCompletedOrders, getExecutions, placeOrder, placeBracketOrder, placeAdvancedBracket, cancelOrder, cancelAllOrders, flattenAllPositions, validateOrder } from "../ibkr/orders.js";
+import { computePortfolioExposure } from "../ibkr/portfolio.js";
 import { setFlattenEnabled, getFlattenConfig } from "../scheduler.js";
 import { getContractDetails } from "../ibkr/contracts.js";
 import { getIBKRQuote } from "../ibkr/marketdata.js";
@@ -422,6 +423,35 @@ export function createMcpServer(): McpServer {
       try {
         const pnl = await getPnL();
         return { content: [{ type: "text", text: JSON.stringify(pnl, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: portfolio_exposure (IBKR — requires TWS/Gateway) ---
+  server.tool(
+    "portfolio_exposure",
+    "Compute portfolio exposure analytics: gross/net exposure, % deployed, largest position, sector breakdown, beta-weighted exposure, portfolio heat. Requires TWS/Gateway.",
+    {},
+    async () => {
+      if (!isConnected()) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                { error: "IBKR not connected. Start TWS/Gateway for portfolio data." },
+                null,
+                2
+              ),
+            },
+          ],
+        };
+      }
+      try {
+        const exposure = await computePortfolioExposure();
+        return { content: [{ type: "text", text: JSON.stringify(exposure, null, 2) }] };
       } catch (e: any) {
         return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
       }

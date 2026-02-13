@@ -18,6 +18,7 @@ import {
 import { isConnected } from "../ibkr/connection.js";
 import { getAccountSummary, getPositions, getPnL } from "../ibkr/account.js";
 import { getOpenOrders, getCompletedOrders, getExecutions, placeOrder, placeBracketOrder, placeAdvancedBracket, cancelOrder, cancelAllOrders, flattenAllPositions, validateOrder } from "../ibkr/orders.js";
+import { computePortfolioExposure } from "../ibkr/portfolio.js";
 import { setFlattenEnabled, getFlattenConfig } from "../scheduler.js";
 import { getContractDetails } from "../ibkr/contracts.js";
 import { getIBKRQuote } from "../ibkr/marketdata.js";
@@ -273,6 +274,20 @@ router.get("/account/pnl", async (_req, res) => {
   try {
     const pnl = await getPnL();
     res.json(pnl);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/portfolio/exposure
+router.get("/portfolio/exposure", async (_req, res) => {
+  if (!isConnected()) {
+    res.json({ error: "IBKR not connected. Start TWS/Gateway for portfolio data." });
+    return;
+  }
+  try {
+    const exposure = await computePortfolioExposure();
+    res.json(exposure);
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }
