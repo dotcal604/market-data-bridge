@@ -14,7 +14,7 @@ import pandas as pd
 # Ensure analytics/ is on sys.path for bare imports when run from project root
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from db_loader import ANALYTICS_DIR, load_evaluations, load_model_outcomes, load_weights, save_weights
+from db_loader import ANALYTICS_DIR, load_evaluations, load_model_outcomes, load_weights, save_weights, insert_weight_history
 
 MODEL_IDS: tuple[str, ...] = ("claude", "gpt4o", "gemini")
 MIN_SAMPLE_SIZE = 50
@@ -236,6 +236,7 @@ def main() -> None:
     }
 
     save_weights(payload)
+    insert_weight_history(payload, "recalibration")
     append_audit(
         old_weights=current_weights,
         new_payload=payload,
@@ -244,6 +245,7 @@ def main() -> None:
     )
 
     print("\nApplied new weights to data/weights.json")
+    print(f"Recorded in weight_history table")
     print(f"Appended audit record: {AUDIT_LOG_PATH}")
 
 

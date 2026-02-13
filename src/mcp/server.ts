@@ -41,6 +41,7 @@ import {
   getReasoningForEval,
   getTraderSyncTrades,
   getTraderSyncStats,
+  getWeightHistory,
 } from "../db/database.js";
 import { generateDriftReport } from "../eval/drift-detector.js";
 import { importTraderSyncCSV } from "../tradersync/importer.js";
@@ -1170,6 +1171,34 @@ export function createMcpServer(): McpServer {
         };
 
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: weight_history ---
+  server.tool(
+    "weight_history",
+    "Get history of ensemble weight changes. Shows timestamp, weights, sample size, and reason (manual/recalibration/simulation) for each update. Use to track weight evolution and audit recalibrations.",
+    {
+      limit: z.number().optional().describe("Max records to return (default: 100, max: 500)"),
+    },
+    async (params) => {
+      try {
+        const limit = params.limit ?? 100;
+        const history = getWeightHistory(Math.min(limit, 500));
+        
+        // Parse weights_json for each record
+        const parsed = history.map((row) => ({
+          id: row.id,
+          weights: JSON.parse(row.weights_json),
+          sample_size: row.sample_size,
+          reason: row.reason,
+          created_at: row.created_at,
+        }));
+
+        return { content: [{ type: "text", text: JSON.stringify({ count: parsed.length, history: parsed }, null, 2) }] };
       } catch (e: any) {
         return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
       }

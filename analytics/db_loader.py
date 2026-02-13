@@ -60,6 +60,29 @@ def save_weights(weights: dict) -> None:
         json.dump(weights, f, indent=2)
 
 
+def insert_weight_history(weights: dict, reason: str | None = None) -> None:
+    """
+    Insert a weight history record into the database.
+    
+    Args:
+        weights: Dictionary with claude, gpt4o, gemini, k, sample_size, source, etc.
+        reason: Description of why weights changed (e.g., "recalibration")
+    """
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        sample_size = weights.get("sample_size")
+        conn.execute(
+            """
+            INSERT INTO weight_history (weights_json, sample_size, reason, created_at)
+            VALUES (?, ?, ?, datetime('now'))
+            """,
+            (json.dumps(weights), sample_size, reason)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 # ── Evaluations ──────────────────────────────────────────────────────────────
 
 def load_evaluations(days: int = 90, symbol: str | None = None) -> pd.DataFrame:
