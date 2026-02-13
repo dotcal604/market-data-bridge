@@ -34,12 +34,14 @@ Every backlog item is scored on 5 dimensions (1-5 scale):
 
 ## Current State
 
-- **Backend**: 38 REST endpoints, 39 MCP tools, 10 SQLite tables, 3-model eval engine
+- **Backend**: 68 REST endpoints, 75 MCP tools, 10 SQLite tables, 3-model eval engine
 - **Frontend**: 14 pages — Dashboard, Evals, Model Stats, Weights, Journal, Executions, Orders, Account, Collab
 - **Tests**: 201 passing (16 test files) — Vitest + in-memory SQLite
 - **SDK versions**: @anthropic-ai/sdk 0.74, openai 6.21, @google/genai 1.0, @stoqey/ib 1.5.3
+- **MCP transport**: Streamable HTTP at `/mcp` for ChatGPT connector (session management, 30-min idle TTL)
 - **Hardening**: Input validation on order routes, symbol regex, crash handlers, safe JSON parsing
 - **Analytics**: Python scaffold ready (`analytics/db_loader.py`, `requirements.txt`). 4 Codex issues created (#56-59)
+- **IBKR coverage**: Market data, news, historical ticks, data wrappers (13 methods), prompt caching, Yahoo recommendations
 
 ---
 
@@ -86,9 +88,10 @@ See what's happening. Required before edge experiments can be measured.
 | **Journal history + detail** | 2 | **Done** | Copilot | PR #54 — searchable, outcome updates |
 | **Score scatter chart** | 2 | **Done** | Copilot | PR #11 |
 | **Eval outcomes endpoint** | 2 | **Done** | Claude Code | `GET /api/eval/outcomes` + `eval_outcomes` MCP tool. Evals joined with outcomes — unblocks calibration + regime analytics. |
-| **Score distribution histogram** | 2 | Not started | Codex | 3-model overlay in 10-point buckets |
-| **Calibration curve UI** | 2 | Not started | Codex | Predicted confidence vs actual win rate |
-| **Run Comparer** | 2 | Not started | Copilot | Select 2-5 evals, side-by-side comparison |
+| **Score distribution histogram** | 2 | Assigned | Copilot | #120 — 3-model overlay in 10-point buckets |
+| **Calibration curve UI** | 2 | Assigned | Copilot | #126 — Predicted confidence vs actual win rate |
+| **Model agreement heatmap** | 2 | Assigned | Copilot | #127 — Pairwise agreement rates, divergence signals |
+| **Run Comparer** | 2 | Assigned | Copilot | #121 — Select 2-5 evals, side-by-side comparison |
 | **Collab channel feed** | 2 | **Done** | Copilot | PR #55 — human visibility into AI-to-AI chat |
 
 ---
@@ -106,9 +109,29 @@ Keep the system running. Don't over-invest here.
 | **Positions table** | 1 | **Done** | Copilot | PR #49 |
 | **Order management page** | 1 | **Done** | Copilot | PR #52 |
 | **Executions log** | 1 | **Done** | Copilot | PR #51 |
-| WebSocket real-time updates | 1 | Not started | Claude Code | Replaces polling |
-| Production build | 1 | Not started | Claude Code | Static export served from Express |
-| OpenAPI spec update | 1 | Not started | Codex | Keep in sync |
+| **OpenAPI spec update** | 1 | **Done** | Codex | PR #118 — 56+ operations in sync |
+| **MCP Streamable HTTP** | 1 | **Done** | Claude Code | `/mcp` endpoint for ChatGPT connector, session management |
+| **IBKR data wrappers** | 1 | **Done** | Codex | PR #119 — 13 TWS request/response methods |
+| **Historical ticks** | 1 | **Done** | Copilot | PR #114 — reqHistoricalTicks |
+| **News stack** | 1 | **Done** | Codex | PR #117 — 4 news methods |
+| **Prompt caching** | 1 | **Done** | Codex | PR #116 — Anthropic + Gemini |
+| **Yahoo recommendations** | 1 | **Done** | Copilot | PR #115 — analyst consensus |
+| WebSocket real-time updates | 1 | Parked | Claude Code | #73 — replaces polling, cross-cutting |
+| Production build | 1 | Parked | Claude Code | #81 — static export from Express, cross-cutting |
+| Subscription APIs (6 methods) | 1 | Deferred | Claude Code | #105 — needs architecture session (streaming) |
+
+---
+
+## Market Data Tools (EI = 1)
+
+Frontend pages exposing the 68 REST endpoints that currently have no UI.
+
+| Item | EI | Status | Agent | Notes |
+|------|----|--------|-------|-------|
+| **Symbol lookup + quote** | 1 | Assigned | Copilot | #122 — Search, live quote, company info |
+| **Price chart** | 1 | Assigned | Copilot | #123 — Historical bars, period selector |
+| **News + earnings** | 1 | Assigned | Copilot | #124 — News feed, earnings history, trending |
+| **Stock screener** | 1 | Assigned | Copilot | #125 — Pre-built screeners, results table |
 
 ---
 
