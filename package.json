@@ -12,7 +12,8 @@
     "start:rest": "node build/index.js --mode rest",
     "dev": "concurrently -n api,ui -c blue,magenta \"node build/index.js\" \"cd frontend && npm run dev -- -p 3001\"",
     "dev:api": "node build/index.js",
-    "dev:ui": "cd frontend && npm run dev -- -p 3001"
+    "dev:ui": "cd frontend && npm run dev -- -p 3001",
+    "audit:api": "node scripts/api-audit.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",

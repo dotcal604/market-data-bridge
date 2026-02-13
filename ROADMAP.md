@@ -7,7 +7,8 @@
 - **Backend**: 43 REST endpoints, 27 MCP tools, 10 SQLite tables, 3-model eval engine
 - **Frontend**: 4 pages (dashboard, evals, eval detail, weights) — **~15% of backend exposed**
 - **Tests**: Zero test files
-- **Agent PRs in-flight**: #11 (score scatter), #12 (weight sliders), #13 (time-of-day chart)
+- **Agent PRs merged**: #11 (score scatter), #12 (weight sliders), #13 (time-of-day), #23 (feature radar)
+- **IBKR API gap**: @stoqey/ib targets TWS API 10.32; current is 10.42. Backwards compatible — no action needed until library updates.
 
 ## Priority Framework
 
@@ -53,11 +54,11 @@ Close the eval loop — trigger evaluations and record outcomes from the browser
 
 | Issue | Component | Agent | PR | Status |
 |-------|-----------|-------|----|--------|
-| #6 | Score scatter chart | Copilot | #11 (draft) | In review |
-| #7 | Feature radar chart | Codex | — | Submitted |
-| #8 | Time-of-day bar chart | Copilot | #13 (draft) | In review |
-| #9 | Weight sliders | Copilot | #12 (draft) | In review |
-| #10 | CSV/JSON export utility | Codex | — | Submitted |
+| #6 | Score scatter chart | Copilot | #11 | **Merged** |
+| #7 | Feature radar chart | Codex | #23 | **Merged** |
+| #8 | Time-of-day bar chart | Copilot | #13 | **Merged** |
+| #9 | Weight sliders | Copilot | #12 | **Merged** |
+| #10 | CSV/JSON export utility | Codex | — | Re-submit |
 
 ### New work
 
@@ -167,10 +168,39 @@ Offline batch analytics for weight recalibration. Runs after 50+ outcomes collec
 | OpenAPI spec update for new eval endpoints | Keep in sync |
 | Weight history tracking (INSERT into weight_history table) | Schema exists, no write logic |
 | Populate ai_confidence field on orders from eval scores | DB field exists, never used |
-| Fix silent catch in ibkr/connection.ts:64 | Error swallowed |
+| ~~Fix silent catch in ibkr/connection.ts:64~~ | **DONE** (commit 1845305) |
 | Expose getRiskLimits() in dashboard (risk gate config viewer) | Exported but unused |
 | Options chain viewer | GET /api/options/:symbol exists |
 | Financials page | GET /api/financials/:symbol exists |
+| **@stoqey/ib upgrade to 10.40+ support** | Order recovery on reconnect, one-message brackets, errorTime, Submitter field. Watch [stoqey/ib](https://github.com/stoqey/ib) for releases. |
+| **One-message bracket orders** (TWS API 10.42) | Replace 3-call bracket with single `placeOrder` using `slOrderId`/`ptOrderId` attributes. Depends on @stoqey/ib update. |
+| **Min TWS version check** | IBKR dropped <10.30 support (Mar 2025). Add startup warning if connected TWS version is too old. |
+| **Decimal tick size handling** (TWS API 10.44, Feb 2026) | `Last_Size`/`Delayed_Last_Size` become Decimal. No action until @stoqey/ib updates. |
+
+---
+
+## API Dependency Monitoring
+
+Automated weekly audit via `.github/workflows/api-audit.yml` + `scripts/api-audit.mjs`.
+
+**What it checks:**
+- npm package drift for all tracked deps (`npm outdated`)
+- AI model deprecation (hardcoded model names in `src/eval/config.ts`)
+- Deprecation calendar with countdown timers
+
+**Schedule:** Every Monday 9:00 AM ET. Creates/updates a GitHub issue labeled `api-audit` when warnings or critical findings detected.
+
+**Manual run:** `node scripts/api-audit.mjs` or trigger via GitHub Actions UI.
+
+**Current deprecation timeline:**
+
+| Deadline | Item | Severity | Action |
+|----------|------|----------|--------|
+| 2026-03-31 | gemini-2.0-flash shutdown | **Critical (46d)** | Migrate to `gemini-2.5-flash` |
+| 2026-06-24 | @google/generative-ai SDK deprecated | Warning | Migrate to `@google/genai` unified SDK |
+| 2026-06-30 | yahoo-finance2 v3 breaking changes | Warning | Pin v2.x; v3 is ESM-only + new API |
+| TBD | @stoqey/ib 10.42 features | Info | Watch releases for one-message brackets |
+| TBD | openai SDK v4→v6 major | Warning | Review breaking changes before upgrading |
 
 ---
 
