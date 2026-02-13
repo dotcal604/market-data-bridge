@@ -30,7 +30,7 @@ import {
   getWeightHistory,
 } from "../db/database.js";
 import { importTraderSyncCSV } from "../tradersync/importer.js";
-import { generateDriftReport } from "./drift-detector.js";
+import { computeDriftReport } from "./drift.js";
 import { extractStructuredReasoning } from "./reasoning/extractor.js";
 import { logger } from "../logging.js";
 
@@ -636,13 +636,13 @@ evalRouter.get("/outcomes", (req, res) => {
 
 // ── Drift Detection ──────────────────────────────────────────────────────
 
-// GET /drift-report — model calibration drift report
-evalRouter.get("/drift-report", (req, res) => {
+// GET /drift — model accuracy and calibration drift report
+evalRouter.get("/drift", (_req, res) => {
   try {
-    const days = Number(req.query.days) || 90;
-    const report = generateDriftReport(days);
-    res.json(report);
+    const report = computeDriftReport();
+    res.json({ data: report });
   } catch (e: any) {
+    logger.error({ err: e }, "[Eval] drift failed");
     res.status(500).json({ error: e.message });
   }
 });
