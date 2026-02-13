@@ -1846,15 +1846,22 @@ export function createMcpServer(): McpServer {
     "eval_reasoning",
     "Get structured reasoning for an evaluation. Returns per-model key_drivers (which features drove the decision), risk_factors, uncertainties, and conviction level. Use for drift detection and disagreement diagnosis.",
     {
-      evaluation_id: z.string().describe("Evaluation ID"),
+      evalId: z.string().optional().describe("Evaluation ID"),
+      evaluation_id: z.string().optional().describe("Legacy alias for evaluation ID"),
     },
     async (params) => {
       try {
-        const evaluation = getEvaluationById(params.evaluation_id);
-        if (!evaluation) {
-          return { content: [{ type: "text", text: JSON.stringify({ error: `Evaluation ${params.evaluation_id} not found` }) }], isError: true };
+        const evalId = params.evalId ?? params.evaluation_id;
+        if (!evalId) {
+          return { content: [{ type: "text", text: JSON.stringify({ error: "evalId is required" }) }], isError: true };
         }
-        const rows = getReasoningForEval(params.evaluation_id);
+
+        const evaluation = getEvaluationById(evalId);
+        if (!evaluation) {
+          return { content: [{ type: "text", text: JSON.stringify({ error: `Evaluation ${evalId} not found` }) }], isError: true };
+        }
+
+        const rows = getReasoningForEval(evalId);
         const models: Record<string, unknown> = {};
         for (const row of rows) {
           models[row.model_id as string] = {
@@ -1864,7 +1871,7 @@ export function createMcpServer(): McpServer {
             conviction: row.conviction,
           };
         }
-        return { content: [{ type: "text", text: JSON.stringify({ evaluation_id: params.evaluation_id, models }, null, 2) }] };
+        return { content: [{ type: "text", text: JSON.stringify({ evaluation_id: evalId, models }, null, 2) }] };
       } catch (e: any) {
         return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
       }
