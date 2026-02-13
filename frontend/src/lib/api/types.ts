@@ -177,8 +177,8 @@ export interface EvalResponse {
 export interface OpenOrder {
   orderId: number;
   symbol: string;
-  action: string; // "BUY" | "SELL"
-  orderType: string; // "MKT" | "LMT" | "STP" | "STP LMT"
+  action: "BUY" | "SELL";
+  orderType: "MKT" | "LMT" | "STP" | "STP LMT";
   totalQuantity: number;
   lmtPrice: number | null;
   auxPrice: number | null;
@@ -190,11 +190,11 @@ export interface OpenOrder {
 export interface CompletedOrder {
   orderId: number;
   symbol: string;
-  action: string;
-  orderType: string;
+  action: "BUY" | "SELL";
+  orderType: "MKT" | "LMT" | "STP" | "STP LMT";
   totalQuantity: number;
   filledQuantity: number;
-  avgFillPrice: number;
+  avgFillPrice: number | null;
   status: string;
   completedTime: string;
 }

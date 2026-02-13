@@ -82,7 +82,8 @@ export function OrdersPanel({ refreshInterval = 5000 }: OrdersPanelProps) {
   };
 
   const formatPrice = (price: number | null) => {
-    if (price === null || price === 0) return "—";
+    if (price === null) return "—";
+    if (price === 0) return "$0.00"; // Valid price, show explicitly
     return `$${price.toFixed(2)}`;
   };
 
