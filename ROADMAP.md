@@ -113,7 +113,7 @@ Research tools — look up symbols, view charts, run screeners. All endpoints ex
 | **Symbol lookup + quote display** — search autocomplete, bid/ask/last/OHLCV card, company details (sector, PE, 52wk), "Evaluate Trade" button | Copilot | GET /api/search, GET /api/quote/:symbol, GET /api/details/:symbol |
 | **Price chart** — candlestick with volume bars, timeframe/interval selectors (1d-YTD) | Copilot | GET /api/history/:symbol |
 | **Stock screener** — dropdown for screener type, results table with symbol/price/change/volume/sector | Copilot | GET /api/screener/filters, POST /api/screener/run-with-quotes |
-| **News feed + earnings** — news articles for symbol, earnings history chart (actual vs estimate with surprise %) | Jules | GET /api/news/:query, GET /api/earnings/:symbol |
+| **News feed + earnings** — news articles for symbol, earnings history chart (actual vs estimate with surprise %) | Codex | GET /api/news/:query, GET /api/earnings/:symbol |
 
 ---
 
@@ -123,11 +123,11 @@ Data visualization for pattern discovery. Inspired by W&B run comparer and Bloom
 
 | Task | Agent | Notes |
 |------|-------|-------|
-| **Score distribution histogram** — overlay 3 models in 10-point buckets, filter by date range | Jules | Recharts BarChart with 3 series |
-| **Model agreement heatmap** — visualize unanimous/majority/split across evals, tooltip with example IDs | Jules | Custom grid component |
+| **Score distribution histogram** — overlay 3 models in 10-point buckets, filter by date range | Codex | Recharts BarChart with 3 series |
+| **Model agreement heatmap** — visualize unanimous/majority/split across evals, tooltip with example IDs | Codex | Custom grid component |
 | **Time-of-day performance** — win rate + avg R-multiple by market session bucket | Copilot | PR #13 exists, extend with outcome data |
 | **Run Comparer** — select 2-5 evals, scrollable horizontal table comparing all features/scores/outcomes side-by-side | Copilot | W&B-inspired, TanStack Table |
-| **Calibration curve** — model predicted confidence vs actual win rate in 5 buckets | Jules | Recharts LineChart |
+| **Calibration curve** — model predicted confidence vs actual win rate in 5 buckets | Codex | Recharts LineChart |
 | **Structured reasoning log** — `eval_reasoning` table capturing per-model key_drivers, risk_factors, uncertainties as JSON. Query via `/api/eval/:id/reasoning`. Enables drift detection + disagreement diagnosis after 50+ outcomes | Claude Code | Minimal "Windsurf" — reasoning harness, not a layer. Add to eval pipeline between features and model calls. ~50 LOC |
 
 ---
@@ -152,10 +152,10 @@ Offline batch analytics for weight recalibration. Runs after 50+ outcomes collec
 | Task | Agent | Notes |
 |------|-------|-------|
 | **Analytics scaffold** — requirements.txt (pandas, numpy, matplotlib, scikit-learn), utils.py (DB loader), README | Claude Code | Sets up analytics/ directory |
-| **Calibration analysis** — Brier score per model, calibration curve PNG, terminal summary | Jules | analytics/calibration.py |
-| **Regime analysis** — accuracy by time_of_day, volatility_regime, liquidity_bucket | Jules | analytics/regime.py |
-| **Weight update script** — compute performance scores, normalize weights, write data/weights.json | Jules | analytics/update_weights.py |
-| **Full report generator** — run all scripts, output markdown report to analytics/reports/ | Jules | analytics/analyze.py |
+| **Calibration analysis** — Brier score per model, calibration curve PNG, terminal summary | Codex | analytics/calibration.py |
+| **Regime analysis** — accuracy by time_of_day, volatility_regime, liquidity_bucket | Codex | analytics/regime.py |
+| **Weight update script** — compute performance scores, normalize weights, write data/weights.json | Codex | analytics/update_weights.py |
+| **Full report generator** — run all scripts, output markdown report to analytics/reports/ | Codex | analytics/analyze.py |
 
 ---
 
@@ -210,8 +210,7 @@ Automated weekly audit via `.github/workflows/api-audit.yml` + `scripts/api-audi
 | Agent | Issues | Strength |
 |-------|--------|----------|
 | **Copilot** | ~20 | Self-contained UI components, clear props/API specs, multi-file refactors |
-| **Codex** | ~8 | Long-running features, parallel execution, complex backend/frontend tasks |
-| **Jules** | ~8 | Analytical/visualization tasks, Python scripts, single-file utilities |
+| **Codex** | ~15 | Long-running features, parallel execution, analytics, Python scripts |
 | **Claude Code** | ~5 | Cross-file wiring, backend routes, architecture, planning |
 
 Orchestrated via **GitHub Agent HQ**. Decision tree and agent profiles: See `ORCHESTRATION.md` and `.github/agents/`.

@@ -1,6 +1,6 @@
 # Market Data Bridge — Agent Orchestration
 
-> 4-agent fleet managed via **GitHub Agent HQ**: Claude Code, GitHub Copilot, OpenAI Codex, and Google Jules.
+> 3-agent fleet managed via **GitHub Agent HQ**: Claude Code, GitHub Copilot, and OpenAI Codex.
 >
 > Agent HQ provides unified Mission Control across GitHub, VS Code, and CLI. Custom agent profiles live in `.github/agents/`.
 
@@ -11,7 +11,6 @@
 | **Claude Code** | Orchestrator — cross-file wiring, architecture, backend routes, planning, code review | Claude Opus 4.6 | CLI (local) | Yes (via claude.md) |
 | **GitHub Copilot** | UI components, multi-file refactors, follows detailed issue specs | GPT-4.1 / Claude 3.5 | GitHub Issues → Draft PRs | Via issue body |
 | **OpenAI Codex** | Long-running tasks, parallel execution, complex features, backend work | GPT-5.2-Codex | chatgpt.com/codex, @codex on issues | Yes (auto-discovery) |
-| **Google Jules** | Single-file tasks, Python scripts, analytical utilities, cloud VM sandbox | Gemini | jules.google, `jules` label | Yes (auto-reads) |
 
 ## Decision Tree
 
@@ -26,9 +25,6 @@ New task arrives
   │
   ├─ Long-running feature, complex refactor, or needs 7+ hours?
   │   └─ YES → OpenAI Codex (cloud sandbox, parallel tasks)
-  │
-  ├─ Single-file utility, chart, or Python script?
-  │   └─ YES → Google Jules (cloud VM, plan-then-execute)
   │
   ├─ Backend route + frontend page + DB migration?
   │   └─ Claude Code builds backend, creates issue for Copilot/Codex
@@ -197,55 +193,19 @@ npm install && cd frontend && npm install && cd ..
 
 **Historical note:** Early Codex (PRs #3, #23) had broken PR bodies and no env setup. Current Codex (GPT-5.2) resolves all previous issues — reads AGENTS.md, supports setup scripts, generates proper PR descriptions.
 
-## Issue Template: Jules
-
-Jules works best with **single-file tasks** or **isolated features** with clear input/output contracts. Cloud VM execution — no local env issues.
-
-```markdown
-## Task: {file path or utility name}
-
-{Description of what to build.}
-
-### Input
-- {Exact parameters, types, data shapes}
-
-### Output
-- {Return type, file output, side effects}
-
-### Implementation Notes
-- Use {specific library or approach}
-- Edge cases: {list them}
-- Do NOT {constraints}
-
-### Test with
-\`\`\`bash
-{Command to verify the output}
-\`\`\`
-```
-
-### Triggering Jules
-
-1. **Via label:** Add the `jules` label to any GitHub issue
-2. **Via dashboard:** Go to [jules.google](https://jules.google), select `market-data-bridge`, paste issue link
-3. **Via GitHub Action:** (optional) `google-labs-code/jules-action`
-
-Jules reads `AGENTS.md` automatically from repo root.
-
----
-
 ## Agent Comparison
 
-| Scenario | Copilot | Codex | Jules |
-|----------|---------|-------|-------|
-| Self-contained UI component | Best | Good | Good |
-| Multi-file component + page wiring | Proved (PRs #11-13) | Good | Good |
-| Long-running complex feature (7+ hours) | No | Best | No |
-| Parallel tasks across issues | Via separate issues | Native (cloud) | One at a time |
-| Python scripts / analytics | Possible | Good | Best (Gemini-native) |
-| Needs exact issue spec | Yes (verbatim) | Natural language OK | Natural language OK |
-| Reads AGENTS.md | Via issue body | Auto-discovery | Auto-reads |
-| Build verification | GitHub Actions sandbox | Cloud sandbox | Cloud VM |
-| Cost | Copilot Pro+ | ChatGPT Pro/Plus | Free (beta) |
+| Scenario | Copilot | Codex |
+|----------|---------|-------|
+| Self-contained UI component | Best | Good |
+| Multi-file component + page wiring | Proved (PRs #11-13) | Good |
+| Long-running complex feature (7+ hours) | No | Best |
+| Parallel tasks across issues | Via separate issues | Native (cloud) |
+| Python scripts / analytics | Possible | Good |
+| Needs exact issue spec | Yes (verbatim) | Natural language OK |
+| Reads AGENTS.md | Via issue body | Auto-discovery |
+| Build verification | GitHub Actions sandbox | Cloud sandbox |
+| Cost | Copilot Pro+ | ChatGPT Pro/Plus |
 
 ---
 
@@ -261,7 +221,6 @@ Tracking issue for all {Phase Name} work.
 ### Issues
 - [ ] #{id} — {title} (assigned: @copilot)
 - [ ] #{id} — {title} (assigned: @codex)
-- [ ] #{id} — {title} (jules label)
 
 ### Dependencies
 - Blocked by: Phase {N-1} completion
@@ -277,7 +236,7 @@ Tracking issue for all {Phase Name} work.
 ## Review Workflow
 
 ```
-1. Agent creates draft PR from issue (Copilot/Codex/Jules)
+1. Agent creates draft PR from issue (Copilot/Codex)
 2. Claude Code reviews (or human reviews):
    - Does it follow AGENTS.md conventions?
    - Does TypeScript compile clean?
@@ -296,7 +255,6 @@ Tracking issue for all {Phase Name} work.
 | `phase-0` through `phase-8` | Roadmap phase tracking |
 | `copilot` | Assigned to GitHub Copilot |
 | `codex` | Assigned to OpenAI Codex |
-| `jules` | Assigned to Google Jules |
 | `claude-code` | Done by Claude Code directly |
 | `api-migration` | API dependency migration tasks |
 | `api-audit` | Automated API audit findings |
@@ -334,12 +292,6 @@ Currently not blocking builds — the `fonts.googleapis.com` warning in PRs #11-
 3. Configure environment setup script: `npm install && cd frontend && npm install && cd ..`
 4. AGENTS.md auto-discovered — no additional config needed
 5. Test: create a task from chatgpt.com/codex or tag `@codex` on an issue
-
-### Google Jules
-1. Go to [jules.google](https://jules.google) → sign in with Google
-2. Connect GitHub → authorize `dotcal604/market-data-bridge`
-3. Jules auto-reads AGENTS.md, clones repo into cloud VM
-4. Test: add `jules` label to an issue, or paste issue link in dashboard
 
 ### GitHub Copilot (Agent HQ)
 1. Copilot Pro+ or Enterprise subscription required

@@ -274,7 +274,7 @@ cd frontend && npx tsc --noEmit
 
 ## Agent-Specific Notes
 
-> All agents (Copilot, Codex, Jules) read this `AGENTS.md` file automatically. The conventions above apply to all.
+> All agents (Copilot, Codex) read this `AGENTS.md` file automatically. The conventions above apply to all.
 > Orchestration is managed via **GitHub Agent HQ** — see `ORCHESTRATION.md` and `.github/agents/` for custom agent profiles.
 
 ### Key Points for All Agents
@@ -299,16 +299,6 @@ npm install && cd frontend && npm install && cd ..
 **Strengths:** Long-running tasks (7+ hours), parallel task execution, GPT-5.2-Codex model, GitHub integration (@codex on issues/PRs).
 
 **Historical note:** Early Codex (PRs #3, #23) had broken PR bodies and missing env setup. Current Codex reads AGENTS.md, supports custom setup scripts, and uses GPT-5.2-Codex.
-
-### Google Jules (Autonomous Agent)
-
-Jules clones the repo into a secure cloud VM, installs deps, builds, and verifies. Reads this `AGENTS.md` automatically.
-
-**Trigger:** Add `jules` label to a GitHub issue, or paste issue link in [jules.google](https://jules.google) dashboard.
-
-**Strengths:** Cloud VM sandbox, plan-then-execute workflow, Python scripts (Gemini-native), reads AGENTS.md automatically.
-
-**Free tier:** Beta — free during beta, subject to daily task limits. Plan approval required before execution.
 
 ### GitHub Copilot (Coding Agent)
 

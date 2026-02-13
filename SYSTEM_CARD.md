@@ -291,7 +291,6 @@ The codebase is built using a multi-agent workflow:
 | **Claude Code** | Orchestrator — cross-file wiring, backend routes, architecture | CLI (local) |
 | **GitHub Copilot** | Self-contained components, UI polish, multi-file refactors | Assigned to GitHub issues via Agent HQ |
 | **OpenAI Codex** | Long-running tasks, parallel execution, complex features | chatgpt.com/codex, @codex on issues |
-| **Google Jules** | Single-file tasks, utility functions, Python scripts, isolated features | `jules` label on GitHub issues or jules.google dashboard |
 
 Orchestrated via **GitHub Agent HQ** (Mission Control). Agent conventions in `AGENTS.md`, custom profiles in `.github/agents/`.
 
