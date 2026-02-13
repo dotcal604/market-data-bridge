@@ -6,6 +6,7 @@ import { ModelComparison } from "@/components/eval-detail/model-comparison";
 import { EnsembleSummary } from "@/components/eval-detail/ensemble-summary";
 import { GuardrailBadges } from "@/components/eval-detail/guardrail-badges";
 import { FeatureTable } from "@/components/eval-detail/feature-table";
+import { FeatureRadarChart } from "@/components/eval-detail/feature-radar-chart";
 import { OutcomePanel } from "@/components/eval-detail/outcome-panel";
 import { DirectionBadge } from "@/components/shared/direction-badge";
 import { ScoreBadge } from "@/components/shared/score-badge";
@@ -85,7 +86,10 @@ export default function EvalDetailPage({ params }: { params: Promise<{ id: strin
       {/* Features */}
       <div>
         <h2 className="mb-3 text-lg font-semibold">Features</h2>
-        <FeatureTable features={features} />
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
+          <FeatureRadarChart features={features} />
+          <FeatureTable features={features} />
+        </div>
       </div>
 
       {/* Outcome */}
