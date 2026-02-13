@@ -27,6 +27,7 @@ interface MarketContextData {
 }
 
 const PREDEFINED_TAGS = ["momentum", "mean-reversion", "breakout", "earnings", "news"] as const;
+const SUGGESTION_BLUR_DELAY_MS = 200;
 
 function getTimeOfDay(): string {
   const now = new Date();
@@ -161,7 +162,8 @@ export function JournalForm() {
       return;
     }
 
-    if (!reasoning.trim() || reasoning.trim().split("\n").length < 3) {
+    const trimmedReasoning = reasoning.trim();
+    if (!trimmedReasoning || trimmedReasoning.split("\n").length < 3) {
       setError("Reasoning must be at least 3 lines");
       return;
     }
@@ -172,7 +174,7 @@ export function JournalForm() {
       const payload = {
         symbol: symbol.toUpperCase(),
         strategy_version: strategyVersion.trim() || undefined,
-        reasoning: reasoning.trim(),
+        reasoning: trimmedReasoning,
         tags: selectedTags.length > 0 ? selectedTags : undefined,
         spy_price: marketContext?.spy_price ?? undefined,
         vix_level: marketContext?.vix_level ?? undefined,
@@ -220,7 +222,7 @@ export function JournalForm() {
                   setShowSuggestions(true);
                 }}
                 onFocus={() => setShowSuggestions(true)}
-                onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                onBlur={() => setTimeout(() => setShowSuggestions(false), SUGGESTION_BLUR_DELAY_MS)}
                 placeholder="AAPL"
                 required
                 className="uppercase"
