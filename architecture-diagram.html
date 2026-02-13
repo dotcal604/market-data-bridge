@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Market Data Bridge — Architecture</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0e17;
+    color: #e0e6f0;
+    font-family: 'Segoe UI', -apple-system, sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  .page { max-width: 1500px; margin: 0 auto; padding: 40px 30px; }
+
+  h1 {
+    text-align: center;
+    font-size: 2.2rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+    background: linear-gradient(135deg, #60a5fa, #a78bfa, #f472b6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .subtitle {
+    text-align: center;
+    color: #64748b;
+    font-size: 0.95rem;
+    margin-bottom: 50px;
+  }
+
+  /* ── STATS PANEL ── */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 14px;
+    margin-bottom: 50px;
+  }
+  .stat-card {
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+    border: 1px solid #1e293b;
+    border-radius: 14px;
+    padding: 18px 12px;
+    text-align: center;
+  }
+  .stat-card .num {
+    font-size: 1.8rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, #60a5fa, #a78bfa);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .stat-card .label { font-size: 0.75rem; color: #64748b; margin-top: 4px; }
+
+  /* ── DIAGRAM CONTAINER ── */
+  .diagram {
+    position: relative;
+    width: 100%;
+    min-height: 900px;
+    margin-bottom: 60px;
+  }
+
+  .node {
+    position: absolute;
+    border-radius: 16px;
+    padding: 16px 20px;
+    text-align: center;
+    transition: transform 0.2s, box-shadow 0.2s;
+    z-index: 2;
+  }
+  .node:hover { transform: translateY(-3px); box-shadow: 0 8px 30px rgba(0,0,0,0.4); }
+  .node h3 { font-size: 0.95rem; margin-bottom: 5px; font-weight: 700; }
+  .node p { font-size: 0.72rem; color: #94a3b8; line-height: 1.4; }
+  .node .icon { font-size: 1.6rem; margin-bottom: 6px; }
+  .node .badge {
+    display: inline-block;
+    font-size: 0.62rem;
+    padding: 2px 8px;
+    border-radius: 99px;
+    margin-top: 5px;
+    font-weight: 600;
+  }
+
+  /* ── Core Bridge (center) ── */
+  .bridge {
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+    border: 2px solid #3b82f6;
+    width: 340px;
+    left: 50%;
+    transform: translateX(-50%);
+    top: 240px;
+    box-shadow: 0 0 40px rgba(59,130,246,0.15);
+  }
+  .bridge:hover { transform: translateX(-50%) translateY(-3px); }
+  .bridge h3 { color: #60a5fa; font-size: 1.15rem; }
+  .bridge .modules {
+    display: flex;
+    gap: 6px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 10px;
+  }
+  .bridge .mod {
+    background: rgba(59,130,246,0.15);
+    border: 1px solid rgba(59,130,246,0.3);
+    border-radius: 8px;
+    padding: 3px 9px;
+    font-size: 0.65rem;
+    color: #93c5fd;
+  }
+
+  /* ── AI Agents (top) ── */
+  .claude-node {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border: 2px solid #c084fc;
+    width: 210px;
+    left: 80px;
+    top: 20px;
+  }
+  .claude-node h3 { color: #c084fc; }
+  .claude-node .badge { background: rgba(192,132,252,0.2); color: #c084fc; }
+
+  .chatgpt-node {
+    background: linear-gradient(135deg, #1a2e1a 0%, #16301e 100%);
+    border: 2px solid #4ade80;
+    width: 210px;
+    right: 80px;
+    top: 20px;
+  }
+  .chatgpt-node h3 { color: #4ade80; }
+  .chatgpt-node .badge { background: rgba(74,222,128,0.2); color: #4ade80; }
+
+  /* ── Data Sources (left) ── */
+  .ibkr-node {
+    background: linear-gradient(135deg, #2e1a1a 0%, #301616 100%);
+    border: 2px solid #f87171;
+    width: 190px;
+    left: 0;
+    top: 280px;
+  }
+  .ibkr-node h3 { color: #f87171; }
+  .ibkr-node .badge { background: rgba(248,113,113,0.2); color: #f87171; }
+
+  .yahoo-node {
+    background: linear-gradient(135deg, #2e2a1a 0%, #302816 100%);
+    border: 2px solid #fbbf24;
+    width: 190px;
+    left: 0;
+    top: 460px;
+  }
+  .yahoo-node h3 { color: #fbbf24; }
+  .yahoo-node .badge { background: rgba(251,191,36,0.2); color: #fbbf24; }
+
+  /* ── Infra (right side) ── */
+  .cloudflare-node {
+    background: linear-gradient(135deg, #1a2a2e 0%, #162e30 100%);
+    border: 2px solid #f97316;
+    width: 190px;
+    right: 0;
+    top: 280px;
+  }
+  .cloudflare-node h3 { color: #f97316; }
+  .cloudflare-node .badge { background: rgba(249,115,22,0.2); color: #f97316; }
+
+  .sqlite-node {
+    background: linear-gradient(135deg, #1a2a2e 0%, #162e30 100%);
+    border: 2px solid #38bdf8;
+    width: 190px;
+    right: 0;
+    top: 460px;
+  }
+  .sqlite-node h3 { color: #38bdf8; }
+  .sqlite-node .badge { background: rgba(56,189,248,0.2); color: #38bdf8; }
+
+  /* ── Eval Engine (center-bottom) ── */
+  .eval-engine {
+    background: linear-gradient(135deg, #1e1a30 0%, #151028 100%);
+    border: 2px solid #a78bfa;
+    width: 420px;
+    left: 50%;
+    transform: translateX(-50%);
+    top: 500px;
+    box-shadow: 0 0 40px rgba(167,139,250,0.12);
+  }
+  .eval-engine:hover { transform: translateX(-50%) translateY(-3px); }
+  .eval-engine h3 { color: #a78bfa; font-size: 1.1rem; }
+  .eval-engine .modules {
+    display: flex;
+    gap: 6px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 10px;
+  }
+  .eval-engine .mod {
+    background: rgba(167,139,250,0.15);
+    border: 1px solid rgba(167,139,250,0.3);
+    border-radius: 8px;
+    padding: 3px 9px;
+    font-size: 0.65rem;
+    color: #c4b5fd;
+  }
+
+  /* ── LLM Providers (bottom) ── */
+  .llm-row {
+    position: absolute;
+    bottom: 40px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 20px;
+    z-index: 2;
+  }
+  .llm-node {
+    border-radius: 14px;
+    padding: 14px 20px;
+    text-align: center;
+    width: 180px;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .llm-node:hover { transform: translateY(-3px); box-shadow: 0 8px 30px rgba(0,0,0,0.4); }
+  .llm-node .icon { font-size: 1.4rem; margin-bottom: 6px; }
+  .llm-node h3 { font-size: 0.9rem; margin-bottom: 3px; font-weight: 700; }
+  .llm-node p { font-size: 0.68rem; color: #94a3b8; }
+  .llm-node .badge {
+    display: inline-block;
+    font-size: 0.6rem;
+    padding: 2px 7px;
+    border-radius: 99px;
+    margin-top: 4px;
+    font-weight: 600;
+  }
+
+  .anthropic-node {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border: 2px solid #d4a574;
+  }
+  .anthropic-node h3 { color: #d4a574; }
+  .anthropic-node .badge { background: rgba(212,165,116,0.2); color: #d4a574; }
+
+  .openai-node {
+    background: linear-gradient(135deg, #1a2e1a 0%, #16301e 100%);
+    border: 2px solid #10b981;
+  }
+  .openai-node h3 { color: #10b981; }
+  .openai-node .badge { background: rgba(16,185,129,0.2); color: #10b981; }
+
+  .gemini-node {
+    background: linear-gradient(135deg, #1a1a2e 0%, #1e2040 100%);
+    border: 2px solid #818cf8;
+  }
+  .gemini-node h3 { color: #818cf8; }
+  .gemini-node .badge { background: rgba(129,140,248,0.2); color: #818cf8; }
+
+  /* ── SVG CONNECTIONS ── */
+  .connections {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 1;
+    pointer-events: none;
+  }
+  .conn-line {
+    stroke-width: 2;
+    fill: none;
+    opacity: 0.6;
+  }
+  .conn-label {
+    font-size: 10px;
+    fill: #64748b;
+    font-family: 'Segoe UI', sans-serif;
+  }
+  .pulse {
+    animation: pulse-anim 2s ease-in-out infinite;
+  }
+  @keyframes pulse-anim {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 0.9; }
+  }
+
+  /* ── PIPELINE SECTION ── */
+  .pipeline {
+    margin-bottom: 60px;
+  }
+  .pipeline h2 {
+    font-size: 1.4rem;
+    color: #e2e8f0;
+    margin-bottom: 20px;
+  }
+  .pipeline-steps {
+    display: flex;
+    gap: 0;
+    align-items: stretch;
+    overflow-x: auto;
+    padding-bottom: 10px;
+  }
+  .pipe-step {
+    flex: 1;
+    min-width: 160px;
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+    border: 1px solid #1e3a5f;
+    border-radius: 12px;
+    padding: 16px 14px;
+    text-align: center;
+    position: relative;
+  }
+  .pipe-step:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    right: -14px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 0; height: 0;
+    border-top: 10px solid transparent;
+    border-bottom: 10px solid transparent;
+    border-left: 12px solid #3b82f6;
+    z-index: 3;
+    opacity: 0.6;
+  }
+  .pipe-step:not(:last-child) { margin-right: 24px; }
+  .pipe-step .step-num {
+    font-size: 0.6rem;
+    font-weight: 700;
+    color: #60a5fa;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+  }
+  .pipe-step h4 {
+    font-size: 0.85rem;
+    color: #e2e8f0;
+    margin-bottom: 4px;
+  }
+  .pipe-step p {
+    font-size: 0.68rem;
+    color: #64748b;
+    line-height: 1.4;
+  }
+  .pipe-step .time {
+    font-size: 0.6rem;
+    color: #a78bfa;
+    margin-top: 6px;
+    font-weight: 600;
+  }
+
+  /* ── FEATURES GRID ── */
+  .features-section { margin-bottom: 60px; }
+  .features-section h2 {
+    font-size: 1.4rem;
+    color: #e2e8f0;
+    margin-bottom: 20px;
+  }
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 10px;
+  }
+  .feat {
+    background: #1e293b;
+    border-radius: 10px;
+    padding: 10px 14px;
+    border-left: 3px solid #a78bfa;
+  }
+  .feat .name {
+    font-size: 0.8rem;
+    font-family: 'Cascadia Code', monospace;
+    color: #c4b5fd;
+    font-weight: 600;
+  }
+  .feat .desc {
+    font-size: 0.68rem;
+    color: #64748b;
+    margin-top: 2px;
+  }
+
+  /* ── ENDPOINT TABLE ── */
+  h2 {
+    font-size: 1.4rem;
+    margin-bottom: 20px;
+    color: #e2e8f0;
+  }
+  .endpoint-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 10px;
+    margin-bottom: 40px;
+  }
+  .ep {
+    background: #1e293b;
+    border-radius: 10px;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-left: 3px solid #3b82f6;
+    transition: border-color 0.2s;
+  }
+  .ep:hover { border-left-color: #60a5fa; }
+  .ep .method {
+    font-size: 0.62rem;
+    font-weight: 800;
+    padding: 3px 8px;
+    border-radius: 4px;
+    min-width: 50px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+  .ep .method.get { background: #166534; color: #4ade80; }
+  .ep .method.post { background: #1e3a5f; color: #60a5fa; }
+  .ep .method.delete { background: #7f1d1d; color: #f87171; }
+  .ep .method.patch { background: #713f12; color: #fbbf24; }
+  .ep .path { font-size: 0.78rem; font-family: 'Cascadia Code', monospace; color: #cbd5e1; }
+  .ep .desc { font-size: 0.68rem; color: #64748b; margin-top: 2px; }
+
+  .section-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: #475569;
+    margin: 20px 0 12px;
+    padding-left: 4px;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Market Data Bridge</h1>
+  <p class="subtitle">Real-time IBKR + Yahoo market data, multi-model trade evaluation, execution, and AI-to-AI collaboration — single process</p>
+
+  <!-- ── STATS ── -->
+  <div class="stats">
+    <div class="stat-card"><div class="num">33</div><div class="label">REST Endpoints</div></div>
+    <div class="stat-card"><div class="num">27</div><div class="label">MCP Tools</div></div>
+    <div class="stat-card"><div class="num">3</div><div class="label">Eval LLMs</div></div>
+    <div class="stat-card"><div class="num">14</div><div class="label">Computed Features</div></div>
+    <div class="stat-card"><div class="num">2</div><div class="label">AI Agents</div></div>
+    <div class="stat-card"><div class="num">1</div><div class="label">Process · Port 3000</div></div>
+  </div>
+
+  <!-- ── DIAGRAM ── -->
+  <div class="diagram" id="diagram">
+    <svg class="connections" id="svg" viewBox="0 0 1500 900" preserveAspectRatio="xMidYMid meet"></svg>
+
+    <!-- Claude (top-left) -->
+    <div class="node claude-node">
+      <div class="icon">&#x1F7E3;</div>
+      <h3>Claude</h3>
+      <p>Desktop + Code CLI</p>
+      <span class="badge">MCP stdio &middot; 27 tools</span>
+    </div>
+
+    <!-- ChatGPT (top-right) -->
+    <div class="node chatgpt-node">
+      <div class="icon">&#x1F7E2;</div>
+      <h3>ChatGPT</h3>
+      <p>Custom GPT Actions</p>
+      <span class="badge">REST &middot; 33 endpoints</span>
+    </div>
+
+    <!-- Bridge (center) -->
+    <div class="node bridge">
+      <div class="icon">&#x26A1;</div>
+      <h3>Market Data Bridge</h3>
+      <p>Node.js &middot; TypeScript &middot; Express &middot; :3000</p>
+      <div class="modules">
+        <span class="mod">MCP Server</span>
+        <span class="mod">REST API</span>
+        <span class="mod">IBKR Client</span>
+        <span class="mod">Yahoo Client</span>
+        <span class="mod">Order Engine</span>
+        <span class="mod">Risk Gate</span>
+        <span class="mod">Collab Channel</span>
+        <span class="mod">Scheduler</span>
+      </div>
+    </div>
+
+    <!-- IBKR (left) -->
+    <div class="node ibkr-node">
+      <div class="icon">&#x1F534;</div>
+      <h3>IBKR TWS</h3>
+      <p>Gateway &middot; port 7496<br>Account, orders, execution</p>
+      <span class="badge">Live when TWS running</span>
+    </div>
+
+    <!-- Yahoo (left-bottom) -->
+    <div class="node yahoo-node">
+      <div class="icon">&#x1F7E1;</div>
+      <h3>Yahoo Finance</h3>
+      <p>Quotes, history, options<br>Financials, news, screeners</p>
+      <span class="badge">Always available</span>
+    </div>
+
+    <!-- Cloudflare (right) -->
+    <div class="node cloudflare-node">
+      <div class="icon">&#x1F7E0;</div>
+      <h3>Cloudflare Tunnel</h3>
+      <p>api.klfh-dot-io.com<br>Named tunnel &middot; persistent</p>
+      <span class="badge">Edge network</span>
+    </div>
+
+    <!-- SQLite (right-bottom) -->
+    <div class="node sqlite-node">
+      <div class="icon">&#x1F4BE;</div>
+      <h3>SQLite (bridge.db)</h3>
+      <p>better-sqlite3 &middot; WAL mode<br>Orders, journal, evals, outcomes</p>
+      <span class="badge">10 tables &middot; persistent</span>
+    </div>
+
+    <!-- Eval Engine (center-bottom) -->
+    <div class="node eval-engine">
+      <div class="icon">&#x1F9EA;</div>
+      <h3>Eval Engine</h3>
+      <p>Ceteris paribus &middot; 3 LLMs &middot; identical inputs<br>Ensemble scoring + guardrails</p>
+      <div class="modules">
+        <span class="mod">14 Features</span>
+        <span class="mod">Pre-filters</span>
+        <span class="mod">Model Runner</span>
+        <span class="mod">Ensemble Scorer</span>
+        <span class="mod">Guardrails</span>
+        <span class="mod">Zod Validation</span>
+      </div>
+    </div>
+
+    <!-- LLM Providers (bottom row) -->
+    <div class="llm-row">
+      <div class="llm-node anthropic-node">
+        <div class="icon">&#x1F9E0;</div>
+        <h3>Anthropic API</h3>
+        <p>Claude &middot; temp 0</p>
+        <span class="badge">Eval provider</span>
+      </div>
+      <div class="llm-node openai-node">
+        <div class="icon">&#x1F916;</div>
+        <h3>OpenAI API</h3>
+        <p>GPT-4o &middot; temp 0</p>
+        <span class="badge">Eval provider</span>
+      </div>
+      <div class="llm-node gemini-node">
+        <div class="icon">&#x1F48E;</div>
+        <h3>Google AI API</h3>
+        <p>Gemini &middot; temp 0</p>
+        <span class="badge">Eval provider</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── EVALUATION PIPELINE ── -->
+  <div class="pipeline">
+    <h2>Evaluation Pipeline</h2>
+    <div class="pipeline-steps">
+      <div class="pipe-step">
+        <div class="step-num">Step 1</div>
+        <h4>Request</h4>
+        <p>Symbol, direction, entry/stop prices</p>
+        <div class="time">POST /api/eval/evaluate</div>
+      </div>
+      <div class="pipe-step">
+        <div class="step-num">Step 2</div>
+        <h4>14 Features</h4>
+        <p>RVOL, VWAP, ATR, spread, gap, alignment&hellip;</p>
+        <div class="time">~200-500ms</div>
+      </div>
+      <div class="pipe-step">
+        <div class="step-num">Step 3</div>
+        <h4>Pre-filters</h4>
+        <p>Reject bad setups before API calls</p>
+        <div class="time">Deterministic</div>
+      </div>
+      <div class="pipe-step">
+        <div class="step-num">Step 4</div>
+        <h4>3 Models</h4>
+        <p>Claude + GPT-4o + Gemini in parallel</p>
+        <div class="time">~1-5s (parallel)</div>
+      </div>
+      <div class="pipe-step">
+        <div class="step-num">Step 5</div>
+        <h4>Ensemble</h4>
+        <p>Weighted mean + disagreement penalty</p>
+        <div class="time">Deterministic</div>
+      </div>
+      <div class="pipe-step">
+        <div class="step-num">Step 6</div>
+        <h4>Guardrails</h4>
+        <p>Trading window, loss streak, flags</p>
+        <div class="time">Behavioral checks</div>
+      </div>
+      <div class="pipe-step">
+        <div class="step-num">Step 7</div>
+        <h4>Response</h4>
+        <p>Score, reasoning, flags &rarr; trader decides</p>
+        <div class="time">Assist discretion</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 14 COMPUTED FEATURES ── -->
+  <div class="features-section">
+    <h2>14 Computed Features (Deterministic)</h2>
+    <div class="features-grid">
+      <div class="feat"><div class="name">rvol</div><div class="desc">Relative volume vs 20-day avg</div></div>
+      <div class="feat"><div class="name">vwap_deviation_pct</div><div class="desc">Distance from intraday VWAP (%)</div></div>
+      <div class="feat"><div class="name">spread_pct</div><div class="desc">Bid-ask spread (%)</div></div>
+      <div class="feat"><div class="name">gap_pct</div><div class="desc">Gap from prior close (%)</div></div>
+      <div class="feat"><div class="name">range_position_pct</div><div class="desc">Position within day's range (0-100%)</div></div>
+      <div class="feat"><div class="name">atr_14 / atr_pct</div><div class="desc">14-period ATR and ATR as % of price</div></div>
+      <div class="feat"><div class="name">float_rotation_est</div><div class="desc">Volume / estimated float</div></div>
+      <div class="feat"><div class="name">price_extension_pct</div><div class="desc">Distance from key levels in ATR units</div></div>
+      <div class="feat"><div class="name">volume_acceleration</div><div class="desc">Last 5min vol / prev 5min vol</div></div>
+      <div class="feat"><div class="name">spy/qqq_change_pct</div><div class="desc">Market index intraday changes</div></div>
+      <div class="feat"><div class="name">market_alignment</div><div class="desc">aligned_bull / aligned_bear / mixed / neutral</div></div>
+      <div class="feat"><div class="name">volatility_regime</div><div class="desc">low / normal / high (from ATR%)</div></div>
+      <div class="feat"><div class="name">liquidity_bucket</div><div class="desc">small / mid / large (from dollar vol)</div></div>
+      <div class="feat"><div class="name">time_of_day</div><div class="desc">premarket / open_drive / morning / midday / power_hour / close</div></div>
+    </div>
+  </div>
+
+  <!-- ── ALL ENDPOINTS ── -->
+  <h2>All Endpoints</h2>
+
+  <div class="section-label">Market Data</div>
+  <div class="endpoint-grid">
+    <div class="ep"><span class="method get">GET</span><div><div class="path">/api/status</div><div class="desc">Bridge status, session, IBKR state</div></div></div>
+    <div class="ep"><span class="method get">GET</span><div><div class="path">/api/quote/{symbol}</div><div class="desc">Smart quote (IBKR &rarr; Yahoo fallback)</div></div></div>
+    <div class="ep"><span class="method get">GET</span><div><div class="path">/api/history/{symbol}</div><div class="desc">Historical OHLCV bars</div></div></div>
+    <div class="ep"><span class="method get">GET</span><div><div class="path">/api/details/{symbol}</div><div class="desc">Company info, sector, PE, 52wk</div></div></div>
+    <div class="ep"><span class="method get">GET</span><div><div class="path">/api/options/{symbol}</div><div class="desc">Options chain</div></div></div>
+    <div class="ep"><span class="method get">GET</span><div><div class="path">/api/options/{symbol}/quote</div><div class="desc">Single option contract quote</div></div></div>
+    <div class="ep"><span class="method get">GET</span><div><div class="path">/api/search</div><div class="desc">Symbol search by name</div></div></div>
+    <div class="ep"><span class="method get">GET</span><div><div class="path">/api/news/{query}</div><div class="desc">Recent news articles</div></div></div>
+    <div class="ep"><span class="method get">GET</span><div><div class="path">/api/financials/{symbol}</div><div class="desc">Revenue, margins, debt, targets</div></div></div>
+    <div class="ep"><span class="method get">GET</span><div><div class="path">/api/earnings/{symbol}</div><div class="desc">Earnings history</div></div></div>
+    <div class="ep"><span class="method get">GET</span><div><div class="path">/api/trending</div><div class="desc">Trending symbols</div></div></div>
+    <div class="ep"><span class="method get">GET</span><div><div class="path">/api/screener/filters</div><div class="desc">Available screener IDs</div></div></div>
+    <div class="ep"><span class="method post">POST</span><div><div class="path">/api/screener/run</div><div class="desc">Run stock screener</div></div></div>
+    <div class="ep"><span class="method post">POST</span><div><div class="path">/api/screener/run-with-quotes</div><div class="desc">Screener with full quote data</div></div></div>
+  </div>
+
+  <div class="section-label">IBKR Account</div>
+  <div class="endpoint-grid">
+    <div class="ep"><span class="method get">GET</span><div><div class="path">/api/account/summary</div><div class="desc">Net liq, cash, buying power, margin</div></div></div>
+    <div class="ep"><span class="method get">GET</span><div><div class="path">/api/account/positions</div><div class="desc">All positions with avg cost</div></div></div>
+    <div class="ep"><span class="method get">GET</span><div><div class="path">/api/account/pnl</div><div class="desc">Daily P&amp;L breakdown</div></div></div>
+    <div class="ep"><span class="method get">GET</span><div><div class="path">/api/account/orders</div><div class="desc">Open orders</div></div></div>
+    <div class="ep"><span class="method get">GET</span><div><div class="path">/api/account/orders/completed</div><div class="desc">Filled/cancelled orders</div></div></div>
+    <div class="ep"><span class="method get">GET</span><div><div class="path">/api/account/executions</div><div class="desc">Today&rsquo;s fills with commissions</div></div></div>
+    <div class="ep"><span class="method get">GET</span><div><div class="path">/api/contract/{symbol}</div><div class="desc">IBKR contract details</div></div></div>
+    <div class="ep"><span class="method get">GET</span><div><div class="path">/api/ibkr/quote/{symbol}</div><div class="desc">Direct IBKR real-time quote</div></div></div>
+  </div>
+
+  <div class="section-label">Trade Execution</div>
+  <div class="endpoint-grid">
+    <div class="ep" style="border-left-color:#f87171"><span class="method post">POST</span><div><div class="path">/api/order</div><div class="desc">Place order (MKT/LMT/STP/STP LMT)</div></div></div>
+    <div class="ep" style="border-left-color:#f87171"><span class="method post">POST</span><div><div class="path">/api/order/bracket</div><div class="desc">Bracket order (entry + TP + SL)</div></div></div>
+    <div class="ep" style="border-left-color:#f87171"><span class="method delete">DELETE</span><div><div class="path">/api/order/{orderId}</div><div class="desc">Cancel specific order</div></div></div>
+    <div class="ep" style="border-left-color:#f87171"><span class="method delete">DELETE</span><div><div class="path">/api/orders/all</div><div class="desc">Cancel ALL open orders</div></div></div>
+  </div>
+
+  <div class="section-label">Trade Evaluation</div>
+  <div class="endpoint-grid">
+    <div class="ep" style="border-left-color:#a78bfa"><span class="method post">POST</span><div><div class="path">/api/eval/evaluate</div><div class="desc">Full pipeline: features &rarr; models &rarr; ensemble &rarr; guardrails</div></div></div>
+    <div class="ep" style="border-left-color:#a78bfa"><span class="method post">POST</span><div><div class="path">/api/eval/outcome</div><div class="desc">Record actual trade result for calibration</div></div></div>
+    <div class="ep" style="border-left-color:#a78bfa"><span class="method get">GET</span><div><div class="path">/api/eval/history</div><div class="desc">Recent evaluations with model outputs</div></div></div>
+    <div class="ep" style="border-left-color:#a78bfa"><span class="method get">GET</span><div><div class="path">/api/eval/stats</div><div class="desc">Per-model accuracy and compliance rates</div></div></div>
+    <div class="ep" style="border-left-color:#a78bfa"><span class="method get">GET</span><div><div class="path">/api/eval/weights</div><div class="desc">Current ensemble weights (claude, gpt4o, gemini, k)</div></div></div>
+  </div>
+
+  <div class="section-label">Trade Journal &amp; History</div>
+  <div class="endpoint-grid">
+    <div class="ep" style="border-left-color:#fbbf24"><span class="method get">GET</span><div><div class="path">/api/journal</div><div class="desc">Query trade journal entries</div></div></div>
+    <div class="ep" style="border-left-color:#fbbf24"><span class="method post">POST</span><div><div class="path">/api/journal</div><div class="desc">Create journal entry with reasoning</div></div></div>
+    <div class="ep" style="border-left-color:#fbbf24"><span class="method patch">PATCH</span><div><div class="path">/api/journal/{id}</div><div class="desc">Update entry with outcome/notes</div></div></div>
+    <div class="ep" style="border-left-color:#fbbf24"><span class="method get">GET</span><div><div class="path">/api/orders/history</div><div class="desc">Historical orders from DB</div></div></div>
+    <div class="ep" style="border-left-color:#fbbf24"><span class="method get">GET</span><div><div class="path">/api/executions/history</div><div class="desc">Historical executions from DB</div></div></div>
+  </div>
+
+  <div class="section-label">Collaboration Channel</div>
+  <div class="endpoint-grid">
+    <div class="ep" style="border-left-color:#e879f9"><span class="method get">GET</span><div><div class="path">/api/collab/messages</div><div class="desc">Read conversation</div></div></div>
+    <div class="ep" style="border-left-color:#e879f9"><span class="method post">POST</span><div><div class="path">/api/collab/message</div><div class="desc">Post message to channel</div></div></div>
+    <div class="ep" style="border-left-color:#e879f9"><span class="method delete">DELETE</span><div><div class="path">/api/collab/messages</div><div class="desc">Clear all messages</div></div></div>
+    <div class="ep" style="border-left-color:#e879f9"><span class="method get">GET</span><div><div class="path">/api/collab/stats</div><div class="desc">Message counts by author</div></div></div>
+  </div>
+</div>
+
+<script>
+const svg = document.getElementById('svg');
+const diagram = document.getElementById('diagram');
+
+function drawLine(x1, y1, x2, y2, color, label, dashed) {
+  const midX = (x1 + x2) / 2;
+  const midY = (y1 + y2) / 2;
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const cx = midX - dy * 0.12;
+  const cy = midY + dx * 0.12;
+
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', `M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}`);
+  path.setAttribute('stroke', color);
+  path.setAttribute('class', 'conn-line' + (dashed ? '' : ' pulse'));
+  if (dashed) path.setAttribute('stroke-dasharray', '6,4');
+  svg.appendChild(path);
+
+  if (label) {
+    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    text.setAttribute('x', (x1 + cx + x2) / 3);
+    text.setAttribute('y', (y1 + cy + y2) / 3 - 6);
+    text.setAttribute('class', 'conn-label');
+    text.setAttribute('text-anchor', 'middle');
+    text.textContent = label;
+    svg.appendChild(text);
+  }
+}
+
+function draw() {
+  svg.innerHTML = '';
+  const rect = diagram.getBoundingClientRect();
+  const w = rect.width;
+  const sx = w / 1500;
+
+  // Claude -> Bridge (MCP stdio)
+  drawLine(190 * sx, 130, 620 * sx, 260, '#c084fc', 'MCP stdio', false);
+
+  // ChatGPT -> Cloudflare -> Bridge
+  drawLine(1120 * sx, 130, 1310 * sx, 300, '#4ade80', 'HTTPS', false);
+  drawLine(1310 * sx, 360, 920 * sx, 300, '#f97316', 'tunnel', false);
+
+  // IBKR -> Bridge
+  drawLine(190 * sx, 320, 580 * sx, 300, '#f87171', 'TWS API', false);
+
+  // Yahoo -> Bridge
+  drawLine(190 * sx, 500, 580 * sx, 360, '#fbbf24', 'direct import', false);
+
+  // Bridge -> SQLite
+  drawLine(920 * sx, 370, 1310 * sx, 490, '#38bdf8', 'better-sqlite3', false);
+
+  // Bridge -> Eval Engine (internal — direct function calls)
+  drawLine(750 * sx, 410, 750 * sx, 510, '#a78bfa', 'integrated', false);
+
+  // Eval Engine -> Yahoo (direct import, no HTTP)
+  drawLine(580 * sx, 560, 190 * sx, 510, '#fbbf24', 'direct import', true);
+
+  // Eval -> Anthropic
+  drawLine(600 * sx, 660, 480 * sx, 770, '#d4a574', 'API call', false);
+
+  // Eval -> OpenAI
+  drawLine(750 * sx, 670, 750 * sx, 770, '#10b981', 'API call', false);
+
+  // Eval -> Gemini
+  drawLine(900 * sx, 660, 1020 * sx, 770, '#818cf8', 'API call', false);
+
+  // Eval -> SQLite
+  drawLine(960 * sx, 570, 1310 * sx, 500, '#38bdf8', 'persist', true);
+}
+
+draw();
+window.addEventListener('resize', draw);
+</script>
+</body>
+</html>
