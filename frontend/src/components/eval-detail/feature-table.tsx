@@ -37,7 +37,7 @@ function formatVal(val: unknown): string {
 
 export function FeatureTable({ features }: Props) {
   return (
-    <div className="grid grid-cols-2 gap-4">
+    <div className="grid gap-4 md:grid-cols-2">
       {FEATURE_GROUPS.map((group) => (
         <Card key={group.label} className="bg-card p-4">
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
