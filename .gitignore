@@ -17,3 +17,8 @@ NUL
 # Test coverage
 coverage/
 .vitest/
+
+# Python analytics venv
+analytics/.venv/
+__pycache__/
+*.pyc

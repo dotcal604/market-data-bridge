@@ -1,11 +1,22 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { checkRisk, getRiskLimits, type RiskCheckParams } from "../risk-gate.js";
+import {
+  checkRisk,
+  getRiskLimits,
+  getSessionState,
+  recordTradeResult,
+  lockSession,
+  unlockSession,
+  resetSession,
+  _testing,
+  type RiskCheckParams,
+} from "../risk-gate.js";
 
 describe("Risk Gate", () => {
   // Get the actual limits from the module
   const LIMITS = getRiskLimits();
 
-  let testStartTime = new Date("2025-01-01T00:00:00Z").getTime();
+  // 10:00 AM ET = 15:00 UTC (during market hours)
+  let testStartTime = new Date("2025-01-06T15:00:00Z").getTime();
 
   beforeEach(() => {
     // Set fake timers and advance to a new time for each test
@@ -13,6 +24,8 @@ describe("Risk Gate", () => {
     vi.useFakeTimers();
     testStartTime += 120_000; // Advance 2 minutes between tests
     vi.setSystemTime(testStartTime);
+    // Reset session state so session guardrails don't interfere with per-order tests
+    resetSession();
   });
 
   afterEach(() => {
@@ -610,6 +623,237 @@ describe("Risk Gate", () => {
 
       expect(limits1).toEqual(limits2);
       expect(limits1).not.toBe(limits2); // Different object instances
+    });
+  });
+
+  // ── Session Guardrails ────────────────────────────────────────────────────
+
+  describe("Session Guardrails", () => {
+    const validOrder: RiskCheckParams = {
+      symbol: "AAPL",
+      action: "BUY",
+      orderType: "LMT",
+      totalQuantity: 10,
+      lmtPrice: 150,
+      estimatedPrice: 150,
+    };
+
+    describe("Manual Lock", () => {
+      it("should reject orders when session is locked", () => {
+        lockSession("tilting");
+        const result = checkRisk(validOrder);
+        expect(result.allowed).toBe(false);
+        expect(result.reason).toContain("Session locked");
+        expect(result.reason).toContain("tilting");
+      });
+
+      it("should allow orders after unlocking", () => {
+        lockSession("test");
+        unlockSession();
+        const result = checkRisk(validOrder);
+        expect(result.allowed).toBe(true);
+      });
+
+      it("should use default reason when none provided", () => {
+        lockSession();
+        const result = checkRisk(validOrder);
+        expect(result.reason).toContain("manual");
+      });
+    });
+
+    describe("Daily Loss Limit", () => {
+      it("should reject when daily loss limit is hit", () => {
+        const limits = getRiskLimits();
+        // Record a loss that exceeds the daily limit
+        recordTradeResult(-limits.maxDailyLoss);
+        const result = checkRisk(validOrder);
+        expect(result.allowed).toBe(false);
+        expect(result.reason).toContain("Daily loss limit");
+      });
+
+      it("should allow trading when under daily loss limit", () => {
+        recordTradeResult(-100); // Small loss
+        const result = checkRisk(validOrder);
+        expect(result.allowed).toBe(true);
+      });
+
+      it("should track cumulative losses", () => {
+        const limits = getRiskLimits();
+        const lossPerTrade = Math.floor(limits.maxDailyLoss / 3);
+        recordTradeResult(-lossPerTrade);
+        recordTradeResult(-lossPerTrade);
+        // Still under limit
+        expect(checkRisk(validOrder).allowed).toBe(true);
+        // This pushes over
+        recordTradeResult(-lossPerTrade);
+        expect(checkRisk(validOrder).allowed).toBe(false);
+      });
+
+      it("should offset losses with wins", () => {
+        const limits = getRiskLimits();
+        recordTradeResult(-(limits.maxDailyLoss - 50)); // Big loss, just under limit
+        expect(checkRisk(validOrder).allowed).toBe(true);
+        recordTradeResult(200); // Win
+        recordTradeResult(-200); // Another loss
+        // Net: -(maxDailyLoss - 50) + 200 - 200 = -(maxDailyLoss - 50), still under
+        expect(checkRisk(validOrder).allowed).toBe(true);
+      });
+    });
+
+    describe("Max Daily Trades", () => {
+      it("should reject when max daily trades reached", () => {
+        const limits = getRiskLimits();
+        // Record trades up to the limit
+        for (let i = 0; i < limits.maxDailyTrades; i++) {
+          recordTradeResult(10); // Small wins so we don't trigger loss limit
+        }
+        const result = checkRisk(validOrder);
+        expect(result.allowed).toBe(false);
+        expect(result.reason).toContain("Daily trade limit");
+      });
+
+      it("should allow trading when under trade count", () => {
+        recordTradeResult(10);
+        recordTradeResult(10);
+        expect(checkRisk(validOrder).allowed).toBe(true);
+      });
+    });
+
+    describe("Consecutive Loss Cooldown", () => {
+      it("should enforce cooldown after consecutive losses", () => {
+        const limits = getRiskLimits();
+        for (let i = 0; i < limits.consecutiveLossLimit; i++) {
+          recordTradeResult(-10);
+        }
+        const result = checkRisk(validOrder);
+        expect(result.allowed).toBe(false);
+        expect(result.reason).toContain("Cooldown active");
+        expect(result.reason).toContain("consecutive losses");
+      });
+
+      it("should allow trading after cooldown expires", () => {
+        const limits = getRiskLimits();
+        for (let i = 0; i < limits.consecutiveLossLimit; i++) {
+          recordTradeResult(-10);
+        }
+        // Advance past cooldown
+        vi.advanceTimersByTime(limits.cooldownMinutes * 60_000 + 1000);
+        const result = checkRisk(validOrder);
+        expect(result.allowed).toBe(true);
+      });
+
+      it("should reset consecutive counter on a win", () => {
+        const limits = getRiskLimits();
+        // Lose N-1 times
+        for (let i = 0; i < limits.consecutiveLossLimit - 1; i++) {
+          recordTradeResult(-10);
+        }
+        // Win resets the counter
+        recordTradeResult(50);
+        // Now lose again — counter restarts from 0
+        recordTradeResult(-10);
+        const result = checkRisk(validOrder);
+        expect(result.allowed).toBe(true); // Only 1 consecutive loss
+      });
+    });
+
+    describe("Late-Day Lockout", () => {
+      it("should reject orders near market close", () => {
+        const limits = getRiskLimits();
+        // Set time to 5 minutes before close: 15:55 ET = 20:55 UTC
+        vi.setSystemTime(new Date("2025-01-06T20:55:00Z"));
+        resetSession();
+        const result = checkRisk(validOrder);
+        expect(result.allowed).toBe(false);
+        expect(result.reason).toContain("Late-day lockout");
+      });
+
+      it("should allow orders well before close", () => {
+        // Set time to 11:00 AM ET = 16:00 UTC (5 hours before close)
+        vi.setSystemTime(new Date("2025-01-06T16:00:00Z"));
+        resetSession();
+        const result = checkRisk(validOrder);
+        expect(result.allowed).toBe(true);
+      });
+    });
+
+    describe("Outside Market Hours", () => {
+      it("should reject orders before market open", () => {
+        // 8:00 AM ET = 13:00 UTC (before 9:30 AM open)
+        vi.setSystemTime(new Date("2025-01-06T13:00:00Z"));
+        resetSession();
+        const result = checkRisk(validOrder);
+        expect(result.allowed).toBe(false);
+        expect(result.reason).toContain("Outside regular trading hours");
+      });
+
+      it("should reject orders after market close", () => {
+        // 5:00 PM ET = 22:00 UTC (after 4:00 PM close)
+        vi.setSystemTime(new Date("2025-01-06T22:00:00Z"));
+        resetSession();
+        const result = checkRisk(validOrder);
+        expect(result.allowed).toBe(false);
+        expect(result.reason).toContain("Outside regular trading hours");
+      });
+
+      it("should allow orders during market hours", () => {
+        // 10:30 AM ET = 15:30 UTC
+        vi.setSystemTime(new Date("2025-01-06T15:30:00Z"));
+        resetSession();
+        const result = checkRisk(validOrder);
+        expect(result.allowed).toBe(true);
+      });
+
+      it("should allow orders right at market open", () => {
+        // 9:30 AM ET = 14:30 UTC
+        vi.setSystemTime(new Date("2025-01-06T14:30:00Z"));
+        resetSession();
+        const result = checkRisk(validOrder);
+        expect(result.allowed).toBe(true);
+      });
+    });
+
+    describe("Session State Management", () => {
+      it("should auto-reset on new trading day", () => {
+        recordTradeResult(-100);
+        const state1 = getSessionState();
+        expect(state1.realizedPnl).toBe(-100);
+
+        // Advance to next day (still during market hours)
+        vi.advanceTimersByTime(24 * 60 * 60 * 1000);
+        const state2 = getSessionState();
+        expect(state2.realizedPnl).toBe(0);
+        expect(state2.tradeCount).toBe(0);
+      });
+
+      it("should track session state correctly", () => {
+        recordTradeResult(50);
+        recordTradeResult(-20);
+        recordTradeResult(-30);
+
+        const state = getSessionState();
+        expect(state.realizedPnl).toBe(0); // 50 - 20 - 30
+        expect(state.tradeCount).toBe(3);
+        expect(state.consecutiveLosses).toBe(2); // Two losses after the win
+      });
+
+      it("resetSession should clear everything", () => {
+        recordTradeResult(-100);
+        lockSession("test");
+        resetSession();
+
+        const state = getSessionState();
+        expect(state.realizedPnl).toBe(0);
+        expect(state.tradeCount).toBe(0);
+        expect(state.locked).toBe(false);
+      });
+
+      it("getSessionState should include limits", () => {
+        const state = getSessionState();
+        expect(state.limits).toBeDefined();
+        expect(state.limits.maxDailyLoss).toBeGreaterThan(0);
+        expect(state.limits.maxDailyTrades).toBeGreaterThan(0);
+      });
     });
   });
 });
