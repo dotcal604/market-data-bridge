@@ -27,7 +27,10 @@ function apiKeyAuth(req: Request, res: Response, next: NextFunction): void {
 
 // Rate limiters — keyed by API key, NOT IP (Cloudflare tunnel makes all external requests appear from localhost)
 const keyGenerator = (req: Request): string =>
-  (req.headers["x-api-key"] as string) ?? req.ip ?? "anonymous";
+  (req.headers["x-api-key"] as string) ?? "anonymous";
+
+// Suppress express-rate-limit IPv6 validation (we key by API key, not IP)
+const rlOptions = { validate: { ip: false } } as const;
 
 const globalLimiter = rateLimit({
   windowMs: 60_000, // 1 minute
@@ -36,6 +39,7 @@ const globalLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator,
   message: { error: "Rate limit exceeded — 100 requests/minute" },
+  ...rlOptions,
 });
 
 const orderLimiter = rateLimit({
@@ -45,6 +49,7 @@ const orderLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator,
   message: { error: "Order rate limit exceeded — 10 orders/minute" },
+  ...rlOptions,
 });
 
 const collabLimiter = rateLimit({
@@ -54,6 +59,7 @@ const collabLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator,
   message: { error: "Collab rate limit exceeded — 30 requests/minute" },
+  ...rlOptions,
 });
 
 const evalLimiter = rateLimit({
@@ -63,9 +69,18 @@ const evalLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator,
   message: { error: "Eval rate limit exceeded — 10 evaluations/minute" },
+  ...rlOptions,
 });
 
 const startTime = Date.now();
+
+// Prevent uncaught errors from killing the process during RTH
+process.on("uncaughtException", (err) => {
+  logRest.error({ err }, "Uncaught exception — keeping server alive");
+});
+process.on("unhandledRejection", (reason) => {
+  logRest.error({ reason }, "Unhandled rejection — keeping server alive");
+});
 
 export function startRestServer(): Promise<void> {
   return new Promise((resolve) => {

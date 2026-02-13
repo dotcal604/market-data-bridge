@@ -18,7 +18,8 @@ import {
 } from "../providers/yahoo.js";
 import { isConnected } from "../ibkr/connection.js";
 import { getAccountSummary, getPositions, getPnL } from "../ibkr/account.js";
-import { getOpenOrders, getCompletedOrders, getExecutions, placeOrder, placeBracketOrder, cancelOrder, cancelAllOrders } from "../ibkr/orders.js";
+import { getOpenOrders, getCompletedOrders, getExecutions, placeOrder, placeBracketOrder, cancelOrder, cancelAllOrders, flattenAllPositions } from "../ibkr/orders.js";
+import { setFlattenEnabled, getFlattenConfig } from "../scheduler.js";
 import { getContractDetails } from "../ibkr/contracts.js";
 import { getIBKRQuote } from "../ibkr/marketdata.js";
 import { readMessages, postMessage, clearMessages, getStats } from "../collab/store.js";
@@ -661,6 +662,39 @@ export function createMcpServer(): McpServer {
       } catch (e: any) {
         return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
       }
+    }
+  );
+
+  // --- Tool: flatten_positions (EOD close-out) ---
+  server.tool(
+    "flatten_positions",
+    "Immediately close ALL open positions with MKT orders and cancel all open orders. Use for EOD flatten or emergency exit.",
+    {},
+    async () => {
+      if (!isConnected()) {
+        return { content: [{ type: "text", text: JSON.stringify({ error: "IBKR not connected." }, null, 2) }] };
+      }
+      try {
+        const result = await flattenAllPositions();
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: flatten_config (view/toggle auto-flatten) ---
+  server.tool(
+    "flatten_config",
+    "Get or set the EOD auto-flatten configuration. Returns current time/enabled state. Pass enabled=true/false to toggle.",
+    {
+      enabled: z.boolean().optional().describe("Set to true to enable auto-flatten, false to disable"),
+    },
+    async ({ enabled }) => {
+      if (typeof enabled === "boolean") {
+        setFlattenEnabled(enabled);
+      }
+      return { content: [{ type: "text", text: JSON.stringify(getFlattenConfig(), null, 2) }] };
     }
   );
 

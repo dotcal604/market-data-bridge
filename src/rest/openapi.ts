@@ -1105,6 +1105,93 @@ export const openApiSpec = {
       },
     },
     // =====================================================================
+    // FLATTEN / EOD CLOSE-OUT
+    // =====================================================================
+    "/api/positions/flatten": {
+      post: {
+        operationId: "flattenAllPositions",
+        summary: "Immediately close ALL open positions with MKT orders and cancel all open orders. EOD flatten or emergency exit.",
+        responses: {
+          "200": {
+            description: "Flatten result with list of closed positions",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    flattened: { type: "array", items: { type: "object" } },
+                    cancelled: { type: "object" },
+                    skipped: { type: "array", items: { type: "string" } },
+                    timestamp: { type: "string" },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/flatten/config": {
+      get: {
+        operationId: "getFlattenConfig",
+        summary: "Get current EOD auto-flatten configuration (time, enabled, firedToday)",
+        responses: {
+          "200": {
+            description: "Flatten config",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    enabled: { type: "boolean" },
+                    time: { type: "string" },
+                    firedToday: { type: "string" },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/flatten/enable": {
+      post: {
+        operationId: "setFlattenEnabled",
+        summary: "Enable or disable the EOD auto-flatten scheduler",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["enabled"],
+                properties: {
+                  enabled: { type: "boolean", description: "true to enable, false to disable" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Updated flatten config",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    enabled: { type: "boolean" },
+                    time: { type: "string" },
+                    firedToday: { type: "string" },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    // =====================================================================
     // COLLABORATION CHANNEL (AI-to-AI communication)
     // =====================================================================
     "/api/collab/messages": {

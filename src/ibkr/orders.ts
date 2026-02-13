@@ -748,6 +748,75 @@ export async function cancelAllOrders(): Promise<{ status: string }> {
   return { status: "Global cancel requested" };
 }
 
+// ── Flatten All Positions (EOD close-out) ────────────────────────────────
+
+export interface FlattenResult {
+  flattened: PlaceOrderResult[];
+  cancelled: { status: string };
+  skipped: string[];
+  timestamp: string;
+}
+
+/**
+ * Market-sell all open positions. Cancels open orders first, then sends
+ * opposing MKT orders for every non-zero position.  Bypasses risk-gate
+ * (this IS the risk-gate — protecting against overnight exposure).
+ */
+export async function flattenAllPositions(): Promise<FlattenResult> {
+  const { getPositions } = await import("./account.js");
+  const positions = await getPositions();
+
+  // 1. Cancel all open orders first (stops, brackets, etc.)
+  const cancelled = await cancelAllOrders();
+
+  // Small delay so cancels propagate before we send closing orders
+  await new Promise((r) => setTimeout(r, 500));
+
+  // 2. Close every non-zero position with a MKT order
+  const flattened: PlaceOrderResult[] = [];
+  const skipped: string[] = [];
+
+  for (const pos of positions) {
+    if (pos.position === 0) {
+      skipped.push(pos.symbol);
+      continue;
+    }
+    const action = pos.position > 0 ? "SELL" : "BUY";
+    const qty = Math.abs(pos.position);
+
+    try {
+      const result = await placeOrder({
+        symbol: pos.symbol,
+        secType: pos.secType,
+        exchange: "SMART",
+        currency: pos.currency,
+        action,
+        orderType: "MKT",
+        totalQuantity: qty,
+        tif: "IOC", // Immediate-or-cancel — don't leave hanging
+        order_source: "flatten_eod",
+        strategy_version: "flatten",
+      });
+      flattened.push(result);
+    } catch (e: any) {
+      logOrder.error({ err: e, symbol: pos.symbol, action, qty }, "Flatten order failed");
+      skipped.push(`${pos.symbol} (error: ${e.message})`);
+    }
+  }
+
+  logOrder.info(
+    { flattened: flattened.length, skipped: skipped.length },
+    `Flatten complete: closed ${flattened.length} positions`,
+  );
+
+  return {
+    flattened,
+    cancelled,
+    skipped,
+    timestamp: new Date().toISOString(),
+  };
+}
+
 // ── Persistent DB Listeners ─────────────────────────────────────────────
 // These run for the lifetime of the process, writing all IBKR order/exec
 // events to the database regardless of which request triggered them.

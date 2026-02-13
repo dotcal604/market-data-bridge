@@ -17,7 +17,8 @@ import {
 } from "../providers/yahoo.js";
 import { isConnected } from "../ibkr/connection.js";
 import { getAccountSummary, getPositions, getPnL } from "../ibkr/account.js";
-import { getOpenOrders, getCompletedOrders, getExecutions, placeOrder, placeBracketOrder, cancelOrder, cancelAllOrders } from "../ibkr/orders.js";
+import { getOpenOrders, getCompletedOrders, getExecutions, placeOrder, placeBracketOrder, cancelOrder, cancelAllOrders, flattenAllPositions } from "../ibkr/orders.js";
+import { setFlattenEnabled, getFlattenConfig } from "../scheduler.js";
 import { getContractDetails } from "../ibkr/contracts.js";
 import { getIBKRQuote } from "../ibkr/marketdata.js";
 import { readMessages, postMessage, clearMessages, getStats } from "../collab/store.js";
@@ -485,6 +486,40 @@ router.delete("/orders/all", async (_req, res) => {
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// =====================================================================
+// FLATTEN / EOD CLOSE-OUT
+// =====================================================================
+
+// POST /api/positions/flatten — immediately close all positions (MKT orders)
+router.post("/positions/flatten", async (_req, res) => {
+  if (!isConnected()) {
+    res.json({ error: "IBKR not connected. Start TWS/Gateway to flatten." });
+    return;
+  }
+  try {
+    const result = await flattenAllPositions();
+    res.json(result);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/flatten/config — current flatten scheduler config
+router.get("/flatten/config", (_req, res) => {
+  res.json(getFlattenConfig());
+});
+
+// POST /api/flatten/enable — enable/disable auto-flatten
+router.post("/flatten/enable", (req, res) => {
+  const { enabled } = req.body ?? {};
+  if (typeof enabled !== "boolean") {
+    res.status(400).json({ error: "enabled must be a boolean" });
+    return;
+  }
+  setFlattenEnabled(enabled);
+  res.json(getFlattenConfig());
 });
 
 // =====================================================================
