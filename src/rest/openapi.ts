@@ -1060,6 +1060,155 @@ export const openApiSpec = {
         },
       },
     },
+    "/api/account/pnl/{symbol}": {
+      get: {
+        operationId: "getPnLSingle",
+        summary: "Get symbol-level PnL using reqPnLSingle. Requires TWS/Gateway.",
+        parameters: [
+          { name: "symbol", in: "path", required: true, schema: { type: "string" } },
+        ],
+        responses: {
+          "200": { description: "PnL single response" },
+        },
+      },
+    },
+    "/api/search/ibkr": {
+      get: {
+        operationId: "searchIbkrSymbols",
+        summary: "Search IBKR contracts via reqMatchingSymbols.",
+        parameters: [
+          { name: "q", in: "query", required: true, schema: { type: "string" } },
+        ],
+        responses: {
+          "200": { description: "Matching symbols" },
+        },
+      },
+    },
+    "/api/config/market-data-type": {
+      post: {
+        operationId: "setMarketDataType",
+        summary: "Set IBKR market data type (1-4).",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: { marketDataType: { type: "integer", minimum: 1, maximum: 4 } },
+                required: ["marketDataType"],
+              },
+            },
+          },
+        },
+        responses: { "200": { description: "Configured market data type" } },
+      },
+    },
+    "/api/orders/auto-open": {
+      post: {
+        operationId: "setAutoOpenOrders",
+        summary: "Enable/disable auto open orders binding.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: { autoBind: { type: "boolean" } },
+                required: ["autoBind"],
+              },
+            },
+          },
+        },
+        responses: { "200": { description: "Auto open orders updated" } },
+      },
+    },
+    "/api/data/head-timestamp/{symbol}": {
+      get: {
+        operationId: "getHeadTimestamp",
+        summary: "Get earliest available historical timestamp for symbol.",
+        parameters: [
+          { name: "symbol", in: "path", required: true, schema: { type: "string" } },
+          { name: "whatToShow", in: "query", schema: { type: "string", enum: ["TRADES", "MIDPOINT", "BID", "ASK"] } },
+          { name: "useRTH", in: "query", schema: { type: "boolean" } },
+          { name: "formatDate", in: "query", schema: { type: "integer", enum: [1, 2] } },
+        ],
+        responses: { "200": { description: "Head timestamp" } },
+      },
+    },
+    "/api/data/histogram/{symbol}": {
+      get: {
+        operationId: "getHistogramData",
+        summary: "Get histogram data distribution for symbol.",
+        parameters: [
+          { name: "symbol", in: "path", required: true, schema: { type: "string" } },
+          { name: "useRTH", in: "query", schema: { type: "boolean" } },
+          { name: "period", in: "query", schema: { type: "integer", minimum: 1 } },
+          { name: "periodUnit", in: "query", schema: { type: "string", enum: ["S", "D", "W", "M", "Y"] } },
+        ],
+        responses: { "200": { description: "Histogram data" } },
+      },
+    },
+    "/api/options/implied-vol": {
+      post: {
+        operationId: "calculateImpliedVolatility",
+        summary: "Calculate implied volatility for an option contract.",
+        requestBody: { required: true },
+        responses: { "200": { description: "Implied volatility result" } },
+      },
+    },
+    "/api/options/price": {
+      post: {
+        operationId: "calculateOptionPrice",
+        summary: "Calculate option price from supplied volatility.",
+        requestBody: { required: true },
+        responses: { "200": { description: "Option price result" } },
+      },
+    },
+    "/api/status/tws-time": {
+      get: {
+        operationId: "getTwsCurrentTime",
+        summary: "Get TWS server time.",
+        responses: { "200": { description: "Current TWS time" } },
+      },
+    },
+    "/api/data/market-rule/{ruleId}": {
+      get: {
+        operationId: "getMarketRule",
+        summary: "Get market rule increments for a market rule ID.",
+        parameters: [
+          { name: "ruleId", in: "path", required: true, schema: { type: "integer" } },
+        ],
+        responses: { "200": { description: "Market rule details" } },
+      },
+    },
+    "/api/data/smart-components/{exchange}": {
+      get: {
+        operationId: "getSmartComponents",
+        summary: "Get SMART routing components by exchange.",
+        parameters: [
+          { name: "exchange", in: "path", required: true, schema: { type: "string" } },
+        ],
+        responses: { "200": { description: "Smart components" } },
+      },
+    },
+    "/api/data/depth-exchanges": {
+      get: {
+        operationId: "getDepthExchanges",
+        summary: "Get list of exchanges supporting market depth.",
+        responses: { "200": { description: "Depth exchanges" } },
+      },
+    },
+    "/api/data/fundamentals/{symbol}": {
+      get: {
+        operationId: "getFundamentalData",
+        summary: "Get IBKR fundamental data XML for symbol.",
+        parameters: [
+          { name: "symbol", in: "path", required: true, schema: { type: "string" } },
+          { name: "reportType", in: "query", schema: { type: "string" } },
+        ],
+        responses: { "200": { description: "Fundamental data" } },
+      },
+    },
     "/api/portfolio/exposure": {
       get: {
         operationId: "getPortfolioExposure",
