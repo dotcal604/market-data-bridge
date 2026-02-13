@@ -37,6 +37,7 @@ import {
   getEvalOutcomes,
   insertOutcome,
   getEvaluationById,
+  getReasoningForEval,
 } from "../db/database.js";
 import { computeEnsembleWithWeights } from "../eval/ensemble/scorer.js";
 import { getWeights } from "../eval/ensemble/weights.js";
@@ -1140,6 +1141,36 @@ export function createMcpServer(): McpServer {
         });
 
         return { content: [{ type: "text", text: JSON.stringify({ success: true, evaluation_id: params.evaluation_id, decision_type: params.decision_type ?? "took_trade" }, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: eval_reasoning ---
+  server.tool(
+    "eval_reasoning",
+    "Get structured reasoning for an evaluation. Returns per-model key_drivers (which features drove the decision), risk_factors, uncertainties, and conviction level. Use for drift detection and disagreement diagnosis.",
+    {
+      evaluation_id: z.string().describe("Evaluation ID"),
+    },
+    async (params) => {
+      try {
+        const evaluation = getEvaluationById(params.evaluation_id);
+        if (!evaluation) {
+          return { content: [{ type: "text", text: JSON.stringify({ error: `Evaluation ${params.evaluation_id} not found` }) }], isError: true };
+        }
+        const rows = getReasoningForEval(params.evaluation_id);
+        const models: Record<string, unknown> = {};
+        for (const row of rows) {
+          models[row.model_id as string] = {
+            key_drivers: JSON.parse(row.key_drivers as string),
+            risk_factors: JSON.parse(row.risk_factors as string),
+            uncertainties: JSON.parse(row.uncertainties as string),
+            conviction: row.conviction,
+          };
+        }
+        return { content: [{ type: "text", text: JSON.stringify({ evaluation_id: params.evaluation_id, models }, null, 2) }] };
       } catch (e: any) {
         return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
       }

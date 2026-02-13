@@ -12,10 +12,12 @@ import type { ModelEvaluation } from "./models/types.js";
 import {
   insertEvaluation,
   insertModelOutput,
+  insertEvalReasoning,
   insertOutcome,
   getEvaluationById,
   getModelOutputsForEval,
   getOutcomeForEval,
+  getReasoningForEval,
   getRecentEvaluations,
   getRecentOutcomes,
   getEvalStats,
@@ -24,6 +26,7 @@ import {
   getEvalsForSimulation,
   getEvalOutcomes,
 } from "../db/database.js";
+import { extractStructuredReasoning } from "./reasoning/extractor.js";
 import { logger } from "../logging.js";
 
 export const evalRouter = Router();
@@ -133,7 +136,7 @@ evalRouter.post("/evaluate", async (req, res) => {
       total_latency_ms: totalLatency,
     });
 
-    // Store individual model outputs
+    // Store individual model outputs + structured reasoning
     for (const e of evaluations) {
       insertModelOutput({
         evaluation_id: id,
@@ -157,6 +160,28 @@ evalRouter.post("/evaluate", async (req, res) => {
         api_response_id: e.api_response_id,
         timestamp: e.timestamp,
       });
+
+      // Extract and store structured reasoning
+      if (e.compliant && e.output?.reasoning) {
+        try {
+          const structured = extractStructuredReasoning(
+            e.output.reasoning,
+            e.output.confidence ?? null,
+            e.output.trade_score ?? null,
+          );
+          insertEvalReasoning({
+            evaluation_id: id,
+            model_id: e.model_id,
+            key_drivers: JSON.stringify(structured.key_drivers),
+            risk_factors: JSON.stringify(structured.risk_factors),
+            uncertainties: JSON.stringify(structured.uncertainties),
+            conviction: structured.conviction,
+          });
+        } catch (err) {
+          // Non-fatal — don't block eval pipeline for reasoning extraction failures
+          logger.warn({ err, model_id: e.model_id }, "[Eval] Reasoning extraction failed");
+        }
+      }
     }
 
     // Build response
@@ -507,6 +532,30 @@ evalRouter.get("/outcomes", (req, res) => {
     res.json({ count: outcomes.length, outcomes });
   } catch (e: any) {
     logger.error({ err: e }, "[Eval] outcomes failed");
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /:id/reasoning — structured reasoning for an evaluation
+evalRouter.get("/:id/reasoning", (req, res) => {
+  try {
+    const evaluation = getEvaluationById(req.params.id);
+    if (!evaluation) {
+      res.status(404).json({ error: "Evaluation not found" });
+      return;
+    }
+    const rows = getReasoningForEval(req.params.id);
+    const models: Record<string, unknown> = {};
+    for (const row of rows) {
+      models[row.model_id as string] = {
+        key_drivers: JSON.parse(row.key_drivers as string),
+        risk_factors: JSON.parse(row.risk_factors as string),
+        uncertainties: JSON.parse(row.uncertainties as string),
+        conviction: row.conviction,
+      };
+    }
+    res.json({ evaluation_id: req.params.id, models });
+  } catch (e: any) {
     res.status(500).json({ error: e.message });
   }
 });
