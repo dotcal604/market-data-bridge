@@ -6,6 +6,8 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { router } from "./routes.js";
 import { evalRouter } from "../eval/routes.js";
 import { openApiSpec } from "./openapi.js";
+import { openApiAgentSpec } from "./openapi-agent.js";
+import { handleAgentRequest } from "./agent.js";
 import { config } from "../config.js";
 import { requestLogger, logRest } from "../logging.js";
 import { isConnected } from "../ibkr/connection.js";
@@ -119,10 +121,9 @@ export function startRestServer(): Promise<void> {
     // Request logging
     app.use(requestLogger);
 
-    // Serve OpenAPI spec for ChatGPT actions (unauthenticated)
-    app.get("/openapi.json", (_req, res) => {
-      res.json(openApiSpec);
-    });
+    // Serve OpenAPI specs (unauthenticated)
+    app.get("/openapi.json", (_req, res) => { res.json(openApiSpec); });
+    app.get("/openapi-agent.json", (_req, res) => { res.json(openApiAgentSpec); });
 
     // Health check (unauthenticated)
     app.get("/", (_req, res) => {
@@ -209,6 +210,9 @@ export function startRestServer(): Promise<void> {
       const transport = mcpSessions.get(sessionId)!;
       await transport.handleRequest(req, res);
     });
+
+    // Agent dispatcher — single endpoint for ChatGPT Actions (no 30-op limit)
+    app.post("/api/agent", apiKeyAuth, globalLimiter, (req, res) => { void handleAgentRequest(req, res); });
 
     // Mount API routes with rate limiting (authenticated)
     app.use("/api", apiKeyAuth, globalLimiter, router);
