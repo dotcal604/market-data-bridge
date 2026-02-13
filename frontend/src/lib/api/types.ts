@@ -172,3 +172,22 @@ export interface EvalResponse {
   guardrail: { allowed: boolean; flags: string[] };
   latency_ms: Record<string, number>;
 }
+
+export interface CollabMessage {
+  id: string;
+  author: "claude" | "chatgpt" | "user";
+  content: string;
+  timestamp: string;
+  replyTo?: string;
+  tags?: string[];
+}
+
+export interface CollabStats {
+  totalMessages: number;
+  byAuthor: Record<string, number>;
+}
+
+export interface PostMessageInput {
+  content: string;
+  tags?: string;
+}

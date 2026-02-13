@@ -8,6 +8,7 @@ import {
   SlidersHorizontal,
   Activity,
   BarChart3,
+  MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +17,7 @@ const NAV_ITEMS = [
   { href: "/evals", label: "Evaluations", icon: History },
   { href: "/model-stats", label: "Model Stats", icon: BarChart3 },
   { href: "/weights", label: "Weights", icon: SlidersHorizontal },
+  { href: "/collab", label: "Collaboration", icon: MessageSquare },
 ] as const;
 
 export function Sidebar() {
