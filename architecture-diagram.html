@@ -59,7 +59,7 @@
   .diagram {
     position: relative;
     width: 100%;
-    min-height: 900px;
+    min-height: 960px;
     margin-bottom: 60px;
   }
 
@@ -118,7 +118,7 @@
     border: 2px solid #c084fc;
     width: 210px;
     left: 80px;
-    top: 20px;
+    top: 100px;
   }
   .claude-node h3 { color: #c084fc; }
   .claude-node .badge { background: rgba(192,132,252,0.2); color: #c084fc; }
@@ -127,8 +127,8 @@
     background: linear-gradient(135deg, #1a2e1a 0%, #16301e 100%);
     border: 2px solid #4ade80;
     width: 210px;
-    right: 80px;
-    top: 20px;
+    right: 280px;
+    top: 100px;
   }
   .chatgpt-node h3 { color: #4ade80; }
   .chatgpt-node .badge { background: rgba(74,222,128,0.2); color: #4ade80; }
@@ -174,6 +174,50 @@
   }
   .sqlite-node h3 { color: #38bdf8; }
   .sqlite-node .badge { background: rgba(56,189,248,0.2); color: #38bdf8; }
+
+  /* ── Dashboard (top-center) ── */
+  .dashboard-node {
+    background: linear-gradient(135deg, #1a2e2a 0%, #16302a 100%);
+    border: 2px solid #2dd4bf;
+    width: 220px;
+    left: 50%;
+    transform: translateX(-50%);
+    top: 20px;
+    box-shadow: 0 0 30px rgba(45,212,191,0.1);
+  }
+  .dashboard-node:hover { transform: translateX(-50%) translateY(-3px); }
+  .dashboard-node h3 { color: #2dd4bf; }
+  .dashboard-node .badge { background: rgba(45,212,191,0.2); color: #2dd4bf; }
+
+  /* ── Dev Agents (far right) ── */
+  .devagents-node {
+    background: linear-gradient(135deg, #1e1a2e 0%, #1a1630 100%);
+    border: 2px solid #e879f9;
+    width: 200px;
+    right: 0;
+    top: 100px;
+  }
+  .devagents-node h3 { color: #e879f9; font-size: 0.9rem; }
+  .devagents-node .badge { background: rgba(232,121,249,0.2); color: #e879f9; }
+  .devagents-node .agents-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 8px;
+  }
+  .devagents-node .agent-item {
+    font-size: 0.68rem;
+    color: #c4b5fd;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .devagents-node .agent-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
 
   /* ── Eval Engine (center-bottom) ── */
   .eval-engine {
@@ -432,17 +476,18 @@
 
   <!-- ── STATS ── -->
   <div class="stats">
-    <div class="stat-card"><div class="num">33</div><div class="label">REST Endpoints</div></div>
+    <div class="stat-card"><div class="num">34</div><div class="label">REST Endpoints</div></div>
     <div class="stat-card"><div class="num">27</div><div class="label">MCP Tools</div></div>
     <div class="stat-card"><div class="num">3</div><div class="label">Eval LLMs</div></div>
     <div class="stat-card"><div class="num">14</div><div class="label">Computed Features</div></div>
-    <div class="stat-card"><div class="num">2</div><div class="label">AI Agents</div></div>
+    <div class="stat-card"><div class="num">4</div><div class="label">Dashboard Pages</div></div>
+    <div class="stat-card"><div class="num">3</div><div class="label">Dev Agents</div></div>
     <div class="stat-card"><div class="num">1</div><div class="label">Process · Port 3000</div></div>
   </div>
 
   <!-- ── DIAGRAM ── -->
   <div class="diagram" id="diagram">
-    <svg class="connections" id="svg" viewBox="0 0 1500 900" preserveAspectRatio="xMidYMid meet"></svg>
+    <svg class="connections" id="svg" viewBox="0 0 1500 960" preserveAspectRatio="xMidYMid meet"></svg>
 
     <!-- Claude (top-left) -->
     <div class="node claude-node">
@@ -458,6 +503,26 @@
       <h3>ChatGPT</h3>
       <p>Custom GPT Actions</p>
       <span class="badge">REST &middot; 33 endpoints</span>
+    </div>
+
+    <!-- Dashboard (top-center) -->
+    <div class="node dashboard-node">
+      <div class="icon">&#x1F4CA;</div>
+      <h3>Admin Dashboard</h3>
+      <p>Next.js 14 &middot; App Router<br>shadcn/ui &middot; TanStack</p>
+      <span class="badge">:3001 dev &middot; 4 pages</span>
+    </div>
+
+    <!-- Dev Agents (far right) -->
+    <div class="node devagents-node">
+      <div class="icon">&#x1F916;</div>
+      <h3>Dev Agents</h3>
+      <div class="agents-list">
+        <div class="agent-item"><div class="agent-dot" style="background:#c084fc"></div>Claude Code — orchestrator</div>
+        <div class="agent-item"><div class="agent-dot" style="background:#4ade80"></div>Copilot — components</div>
+        <div class="agent-item"><div class="agent-dot" style="background:#10b981"></div>Codex — utilities</div>
+      </div>
+      <span class="badge">GitHub Issues &middot; PRs</span>
     </div>
 
     <!-- Bridge (center) -->
@@ -663,6 +728,7 @@
     <div class="ep" style="border-left-color:#a78bfa"><span class="method post">POST</span><div><div class="path">/api/eval/evaluate</div><div class="desc">Full pipeline: features &rarr; models &rarr; ensemble &rarr; guardrails</div></div></div>
     <div class="ep" style="border-left-color:#a78bfa"><span class="method post">POST</span><div><div class="path">/api/eval/outcome</div><div class="desc">Record actual trade result for calibration</div></div></div>
     <div class="ep" style="border-left-color:#a78bfa"><span class="method get">GET</span><div><div class="path">/api/eval/history</div><div class="desc">Recent evaluations with model outputs</div></div></div>
+    <div class="ep" style="border-left-color:#a78bfa"><span class="method get">GET</span><div><div class="path">/api/eval/{id}</div><div class="desc">Single eval detail + model outputs + outcome</div></div></div>
     <div class="ep" style="border-left-color:#a78bfa"><span class="method get">GET</span><div><div class="path">/api/eval/stats</div><div class="desc">Per-model accuracy and compliance rates</div></div></div>
     <div class="ep" style="border-left-color:#a78bfa"><span class="method get">GET</span><div><div class="path">/api/eval/weights</div><div class="desc">Current ensemble weights (claude, gpt4o, gemini, k)</div></div></div>
   </div>
@@ -722,11 +788,14 @@ function draw() {
   const sx = w / 1500;
 
   // Claude -> Bridge (MCP stdio)
-  drawLine(190 * sx, 130, 620 * sx, 260, '#c084fc', 'MCP stdio', false);
+  drawLine(190 * sx, 210, 620 * sx, 300, '#c084fc', 'MCP stdio', false);
 
   // ChatGPT -> Cloudflare -> Bridge
-  drawLine(1120 * sx, 130, 1310 * sx, 300, '#4ade80', 'HTTPS', false);
+  drawLine(1030 * sx, 210, 1310 * sx, 300, '#4ade80', 'HTTPS', false);
   drawLine(1310 * sx, 360, 920 * sx, 300, '#f97316', 'tunnel', false);
+
+  // Dashboard -> Bridge (proxy /api/*)
+  drawLine(750 * sx, 100, 750 * sx, 260, '#2dd4bf', 'proxy /api/*', false);
 
   // IBKR -> Bridge
   drawLine(190 * sx, 320, 580 * sx, 300, '#f87171', 'TWS API', false);

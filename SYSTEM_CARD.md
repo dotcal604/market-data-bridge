@@ -21,6 +21,11 @@ Claude (MCP stdio) ←→ Market Data Bridge ←→ ChatGPT (REST + OpenAPI)
                        ├─ GPT-4o API  ──┼─ parallel, identical inputs
                        └─ Gemini API  ──┘
                        └─ Ensemble scorer → guardrails → response
+                            ↕
+                     Admin Dashboard (Next.js 14)
+                       ├─ Eval history + detail (3-model comparison)
+                       ├─ Ensemble weights display
+                       └─ Stats cards + real-time polling
 ```
 
 - **Claude** connects via MCP tools (hardcodes `author: "claude"` for collab)
@@ -28,6 +33,7 @@ Claude (MCP stdio) ←→ Market Data Bridge ←→ ChatGPT (REST + OpenAPI)
 - **Eval engine** is integrated — calls providers directly (no HTTP hop between bridge and eval)
 - **SQLite** (better-sqlite3, WAL mode) — single `data/bridge.db` for orders, journal, collab, evaluations, model outputs, outcomes
 - **Single process** — one `npm start`, one port (3000)
+- **Admin dashboard** — Next.js 14 (App Router) on port 3001 in dev, proxies `/api/*` to backend. Dark theme, TanStack Table + Query, Recharts, shadcn/ui
 
 ---
 
@@ -115,6 +121,7 @@ A **ceteris paribus** evaluation system: 3 frontier LLMs receive identical input
 | `/api/eval/evaluate` | POST | Full pipeline: features → prefilter → 3 models → ensemble → guardrails |
 | `/api/eval/outcome` | POST | Record actual trade result for a previous evaluation |
 | `/api/eval/history` | GET | Recent evaluations. Query: `limit`, `symbol` |
+| `/api/eval/{id}` | GET | Single evaluation detail with model outputs + outcome |
 | `/api/eval/stats` | GET | Per-model accuracy, compliance rates, ensemble stats |
 | `/api/eval/weights` | GET | Current ensemble weights (claude, gpt4o, gemini, k) |
 
@@ -254,6 +261,37 @@ Persist to SQLite + Return Response
 2. **Read Claude's input:** Filter with `author=claude`
 3. **Respond:** `POST /api/collab/message` with `author: "chatgpt"`, content, and optional `replyTo`
 4. **Tag conversations:** Use tags like `trade-idea`, `code-review`, `question`
+
+---
+
+## Admin Dashboard
+
+A Next.js 14 (App Router) admin dashboard for reviewing evaluations and monitoring the eval engine.
+
+**Stack:** Next.js 14 + Tailwind CSS v4 + shadcn/ui + TanStack Table v8 + TanStack Query v5 + Recharts v3 + Zustand v5
+
+**Dev:** `npm run dev` starts backend (:3000) + frontend (:3001) via `concurrently`. Frontend proxies `/api/*` to backend.
+
+### Pages
+
+| Route | Purpose |
+|-------|---------|
+| `/` | Dashboard home — stats cards (total evals, trade rate, avg latency, avg R) + last 10 evals |
+| `/evals` | Full eval history — sortable TanStack Table with symbol, direction, score, confidence, guardrail status |
+| `/evals/[id]` | Eval detail — 3-model side-by-side comparison, ensemble summary, guardrail badges, feature table, outcome panel |
+| `/weights` | Current ensemble weights per model with progress bars |
+
+### Development Agents
+
+The codebase is built using a multi-agent workflow:
+
+| Agent | Role | Interface |
+|-------|------|-----------|
+| **Claude Code** | Orchestrator — cross-file wiring, backend routes, architecture | CLI (local) |
+| **GitHub Copilot** | Self-contained components, UI polish, multi-file refactors | Assigned to GitHub issues |
+| **OpenAI Codex** | Single-file tasks, utility functions, isolated features | Submitted via chatgpt.com/codex |
+
+Agent conventions are documented in `AGENTS.md`.
 
 ---
 

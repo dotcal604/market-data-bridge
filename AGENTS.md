@@ -271,3 +271,45 @@ cd frontend && npx tsc --noEmit
 - Do not allow schema drift — Zod schemas are the source of truth
 - Do not auto-merge any PR — human review required
 - Do not store API keys in code — `.env` only
+
+## Codex Cloud Environment
+
+> This section is for OpenAI Codex (chatgpt.com/codex) running tasks against this repo.
+
+### Setup Script (configure at chatgpt.com/codex → Settings → Environments)
+
+```bash
+npm install
+cd frontend && npm install
+```
+
+Both the root (backend) and `frontend/` (Next.js dashboard) need `npm install` before any work.
+
+### Verification Commands
+
+After writing code, Codex should verify with:
+
+```bash
+# Frontend components
+cd frontend && npx tsc --noEmit
+
+# Backend modules
+npx tsc --noEmit
+```
+
+### PR Conventions
+
+When creating PRs, include in the body:
+- **What changed**: files created/modified
+- **Fixes #N**: link to the issue being resolved
+- **Verification**: paste the output of `tsc --noEmit` showing clean compile
+
+### Common Pitfalls
+
+- **Two package.json files** — root is backend (Express/TypeScript), `frontend/` is Next.js. Install both.
+- **ESM imports** — backend uses `.js` extensions in imports (`import { foo } from "./bar.js"`). Frontend uses bare paths.
+- **Frontend paths** — components live in `frontend/src/components/`, not `src/components/`
+- **shadcn/ui** — already installed. Import from `@/components/ui/*`. Don't re-install.
+- **Recharts** — already installed in frontend. Import from `recharts`.
+- **Dark theme always** — use `bg-card`, `text-muted-foreground`, semantic Tailwind classes. No white backgrounds.
+- **Named exports only** — `export function Foo()`, not `export default function Foo()`
