@@ -8,7 +8,8 @@ The portfolio exposure endpoint provides comprehensive analytics on current port
 
 ## Requirements
 - IBKR TWS or Gateway must be connected
-- Active positions in the account (optional - returns zeros if no positions)
+
+**Note:** Returns zeroed metrics with current net liquidation when no positions exist (not an error).
 
 ## Response Example
 

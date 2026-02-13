@@ -197,7 +197,7 @@ export async function computePortfolioExposure(): Promise<PortfolioExposureRespo
     positions.map(async (pos) => {
       // Get current price from quote
       let quote;
-      let currentPrice = pos.avgCost; // Default to avgCost
+      let currentPrice = pos.avgCost; // Fallback to avgCost if quote unavailable
       try {
         quote = await getQuote(pos.symbol);
         if (quote.last !== null) {
@@ -275,8 +275,8 @@ export async function computePortfolioExposure(): Promise<PortfolioExposureRespo
     sectorBreakdown[sector] = Math.round(percentage * 10) / 10;
   }
   
-  // Beta-weighted exposure
-  // Note: Uses signed marketValue to preserve long/short directionality.
+  // Beta-weighted exposure: sum of (marketValue × beta) for all positions.
+  // Uses signed marketValue to preserve long/short directionality.
   // Short positions (negative marketValue) with beta > 1 contribute more negative exposure.
   const betaWeightedExposure = enrichedPositions.reduce(
     (sum, p) => sum + p.marketValue * p.beta,
