@@ -116,7 +116,7 @@ export function PositionsTable({ refreshInterval = 10_000 }: PositionsTableProps
 
   // Fetch quotes for all positions
   const symbols = useMemo(
-    () => positionsQuery.data?.positions.map((p) => p.symbol) ?? [],
+    () => positionsQuery.data?.positions?.map((p) => p.symbol) ?? [],
     [positionsQuery.data]
   );
 
@@ -178,6 +178,7 @@ export function PositionsTable({ refreshInterval = 10_000 }: PositionsTableProps
 
   const isLoading = positionsQuery.isLoading || quotesQuery.isLoading;
   const hasError = positionsQuery.error || quotesQuery.error;
+  const hasApiError = positionsQuery.data && 'error' in positionsQuery.data;
 
   return (
     <Card>
@@ -185,7 +186,13 @@ export function PositionsTable({ refreshInterval = 10_000 }: PositionsTableProps
         <CardTitle>Open Positions</CardTitle>
       </CardHeader>
       <CardContent>
-        {hasError && (
+        {hasApiError && (
+          <div className="text-sm text-red-400">
+            {(positionsQuery.data as any).error}
+          </div>
+        )}
+
+        {hasError && !hasApiError && (
           <div className="text-sm text-red-400">
             Error loading positions: {(positionsQuery.error as Error)?.message || (quotesQuery.error as Error)?.message}
           </div>
@@ -199,13 +206,13 @@ export function PositionsTable({ refreshInterval = 10_000 }: PositionsTableProps
           </div>
         )}
 
-        {!isLoading && !hasError && positionsWithPrices.length === 0 && (
+        {!isLoading && !hasError && !hasApiError && positionsWithPrices.length === 0 && (
           <div className="py-8 text-center text-sm text-muted-foreground">
             No open positions
           </div>
         )}
 
-        {!isLoading && !hasError && positionsWithPrices.length > 0 && (
+        {!isLoading && !hasError && !hasApiError && positionsWithPrices.length > 0 && (
           <div className="rounded-lg border border-border">
             <Table>
               <TableHeader>
