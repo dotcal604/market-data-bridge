@@ -722,6 +722,61 @@ export const openApiSpec = {
         },
       },
     },
+    "/api/portfolio/stress-test": {
+      post: {
+        operationId: "runPortfolioStressTest",
+        summary: "Run portfolio stress scenario using current IBKR positions and account net liquidation.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  shockPercent: { type: "number", description: "Shock percentage applied to each position (e.g. -5 for a 5% down move)" },
+                  betaAdjusted: { type: "boolean", default: true, description: "If true, scales position shock by beta vs SPY" },
+                },
+                required: ["shockPercent"],
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Portfolio stress test result",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    shockPercent: { type: "number" },
+                    betaAdjusted: { type: "boolean" },
+                    totalProjectedPnL: { type: "number" },
+                    equityImpactPercent: { type: "number" },
+                    currentNetLiq: { type: "number" },
+                    projectedNetLiq: { type: "number" },
+                    positions: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          symbol: { type: "string" },
+                          marketValue: { type: "number" },
+                          beta: { type: "number" },
+                          effectiveShock: { type: "number" },
+                          projectedLoss: { type: "number" },
+                        },
+                      },
+                    },
+                    warnings: { type: "array", items: { type: "string" } },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
     "/api/account/pnl": {
       get: {
         operationId: "getPnL",
