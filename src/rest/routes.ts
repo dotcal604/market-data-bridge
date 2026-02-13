@@ -23,6 +23,7 @@ import { getContractDetails } from "../ibkr/contracts.js";
 import { getIBKRQuote } from "../ibkr/marketdata.js";
 import { readMessages, postMessage, clearMessages, getStats } from "../collab/store.js";
 import { checkRisk, getSessionState, recordTradeResult, lockSession, unlockSession, resetSession } from "../ibkr/risk-gate.js";
+import { calculatePositionSize } from "../ibkr/risk.js";
 import {
   queryOrders,
   queryExecutions,
@@ -618,6 +619,53 @@ router.post("/session/unlock", (_req, res) => {
 router.post("/session/reset", (_req, res) => {
   resetSession();
   res.json(getSessionState());
+});
+
+// POST /api/risk/size-position — calculate position size based on risk parameters
+router.post("/risk/size-position", async (req, res) => {
+  if (!isConnected()) {
+    res.json({ error: "IBKR not connected. Start TWS/Gateway for account data." });
+    return;
+  }
+  try {
+    const { symbol, entryPrice, stopPrice, riskPercent, riskAmount, maxCapitalPercent } = req.body ?? {};
+    
+    // Validate required fields
+    if (!symbol) {
+      res.status(400).json({ error: "symbol is required" });
+      return;
+    }
+    const symErr = validateSymbol(symbol);
+    if (symErr) {
+      res.status(400).json({ error: symErr });
+      return;
+    }
+    if (typeof entryPrice !== "number" || !Number.isFinite(entryPrice) || entryPrice <= 0) {
+      res.status(400).json({ error: "entryPrice must be a positive number" });
+      return;
+    }
+    if (typeof stopPrice !== "number" || !Number.isFinite(stopPrice) || stopPrice < 0) {
+      res.status(400).json({ error: "stopPrice must be a non-negative number" });
+      return;
+    }
+    if (riskPercent !== undefined && (typeof riskPercent !== "number" || !Number.isFinite(riskPercent) || riskPercent <= 0 || riskPercent > 100)) {
+      res.status(400).json({ error: "riskPercent must be between 0 and 100" });
+      return;
+    }
+    if (riskAmount !== undefined && (typeof riskAmount !== "number" || !Number.isFinite(riskAmount) || riskAmount <= 0)) {
+      res.status(400).json({ error: "riskAmount must be a positive number" });
+      return;
+    }
+    if (maxCapitalPercent !== undefined && (typeof maxCapitalPercent !== "number" || !Number.isFinite(maxCapitalPercent) || maxCapitalPercent <= 0 || maxCapitalPercent > 100)) {
+      res.status(400).json({ error: "maxCapitalPercent must be between 0 and 100" });
+      return;
+    }
+
+    const result = await calculatePositionSize({ symbol, entryPrice, stopPrice, riskPercent, riskAmount, maxCapitalPercent });
+    res.json(result);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // =====================================================================

@@ -1380,6 +1380,70 @@ export const openApiSpec = {
         },
       },
     },
+    "/api/risk/size-position": {
+      post: {
+        operationId: "sizePosition",
+        summary: "Calculate safe position size based on account equity, risk parameters, and margin capacity. Read-only computation — does not place orders.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["symbol", "entryPrice", "stopPrice"],
+                properties: {
+                  symbol: { type: "string", description: "Ticker symbol, e.g. AAPL" },
+                  entryPrice: { type: "number", description: "Entry price per share" },
+                  stopPrice: { type: "number", description: "Stop loss price per share" },
+                  riskPercent: { type: "number", description: "Max % of net liquidation to risk (default 1%)" },
+                  riskAmount: { type: "number", description: "Absolute dollar risk cap (overrides riskPercent if provided)" },
+                  maxCapitalPercent: { type: "number", description: "Max % of equity in this position (default 10%)" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Position sizing calculation",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    symbol: { type: "string" },
+                    recommendedShares: { type: "number", description: "Recommended share quantity (minimum of all constraints)" },
+                    riskPerShare: { type: "number", description: "Risk per share (entry - stop)" },
+                    totalRisk: { type: "number", description: "Total dollar risk for recommended shares" },
+                    totalCapital: { type: "number", description: "Total capital required for position" },
+                    percentOfEquity: { type: "number", description: "Position size as % of net liquidation" },
+                    sizing: {
+                      type: "object",
+                      properties: {
+                        byRisk: { type: "number", description: "Max shares based on risk tolerance" },
+                        byCapital: { type: "number", description: "Max shares based on capital allocation" },
+                        byMargin: { type: "number", description: "Max shares based on available margin" },
+                        binding: { type: "string", enum: ["byRisk", "byCapital", "byMargin"], description: "Which constraint is limiting" },
+                      },
+                    },
+                    warnings: { type: "array", items: { type: "string" }, description: "Risk warnings" },
+                    netLiquidation: { type: "number", description: "Account net liquidation value" },
+                  },
+                },
+              },
+            },
+          },
+          "400": {
+            description: "Invalid request parameters",
+            content: { "application/json": { schema: { type: "object", properties: { error: { type: "string" } } } } },
+          },
+          "500": {
+            description: "Calculation error or IBKR connection issue",
+            content: { "application/json": { schema: { type: "object", properties: { error: { type: "string" } } } } },
+          },
+        },
+      },
+    },
     "/api/flatten/config": {
       get: {
         operationId: "getFlattenConfig",

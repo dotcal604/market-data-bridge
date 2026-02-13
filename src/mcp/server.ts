@@ -24,6 +24,7 @@ import { getContractDetails } from "../ibkr/contracts.js";
 import { getIBKRQuote } from "../ibkr/marketdata.js";
 import { readMessages, postMessage, clearMessages, getStats } from "../collab/store.js";
 import { checkRisk, getSessionState, recordTradeResult, lockSession, unlockSession, resetSession } from "../ibkr/risk-gate.js";
+import { calculatePositionSize } from "../ibkr/risk.js";
 import {
   queryOrders,
   queryExecutions,
@@ -898,6 +899,30 @@ export function createMcpServer(): McpServer {
       try {
         resetSession();
         return { content: [{ type: "text", text: JSON.stringify(getSessionState(), null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "size_position",
+    "Calculate safe position size based on account equity, risk parameters, and margin capacity. Read-only computation — does not place orders.",
+    {
+      symbol: z.string().describe("Ticker symbol, e.g. AAPL, MSFT"),
+      entryPrice: z.number().positive().describe("Entry price per share"),
+      stopPrice: z.number().nonnegative().describe("Stop loss price per share"),
+      riskPercent: z.number().positive().max(100).optional().describe("Max % of net liquidation to risk (default 1%)"),
+      riskAmount: z.number().positive().optional().describe("Absolute dollar risk cap (overrides riskPercent if provided)"),
+      maxCapitalPercent: z.number().positive().max(100).optional().describe("Max % of equity in this position (default 10%)"),
+    },
+    async (params) => {
+      if (!isConnected()) {
+        return { content: [{ type: "text", text: "Error: IBKR not connected. Start TWS/Gateway for account data." }], isError: true };
+      }
+      try {
+        const result = await calculatePositionSize(params);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       } catch (e: any) {
         return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
       }
