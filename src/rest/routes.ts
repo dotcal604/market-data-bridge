@@ -11,6 +11,7 @@ import {
   getNews,
   getFinancials,
   getEarnings,
+  getRecommendations,
   getTrendingSymbols,
   getScreenerIds,
   runScreener,
@@ -200,6 +201,16 @@ router.get("/financials/:symbol", async (req, res) => {
 router.get("/earnings/:symbol", async (req, res) => {
   try {
     const data = await getEarnings(req.params.symbol);
+    res.json(data);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/recommendations/:symbol
+router.get("/recommendations/:symbol", async (req, res) => {
+  try {
+    const data = await getRecommendations(req.params.symbol);
     res.json(data);
   } catch (e: any) {
     res.status(500).json({ error: e.message });

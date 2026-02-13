@@ -499,6 +499,44 @@ export const openApiSpec = {
         },
       },
     },
+    "/api/recommendations/{symbol}": {
+      get: {
+        operationId: "getRecommendations",
+        summary: "Get analyst recommendation trends (strong buy, buy, hold, sell, strong sell counts per period)",
+        parameters: [
+          { name: "symbol", in: "path", required: true, schema: { type: "string" }, description: "Ticker symbol" },
+        ],
+        responses: {
+          "200": {
+            description: "Analyst recommendation trend data",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    symbol: { type: "string" },
+                    trend: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          period: { type: "string", description: "Time period (e.g., '0m', '-1m', '-2m', '-3m')" },
+                          strongBuy: { type: "integer", description: "Number of strong buy ratings" },
+                          buy: { type: "integer", description: "Number of buy ratings" },
+                          hold: { type: "integer", description: "Number of hold ratings" },
+                          sell: { type: "integer", description: "Number of sell ratings" },
+                          strongSell: { type: "integer", description: "Number of strong sell ratings" },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
     "/api/trending": {
       get: {
         operationId: "getTrending",

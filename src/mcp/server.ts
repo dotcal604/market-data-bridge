@@ -11,6 +11,7 @@ import {
   getNews,
   getFinancials,
   getEarnings,
+  getRecommendations,
   getTrendingSymbols,
   getScreenerIds,
   runScreener,
@@ -251,6 +252,23 @@ export function createMcpServer(): McpServer {
     async ({ symbol }) => {
       try {
         const data = await getEarnings(symbol);
+        return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: get_recommendations ---
+  server.tool(
+    "get_recommendations",
+    "Get analyst recommendation trends (strong buy, buy, hold, sell, strong sell counts per period)",
+    {
+      symbol: z.string().describe("Ticker symbol, e.g. AAPL"),
+    },
+    async ({ symbol }) => {
+      try {
+        const data = await getRecommendations(symbol);
         return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
       } catch (e: any) {
         return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
