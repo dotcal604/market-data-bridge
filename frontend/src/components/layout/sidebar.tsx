@@ -48,8 +48,12 @@ export function Sidebar() {
       <nav className="flex-1 space-y-1 px-2 py-3">
         {NAV_ITEMS.map((item) => {
           const { href, label, icon: Icon } = item;
+          const children = "children" in item ? item.children : undefined;
+          const hasActiveChild = children?.some((child) => pathname.startsWith(child.href));
           const active =
-            href === "/" ? pathname === "/" : pathname.startsWith(href);
+            href === "/" 
+              ? pathname === "/" 
+              : (pathname === href || (pathname.startsWith(href) && !hasActiveChild));
           return (
             <div key={href}>
               <Link
@@ -64,9 +68,9 @@ export function Sidebar() {
                 <Icon className="h-4 w-4" />
                 {label}
               </Link>
-              {"children" in item && item.children && (
+              {children && (
                 <div className="ml-4 mt-1 space-y-1">
-                  {item.children.map((child) => {
+                  {children.map((child) => {
                     const childActive = pathname.startsWith(child.href);
                     const ChildIcon = child.icon;
                     return (
