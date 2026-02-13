@@ -1,13 +1,15 @@
 "use client";
 
-import { useEvalStats } from "@/lib/hooks/use-evals";
+import { useEvalStats, useEvalOutcomes } from "@/lib/hooks/use-evals";
 import { StatsSummary } from "@/components/model-stats/stats-summary";
 import { ModelComparison } from "@/components/model-stats/model-comparison";
+import { CalibrationCurve } from "@/components/charts/CalibrationCurve";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 
 export default function ModelStatsPage() {
   const stats = useEvalStats();
+  const outcomes = useEvalOutcomes(500);
 
   return (
     <div className="space-y-6">
@@ -48,6 +50,35 @@ export default function ModelStatsPage() {
         <div className="space-y-6">
           <StatsSummary stats={stats.data} />
           <ModelComparison stats={stats.data} />
+          
+          {/* Calibration Curve Section */}
+          <div>
+            <h2 className="mb-4 text-xl font-semibold">Calibration Analysis</h2>
+            {outcomes.isLoading ? (
+              <Skeleton className="h-[480px] rounded-lg" />
+            ) : outcomes.error ? (
+              <Card className="bg-card">
+                <CardContent className="py-8 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    Failed to load outcomes: {(outcomes.error as Error).message}
+                  </p>
+                </CardContent>
+              </Card>
+            ) : outcomes.data && outcomes.data.outcomes.length > 0 ? (
+              <CalibrationCurve outcomes={outcomes.data.outcomes} />
+            ) : (
+              <Card className="bg-card">
+                <CardContent className="py-12 text-center">
+                  <p className="text-lg font-medium text-muted-foreground">
+                    No outcomes recorded yet
+                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Record trade outcomes to see calibration analysis
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
         </div>
       )}
     </div>
