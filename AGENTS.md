@@ -2,12 +2,13 @@
 
 ## Project Overview
 
-Single-process Node.js/TypeScript server (port 3000) providing:
+Single-process Node.js/TypeScript server (port 3000) + Next.js dashboard (port 3001 in dev):
 - Real-time market data (Yahoo Finance always, IBKR when connected)
 - Trade execution via IBKR TWS/Gateway
 - Multi-model trade evaluation engine (Claude + GPT-4o + Gemini)
 - AI-to-AI collaboration channel
 - MCP server (Claude) + REST API (ChatGPT/Codex)
+- Admin dashboard (Next.js 14, App Router) in `frontend/`
 
 ## Architecture Constraints
 
@@ -98,11 +99,105 @@ src/
       behavioral.ts   — post-ensemble checks (trading window, loss streak, disagreement)
 
     routes.ts         — Express router mounted at /api/eval
+
+frontend/                 — Next.js 14 dashboard (App Router)
+  next.config.ts          — proxy /api/* to backend on port 3000
+  src/
+    app/
+      page.tsx            — dashboard home (stats cards + recent evals)
+      evals/
+        page.tsx          — eval history (TanStack Table, sortable)
+        [id]/page.tsx     — eval detail (3-model comparison)
+      weights/
+        page.tsx          — ensemble weights display
+    components/
+      layout/             — app-shell.tsx, sidebar.tsx, top-bar.tsx
+      dashboard/          — stats-cards.tsx, recent-evals-mini.tsx
+      eval-table/         — eval-table.tsx, eval-table-columns.tsx
+      eval-detail/        — model-card.tsx, model-comparison.tsx, ensemble-summary.tsx,
+                            guardrail-badges.tsx, feature-table.tsx, outcome-panel.tsx
+      shared/             — score-badge.tsx, direction-badge.tsx, model-avatar.tsx
+      analytics/          — (Phase 2) score-scatter.tsx, feature-radar.tsx, time-of-day-chart.tsx
+      weights/            — (Phase 2) weight-sliders.tsx
+      ui/                 — shadcn/ui primitives (button, card, table, badge, etc.)
+    lib/
+      api/
+        types.ts          — TypeScript interfaces mirroring backend schemas
+        eval-client.ts    — typed fetch wrappers for /api/eval endpoints
+      hooks/
+        use-evals.ts      — React Query hooks (useEvalHistory, useEvalDetail, useEvalStats, etc.)
+      utils/
+        formatters.ts     — formatScore, formatPrice, formatMs, formatTimestamp, etc.
+        colors.ts         — scoreColor, scoreBg, modelColor, directionColor, etc.
+        export.ts         — (Phase 2) exportToCsv, exportToJson
+      providers.tsx       — QueryClientProvider wrapper
+      utils.ts            — cn() helper (clsx + tailwind-merge)
+```
+
+## Build & Dev
+
+```bash
+# Backend: build TypeScript
+npm run build
+
+# Frontend: install deps + build
+cd frontend && npm install && npm run build
+
+# Dev mode (both): backend on :3000, frontend on :3001
+npm run dev
+
+# Frontend type-check only (no build output)
+cd frontend && npx tsc --noEmit
 ```
 
 ## Code Standards
 
-### TypeScript
+### Frontend (frontend/src/)
+
+#### Stack
+- **Next.js 14+** — App Router, `"use client"` for interactive components
+- **Tailwind CSS v4** — utility-first, dark theme via `.dark` class on `<html>`
+- **shadcn/ui** — import from `@/components/ui/*` (already installed: button, card, table, badge, input, skeleton, tabs, tooltip, dialog, select, separator)
+- **TanStack Table v8** — `useReactTable` + `getCoreRowModel` + `getSortedRowModel`
+- **TanStack Query v5** — `useQuery` with `queryKey` arrays, `refetchInterval` for polling
+- **Recharts v3** — `ResponsiveContainer` wrapper required, dark theme: transparent bg, `text-muted-foreground` for axis labels
+- **Zustand v5** — lightweight client stores (filter state, etc.)
+- **Lucide React** — icon library, import individual icons
+
+#### Component Conventions
+- Every interactive component starts with `"use client"` directive
+- Named exports only (no default exports for components)
+- Props interface defined in same file or imported from `@/lib/api/types`
+- Use `cn()` from `@/lib/utils` for conditional class merging
+- Font: `font-mono` for numeric/data values, default sans for labels
+
+#### Dark Theme (mandatory)
+- App is always in dark mode (`<html className="dark">`)
+- CSS vars use oklch color space — defined in `globals.css` under `.dark {}`
+- Use semantic Tailwind classes: `bg-background`, `text-foreground`, `bg-card`, `text-muted-foreground`, `border-border`
+- For custom colors: `text-emerald-400` (positive/long), `text-red-400` (negative/short), `text-yellow-400` (neutral)
+- Score colors: 8+→emerald, 6+→green, 4+→yellow, 2+→orange, <2→red (see `lib/utils/colors.ts`)
+
+#### Color Constants
+- Model colors: `gpt-4o=#10b981`, `claude-sonnet=#8b5cf6`, `gemini-flash=#f59e0b`
+- Use `modelColor()` from `@/lib/utils/colors` — do not hardcode
+
+#### Data Fetching
+- All API calls go through `@/lib/api/eval-client.ts` (typed wrappers)
+- React Query hooks in `@/lib/hooks/use-evals.ts`
+- Proxy config in `next.config.ts` rewrites `/api/*` → `http://localhost:3000/api/*`
+- No direct `fetch()` in components — always use hooks or eval-client
+
+#### New Component Checklist
+1. Create file in appropriate `components/` subdirectory
+2. Add `"use client"` if interactive
+3. Define props interface with explicit types
+4. Use shadcn primitives (Card, Badge, etc.) for structure
+5. Use color utilities from `@/lib/utils/colors`
+6. Use formatters from `@/lib/utils/formatters`
+7. Verify: `cd frontend && npx tsc --noEmit`
+
+### TypeScript (Backend)
 - Strict mode enabled
 - No `any` types — use `unknown` + narrowing or explicit interfaces
 - Prefer `interface` over `type` for object shapes
