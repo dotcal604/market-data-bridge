@@ -24,6 +24,7 @@ import { setFlattenEnabled, getFlattenConfig } from "../scheduler.js";
 import { getContractDetails } from "../ibkr/contracts.js";
 import { getIBKRQuote } from "../ibkr/marketdata.js";
 import { readMessages, postMessage, clearMessages, getStats } from "../collab/store.js";
+import { getGptInstructions } from "./gpt-instructions.js";
 import { checkRisk, getSessionState, recordTradeResult, lockSession, unlockSession, resetSession } from "../ibkr/risk-gate.js";
 import { runPortfolioStressTest } from "../ibkr/portfolio.js";
 import { calculatePositionSize } from "../ibkr/risk.js";
@@ -879,4 +880,12 @@ router.delete("/collab/messages", (_req, res) => {
 // GET /api/collab/stats — Channel statistics
 router.get("/collab/stats", (_req, res) => {
   res.json(getStats());
+});
+
+// GET /api/gpt-instructions — Dynamic GPT system prompt (auto-synced on every conversation)
+router.get("/gpt-instructions", (_req, res) => {
+  res.json({
+    role: "system",
+    instructions: getGptInstructions(),
+  });
 });

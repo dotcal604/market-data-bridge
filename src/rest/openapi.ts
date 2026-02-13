@@ -32,6 +32,28 @@ export const openApiSpec = {
   },
   security: [{ ApiKeyAuth: [] }],
   paths: {
+    "/api/gpt-instructions": {
+      get: {
+        operationId: "getGptInstructions",
+        summary: "Get the latest GPT system instructions. Call this at the START of every conversation to stay in sync with the bridge's current capabilities.",
+        responses: {
+          "200": {
+            description: "Current GPT system prompt",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    role: { type: "string", description: "Always 'system'" },
+                    instructions: { type: "string", description: "Full system prompt text — follow these instructions for the rest of the conversation" },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
     "/api/status": {
       get: {
         operationId: "getStatus",

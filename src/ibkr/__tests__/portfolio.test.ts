@@ -80,7 +80,7 @@ describe("Portfolio Functions", () => {
       // In a production test suite, you'd want to mock getHistoricalBars
       
       // For now, just test that it returns a valid default on error
-      const beta = await calculateBeta("INVALID_SYMBOL_12345", 20);
+      const beta = await calculateBeta("INVALID_SYMBOL_12345");
       
       // Should return default beta of 1.0 on error
       expect(typeof beta).toBe("number");
@@ -89,8 +89,8 @@ describe("Portfolio Functions", () => {
 
     it("should handle different day parameters", async () => {
       // Test with different day periods
-      const beta10 = await calculateBeta("INVALID_SYMBOL_12345", 10);
-      const beta20 = await calculateBeta("INVALID_SYMBOL_12345", 20);
+      const beta10 = await calculateBeta("INVALID_SYMBOL_12345");
+      const beta20 = await calculateBeta("INVALID_SYMBOL_12345", "QQQ");
       
       expect(typeof beta10).toBe("number");
       expect(typeof beta20).toBe("number");

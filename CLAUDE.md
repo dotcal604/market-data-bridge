@@ -25,22 +25,68 @@ If `get_status` fails, do not proceed with analysis. Report the connection issue
 
 **IBKR real-time (requires connection):**
 - Quotes (primary source when connected) — `get_quote` auto-routes, check `source` field
-- Account summary, positions, P&L, orders, executions — `get_account_summary`, `get_positions`, `get_pnl`, `get_open_orders`, `get_completed_orders`, `get_executions`
+- Account summary, positions, P&L — `get_account_summary`, `get_positions`, `get_pnl`
+- Orders — `get_open_orders`, `get_completed_orders`, `get_executions`
 - Contract details — `get_contract_details`
 - Direct IBKR quote snapshots — `get_ibkr_quote`
+- Portfolio analytics — `portfolio_exposure`, `stress_test`, `size_position`
 
 **Yahoo Finance (always available):**
 - Quotes (fallback when IBKR unavailable) — `get_quote` auto-routes
 - Historical bars — `get_historical_bars`
-- Financials — `get_financials`
-- Earnings — `get_earnings`
-- News — `get_news`
+- Financials, earnings, news — `get_financials`, `get_earnings`, `get_news`
 - Screeners and trending — `run_screener`, `run_screener_with_quotes`, `get_trending`
-- Options chains (IV, OI, Greeks, expirations) — `get_options_chain`, `get_option_quote`
-- Stock details (sector, industry, PE, 52-week range) — `get_stock_details`
+- Options chains — `get_options_chain`, `get_option_quote`
+- Stock details — `get_stock_details`
 - Symbol search — `search_symbols`
 
 Always disclose which source was used.
+
+## ORDER EXECUTION
+
+**ALWAYS use `place_advanced_bracket` for bracket orders.** Never manually sequence entry→fill→TP/SL.
+
+Available order tools:
+- `place_order` — Single order (MKT, LMT, STP, STP_LMT, TRAIL, TRAIL_LIMIT, REL)
+- `place_bracket_order` — Simple bracket (entry + TP + SL)
+- `place_advanced_bracket` — Full bracket with OCA, trailing stops, adaptive algo
+- `cancel_order` / `cancel_all_orders` — Cancel management
+
+**Risk tools:**
+- `size_position` — Risk-based position sizing (triple constraint: risk/capital/margin)
+- `session_state` / `session_lock` / `session_unlock` / `session_reset` — Session risk gate
+- `session_record_trade` — Record trade outcome for session tracking
+
+**Flatten tools:**
+- `flatten_positions` — Flatten all positions to cash immediately
+- `flatten_config` — Get/set EOD auto-flatten schedule
+
+## PORTFOLIO ANALYTICS
+
+- `portfolio_exposure` — Gross/net exposure, % deployed, sector breakdown, beta-weighted exposure, portfolio heat
+- `stress_test` — Portfolio stress test with beta-adjusted shocks
+- `size_position` — Calculate position size from entry/stop with risk/capital/margin constraints
+
+## EVAL ENGINE
+
+- `eval_stats` — Evaluation statistics and model performance
+- `simulate_weights` — Test different model weight configurations
+- `weight_history` — Audit trail of weight changes
+- `eval_outcomes` — Win/loss outcomes for past evaluations
+- `record_outcome` — Record actual outcome for an evaluation
+- `eval_reasoning` — View model reasoning for evaluations
+- `drift_report` — Model drift analysis
+- `daily_summary` — Daily performance summary
+
+## COLLABORATION
+
+- `collab_read` / `collab_post` / `collab_clear` / `collab_stats` — AI-to-AI messaging channel
+
+## TRADE JOURNAL & HISTORY
+
+- `trade_journal_read` / `trade_journal_write` — Trade journal with reasoning, tags, outcomes
+- `orders_history` / `executions_history` — Historical order and execution queries
+- `tradersync_import` / `tradersync_stats` / `tradersync_trades` — TraderSync integration
 
 ## STANDARD CALCULATION DEFINITIONS (MANDATORY)
 
