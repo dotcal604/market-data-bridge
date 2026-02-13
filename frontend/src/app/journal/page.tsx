@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { useJournalEntries } from "@/lib/hooks/use-journal";
 import { JournalTable } from "@/components/journal/journal-table";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Plus } from "lucide-react";
 
 const ITEMS_PER_PAGE = 25;
 
@@ -37,6 +39,12 @@ export default function JournalPage() {
             Trade journal entries and post-trade reflections
           </p>
         </div>
+        <Link href="/journal/new">
+          <Button>
+            <Plus className="mr-2 h-4 w-4" />
+            New Entry
+          </Button>
+        </Link>
       </div>
 
       {/* Search Filter */}
@@ -80,7 +88,7 @@ export default function JournalPage() {
       ) : entries ? (
         <>
           <JournalTable entries={entries} />
-          
+
           {entries.length === 0 && !symbolFilter && (
             <div className="rounded-lg border border-border bg-card p-8 text-center">
               <p className="text-sm text-muted-foreground">
