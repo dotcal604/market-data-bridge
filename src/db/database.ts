@@ -11,6 +11,10 @@ if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 const dbPath = path.join(dataDir, "bridge.db");
 const db: DatabaseType = new Database(dbPath);
 
+export function getDb(): DatabaseType {
+  return db;
+}
+
 // WAL mode — prevents event loop blocking during concurrent reads/writes
 db.pragma("journal_mode = WAL");
 db.pragma("synchronous = NORMAL");
