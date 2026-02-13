@@ -14,6 +14,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { EvalTriggerForm } from "@/components/eval-form/eval-trigger-form";
+import { CalibrationCurve } from "@/components/evals/CalibrationCurve";
 import type { EvalResponse, Evaluation } from "@/lib/api/types";
 import type { EvalFilterState } from "@/lib/stores/eval-filters";
 
@@ -137,6 +138,8 @@ function EvalsContent() {
       </div>
 
       <EvalFilters onFilterChange={setFilters} />
+
+      <CalibrationCurve />
 
       {isLoading ? (
         <div className="space-y-2">
