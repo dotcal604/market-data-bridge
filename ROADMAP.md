@@ -39,6 +39,7 @@ Every backlog item is scored on 5 dimensions (1-5 scale):
 - **Tests**: 201 passing (16 test files) — Vitest + in-memory SQLite
 - **SDK versions**: @anthropic-ai/sdk 0.74, openai 6.21, @google/genai 1.0, @stoqey/ib 1.5.3
 - **Hardening**: Input validation on order routes, symbol regex, crash handlers, safe JSON parsing
+- **Analytics**: Python scaffold ready (`analytics/db_loader.py`, `requirements.txt`). 4 Codex issues created (#56-59)
 
 ---
 
@@ -49,12 +50,12 @@ These directly increase or measure trading edge. **Priority over everything else
 | Item | EI | Thesis | Status | Agent | Notes |
 |------|----|--------|--------|-------|-------|
 | **Daily session summary** | 5 | B | **Done** | Claude Code | P&L, win rate, avg R per session. `GET /eval/daily-summary` + `daily_summary` MCP tool. Rolling totals. |
-| **Confidence calibration tracking** | 5 | B | Not started | Codex | Brier score per model, calibration curve. Requires 50+ outcomes. `analytics/calibration.py` |
+| **Confidence calibration tracking** | 5 | B | Assigned | Codex | #56 — Brier score per model, calibration curve. Requires 50+ outcomes. `analytics/calibration.py` |
 | **Structured reasoning log** | 5 | A,B | Not started | Claude Code | `eval_reasoning` table — per-model key_drivers, risk_factors, uncertainties as JSON. Enables drift detection + disagreement diagnosis. ~50 LOC in eval pipeline |
-| **Regime-conditioned accuracy** | 5 | C | Not started | Codex | Win rate by volatility_regime × time_of_day × liquidity_bucket. `analytics/regime.py` |
-| **Weight recalibration script** | 4 | B | Not started | Codex | Compute performance scores from outcomes, normalize weights, write `data/weights.json`. Automated edge tuning. |
+| **Regime-conditioned accuracy** | 5 | C | Assigned | Codex | #57 — Win rate by volatility_regime × time_of_day × liquidity_bucket. `analytics/regime.py` |
+| **Weight recalibration script** | 4 | B | Assigned | Codex | #58 — Compute performance scores from outcomes, normalize weights, write `data/weights.json`. Automated edge tuning. |
 | **Drift reconciliation** | 4 | B,C | Not started | Claude Code | Detect when model predictions diverge from recent outcomes. Alert when ensemble is miscalibrated. |
-| **Model agreement analysis** | 4 | B | Not started | Codex | Unanimous/majority/split classification. Track: does agreement predict outcome? |
+| **Model agreement analysis** | 4 | B | Assigned | Codex | #59 — Unanimous/majority/split classification. Track: does agreement predict outcome? |
 | **Risk gate tuning** | 4 | A | Not started | Claude Code | Parameterize risk limits from data (max position size by regime, volatility-adjusted sizing) |
 | **Weight simulation endpoint** | 4 | B | **Done** | Claude Code | `POST /api/eval/weights/simulate` + `simulate_weights` MCP tool. Re-scores historical evals with custom weights. |
 
