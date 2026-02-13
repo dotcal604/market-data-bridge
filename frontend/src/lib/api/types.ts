@@ -173,6 +173,51 @@ export interface EvalResponse {
   latency_ms: Record<string, number>;
 }
 
+// Order types
+export interface OpenOrder {
+  orderId: number;
+  symbol: string;
+  action: "BUY" | "SELL";
+  orderType: "MKT" | "LMT" | "STP" | "STP LMT";
+  totalQuantity: number;
+  lmtPrice: number | null;
+  auxPrice: number | null;
+  status: string;
+  remaining: number;
+  tif: string;
+}
+
+export interface CompletedOrder {
+  orderId: number;
+  symbol: string;
+  action: "BUY" | "SELL";
+  orderType: "MKT" | "LMT" | "STP" | "STP LMT";
+  totalQuantity: number;
+  filledQuantity: number;
+  avgFillPrice: number | null;
+  status: string;
+  completedTime: string;
+}
+
+export interface OrdersResponse {
+  count: number;
+  orders: OpenOrder[];
+}
+
+export interface CompletedOrdersResponse {
+  count: number;
+  orders: CompletedOrder[];
+}
+
+export interface CancelOrderResponse {
+  orderId: number;
+  status: string;
+}
+
+export interface CancelAllOrdersResponse {
+  status: string;
+}
+
 // Executions API types
 export interface Execution {
   execId: string;
