@@ -25,6 +25,7 @@ import {
   getTodaysTrades,
   getEvalsForSimulation,
   getEvalOutcomes,
+  getModelOutcomesForCalibration,
   getTraderSyncTrades,
   getTraderSyncStats,
   getWeightHistory,
@@ -615,6 +616,27 @@ evalRouter.get("/outcomes", (req, res) => {
     res.json({ count: outcomes.length, outcomes });
   } catch (e: any) {
     logger.error({ err: e }, "[Eval] outcomes failed");
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /calibration — per-model confidence + r_multiple for calibration charts
+// Query params: ?limit=500&symbol=AAPL&days=90
+evalRouter.get("/calibration", (req, res) => {
+  try {
+    const limit = typeof req.query.limit === "string" ? parseInt(req.query.limit, 10) : undefined;
+    const symbol = typeof req.query.symbol === "string" ? req.query.symbol : undefined;
+    const days = typeof req.query.days === "string" ? parseInt(req.query.days, 10) : undefined;
+
+    const calibrationData = getModelOutcomesForCalibration({
+      limit: isNaN(limit as number) ? undefined : limit,
+      symbol,
+      days: isNaN(days as number) ? undefined : days,
+    });
+
+    res.json({ count: calibrationData.length, data: calibrationData });
+  } catch (e: any) {
+    logger.error({ err: e }, "[Eval] calibration data failed");
     res.status(500).json({ error: e.message });
   }
 });

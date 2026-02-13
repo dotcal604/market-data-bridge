@@ -1100,6 +1100,48 @@ export function getModelOutcomesForDrift(days: number = 90): Array<Record<string
   `).all(`-${days}`) as Array<Record<string, unknown>>;
 }
 
+/**
+ * Get per-model confidence + ensemble confidence + r_multiple for calibration charts.
+ * Joins model_outputs with evaluations and outcomes for trades that have all data.
+ */
+export function getModelOutcomesForCalibration(opts: {
+  limit?: number;
+  symbol?: string;
+  days?: number;
+} = {}): Array<Record<string, unknown>> {
+  const limit = Math.min(opts.limit ?? 500, 2000);
+  const conditions: string[] = ["m.compliant = 1", "o.trade_taken = 1", "o.r_multiple IS NOT NULL", "m.confidence IS NOT NULL"];
+  const params: unknown[] = [];
+
+  if (opts.symbol) {
+    conditions.push("e.symbol = ?");
+    params.push(opts.symbol);
+  }
+  if (opts.days) {
+    conditions.push("e.timestamp >= datetime('now', ? || ' days')");
+    params.push(`-${opts.days}`);
+  }
+
+  const where = conditions.join(" AND ");
+  params.push(limit);
+
+  return db.prepare(`
+    SELECT
+      e.id as evaluation_id,
+      e.symbol,
+      e.ensemble_confidence,
+      m.model_id,
+      m.confidence,
+      o.r_multiple
+    FROM model_outputs m
+    JOIN evaluations e ON m.evaluation_id = e.id
+    JOIN outcomes o ON o.evaluation_id = e.id
+    WHERE ${where}
+    ORDER BY e.timestamp DESC
+    LIMIT ?
+  `).all(...params) as Array<Record<string, unknown>>;
+}
+
 // ── Weight History ────────────────────────────────────────────────────────
 
 export interface WeightHistoryRow {

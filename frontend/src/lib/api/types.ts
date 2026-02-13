@@ -175,6 +175,20 @@ export interface EvalOutcomesResponse {
   outcomes: EvalOutcome[];
 }
 
+export interface CalibrationDataPoint {
+  evaluation_id: string;
+  symbol: string;
+  ensemble_confidence: number;
+  model_id: string;
+  confidence: number;
+  r_multiple: number;
+}
+
+export interface CalibrationDataResponse {
+  count: number;
+  data: CalibrationDataPoint[];
+}
+
 export interface EnsembleWeights {
   [modelId: string]: number;
 }

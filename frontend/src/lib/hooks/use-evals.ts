@@ -52,3 +52,11 @@ export function useEvalOutcomes(limit = 500) {
     refetchInterval: 60_000,
   });
 }
+
+export function useCalibrationData(limit = 500, symbol?: string, days?: number) {
+  return useQuery({
+    queryKey: ["calibration-data", limit, symbol, days],
+    queryFn: () => evalClient.getCalibrationData(limit, symbol, days),
+    refetchInterval: 60_000,
+  });
+}

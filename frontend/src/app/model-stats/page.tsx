@@ -1,6 +1,6 @@
 "use client";
 
-import { useEvalStats, useEvalOutcomes } from "@/lib/hooks/use-evals";
+import { useEvalStats, useCalibrationData } from "@/lib/hooks/use-evals";
 import { StatsSummary } from "@/components/model-stats/stats-summary";
 import { ModelComparison } from "@/components/model-stats/model-comparison";
 import { CalibrationCurve } from "@/components/charts/CalibrationCurve";
@@ -9,7 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 
 export default function ModelStatsPage() {
   const stats = useEvalStats();
-  const outcomes = useEvalOutcomes(500);
+  const calibrationData = useCalibrationData(500);
 
   return (
     <div className="space-y-6">
@@ -54,18 +54,18 @@ export default function ModelStatsPage() {
           {/* Calibration Curve Section */}
           <div>
             <h2 className="mb-4 text-xl font-semibold">Calibration Analysis</h2>
-            {outcomes.isLoading ? (
+            {calibrationData.isLoading ? (
               <Skeleton className="h-[480px] rounded-lg" />
-            ) : outcomes.error ? (
+            ) : calibrationData.error ? (
               <Card className="bg-card">
                 <CardContent className="py-8 text-center">
                   <p className="text-sm text-muted-foreground">
-                    Failed to load outcomes: {(outcomes.error as Error).message}
+                    Failed to load calibration data: {(calibrationData.error as Error).message}
                   </p>
                 </CardContent>
               </Card>
-            ) : outcomes.data && outcomes.data.outcomes.length > 0 ? (
-              <CalibrationCurve outcomes={outcomes.data.outcomes} />
+            ) : calibrationData.data && calibrationData.data.data.length > 0 ? (
+              <CalibrationCurve data={calibrationData.data.data} />
             ) : (
               <Card className="bg-card">
                 <CardContent className="py-12 text-center">

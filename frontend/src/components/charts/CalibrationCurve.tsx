@@ -13,10 +13,10 @@ import {
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { modelColor } from "@/lib/utils/colors";
-import type { EvalOutcome } from "@/lib/api/types";
+import type { CalibrationDataPoint } from "@/lib/api/types";
 
 interface CalibrationCurveProps {
-  outcomes: EvalOutcome[];
+  data: CalibrationDataPoint[];
 }
 
 interface BucketData {
@@ -90,36 +90,77 @@ function computeCalibration(
   return { modelId, buckets };
 }
 
-// Process outcomes to get calibration data for all models + ensemble
-function processCalibrationData(outcomes: EvalOutcome[]): {
+// Process calibration data to get per-model + ensemble calibration
+function processCalibrationData(data: CalibrationDataPoint[]): {
   chartData: ChartDataPoint[];
   hasData: boolean;
 } {
-  // Need to get model-level outcomes
-  // For now, we'll use ensemble data from the outcomes
-  // TODO: Need to modify backend to include model outputs in outcomes endpoint
+  // Group by model_id
+  const byModel = new Map<string, Array<{ confidence: number; r_multiple: number }>>();
+  const ensembleData: Array<{ confidence: number; r_multiple: number }> = [];
 
-  const ensembleData = outcomes
-    .filter((o) => o.r_multiple != null && o.ensemble_confidence != null)
-    .map((o) => ({
-      confidence: o.ensemble_confidence,
-      r_multiple: o.r_multiple,
-    }));
-
-  const ensembleCalibration = computeCalibration(ensembleData, "ensemble");
-
-  // Convert to chart format
-  const chartData: ChartDataPoint[] = [];
-  for (const bucket of ensembleCalibration.buckets) {
-    chartData.push({
-      bucket: bucket.bucket,
-      ensemble: bucket.winRate,
-      ensembleCount: bucket.count,
+  for (const point of data) {
+    // Add to model-specific data
+    if (!byModel.has(point.model_id)) {
+      byModel.set(point.model_id, []);
+    }
+    byModel.get(point.model_id)!.push({
+      confidence: point.confidence,
+      r_multiple: point.r_multiple,
     });
+
+    // Also add to ensemble (deduplicate by evaluation_id)
+    if (!ensembleData.find(e => e.confidence === point.ensemble_confidence)) {
+      ensembleData.push({
+        confidence: point.ensemble_confidence,
+        r_multiple: point.r_multiple,
+      });
+    }
   }
 
-  // Sort by bucket
-  chartData.sort((a, b) => a.bucket - b.bucket);
+  // Compute calibration for ensemble
+  const ensembleCalibration = computeCalibration(ensembleData, "ensemble");
+
+  // Compute calibration for each model
+  const modelCalibrations = new Map<string, ModelCalibrationData>();
+  for (const [modelId, modelData] of byModel) {
+    modelCalibrations.set(modelId, computeCalibration(modelData, modelId));
+  }
+
+  // Merge all data into chart format
+  const bucketMap = new Map<number, ChartDataPoint>();
+
+  // Add ensemble data
+  for (const bucket of ensembleCalibration.buckets) {
+    if (!bucketMap.has(bucket.bucket)) {
+      bucketMap.set(bucket.bucket, { bucket: bucket.bucket });
+    }
+    const point = bucketMap.get(bucket.bucket)!;
+    point.ensemble = bucket.winRate;
+    point.ensembleCount = bucket.count;
+  }
+
+  // Add model data
+  for (const [modelId, calibration] of modelCalibrations) {
+    for (const bucket of calibration.buckets) {
+      if (!bucketMap.has(bucket.bucket)) {
+        bucketMap.set(bucket.bucket, { bucket: bucket.bucket });
+      }
+      const point = bucketMap.get(bucket.bucket)!;
+      if (modelId === "claude-sonnet") {
+        point["claude-sonnet"] = bucket.winRate;
+        point.claudeCount = bucket.count;
+      } else if (modelId === "gpt-4o") {
+        point["gpt-4o"] = bucket.winRate;
+        point.gptCount = bucket.count;
+      } else if (modelId === "gemini-flash") {
+        point["gemini-flash"] = bucket.winRate;
+        point.geminiCount = bucket.count;
+      }
+    }
+  }
+
+  const chartData = Array.from(bucketMap.values()).sort((a, b) => a.bucket - b.bucket);
 
   return {
     chartData,
@@ -177,8 +218,8 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
   );
 }
 
-export function CalibrationCurve({ outcomes }: CalibrationCurveProps) {
-  const { chartData, hasData } = processCalibrationData(outcomes);
+export function CalibrationCurve({ data }: CalibrationCurveProps) {
+  const { chartData, hasData } = processCalibrationData(data);
 
   if (!hasData) {
     return (
@@ -267,14 +308,15 @@ export function CalibrationCurve({ outcomes }: CalibrationCurveProps) {
               dot={{ r: 6, fill: "#888888" }}
               activeDot={{ r: 8 }}
             />
-            {/* Individual model lines (will be added when backend provides data) */}
-            {/* <Line
+            {/* Individual model lines */}
+            <Line
               type="monotone"
               dataKey="claude-sonnet"
               name="Claude"
               stroke={modelColor("claude-sonnet")}
               strokeWidth={2}
               dot={{ r: 5 }}
+              activeDot={{ r: 7 }}
             />
             <Line
               type="monotone"
@@ -283,6 +325,7 @@ export function CalibrationCurve({ outcomes }: CalibrationCurveProps) {
               stroke={modelColor("gpt-4o")}
               strokeWidth={2}
               dot={{ r: 5 }}
+              activeDot={{ r: 7 }}
             />
             <Line
               type="monotone"
@@ -291,7 +334,8 @@ export function CalibrationCurve({ outcomes }: CalibrationCurveProps) {
               stroke={modelColor("gemini-flash")}
               strokeWidth={2}
               dot={{ r: 5 }}
-            /> */}
+              activeDot={{ r: 7 }}
+            />
           </LineChart>
         </ResponsiveContainer>
       </CardContent>

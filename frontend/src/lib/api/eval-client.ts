@@ -5,6 +5,7 @@ import type {
   EvalStats,
   EnsembleWeights,
   EvalResponse,
+  CalibrationDataResponse,
 } from "./types";
 import { fetchJson } from "./fetch-json";
 
@@ -61,5 +62,12 @@ export const evalClient = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ evaluation_id: evaluationId, ...data }),
     });
+  },
+
+  getCalibrationData(limit = 500, symbol?: string, days?: number) {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (symbol) params.set("symbol", symbol);
+    if (days) params.set("days", String(days));
+    return fetchJson<CalibrationDataResponse>(`${BASE}/calibration?${params}`);
   },
 };
