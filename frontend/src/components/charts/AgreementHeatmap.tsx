@@ -3,6 +3,12 @@
 import { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface AgreementHeatmapProps {
   data: Array<{
@@ -219,43 +225,62 @@ export function AgreementHeatmap({ data }: AgreementHeatmapProps) {
         {/* 3x3 Heatmap Matrix */}
         <div className="space-y-2">
           <h3 className="text-sm font-medium">Pairwise Agreement Rates</h3>
-          <div className="grid gap-4">
-            {stats.matrix.map((cell) => (
-              <div
-                key={`${cell.model1}-${cell.model2}`}
-                className="flex items-center gap-4"
-              >
-                <div className="flex-1 flex items-center justify-between rounded-lg border bg-card p-4">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">
-                      {modelDisplayName(cell.model1)}
-                    </span>
-                    <span className="text-muted-foreground">×</span>
-                    <span className="font-medium">
-                      {modelDisplayName(cell.model2)}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className="text-right">
-                      <p className="text-xl font-bold font-mono">
-                        {cell.agreementRate.toFixed(1)}%
+          <TooltipProvider>
+            <div className="grid gap-4">
+              {stats.matrix.map((cell) => (
+                <Tooltip key={`${cell.model1}-${cell.model2}`}>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center gap-4 cursor-help">
+                      <div className="flex-1 flex items-center justify-between rounded-lg border bg-card p-4">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">
+                            {modelDisplayName(cell.model1)}
+                          </span>
+                          <span className="text-muted-foreground">×</span>
+                          <span className="font-medium">
+                            {modelDisplayName(cell.model2)}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <div className="text-right">
+                            <p className="text-xl font-bold font-mono">
+                              {cell.agreementRate.toFixed(1)}%
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {cell.totalComparisons} evaluations
+                            </p>
+                          </div>
+                          <div
+                            className={`h-12 w-12 rounded flex items-center justify-center ${getAgreementColor(cell.agreementRate)}`}
+                          >
+                            <span className="text-sm font-bold text-white">
+                              {Math.round(cell.agreementRate)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <div className="space-y-1">
+                      <p className="font-semibold">
+                        {modelDisplayName(cell.model1)} × {modelDisplayName(cell.model2)}
                       </p>
-                      <p className="text-xs text-muted-foreground">
-                        {cell.totalComparisons} evaluations
+                      <p className="text-sm">
+                        Agreement rate: {cell.agreementRate.toFixed(2)}%
+                      </p>
+                      <p className="text-sm">
+                        Total evaluations: {cell.totalComparisons}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Agreement = both models make the same directional call
                       </p>
                     </div>
-                    <div
-                      className={`h-12 w-12 rounded flex items-center justify-center ${getAgreementColor(cell.agreementRate)}`}
-                    >
-                      <span className="text-sm font-bold text-white">
-                        {Math.round(cell.agreementRate)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+                  </TooltipContent>
+                </Tooltip>
+              ))}
+            </div>
+          </TooltipProvider>
         </div>
 
         {/* Color Legend */}
