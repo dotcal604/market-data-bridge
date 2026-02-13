@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ordersClient } from "../api/orders-client";
+import type { PlaceOrderRequest } from "../api/types";
 
 export function useOpenOrders(refreshInterval = 5000) {
   return useQuery({
@@ -36,5 +37,25 @@ export function useCancelAllOrders() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["open-orders"] });
     },
+  });
+}
+
+export function usePlaceOrder() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (order: PlaceOrderRequest) => ordersClient.placeOrder(order),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["open-orders"] });
+    },
+  });
+}
+
+export function useQuote(symbol: string | null, enabled = true) {
+  return useQuery({
+    queryKey: ["quote", symbol],
+    queryFn: () => ordersClient.getQuote(symbol!),
+    enabled: enabled && !!symbol && symbol.length > 0,
+    refetchInterval: 5000,
+    staleTime: 3000,
   });
 }

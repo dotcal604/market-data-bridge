@@ -326,6 +326,50 @@ export interface CancelAllOrdersResponse {
   status: string;
 }
 
+// Order placement types
+export interface PlaceOrderRequest {
+  symbol: string;
+  action: "BUY" | "SELL";
+  orderType: "MKT" | "LMT" | "STP" | "STP LMT" | "TRAIL" | "TRAIL LIMIT" | "REL" | "MIT" | "MOC" | "LOC";
+  totalQuantity: number;
+  lmtPrice?: number;
+  auxPrice?: number;
+  trailingPercent?: number;
+  trailStopPrice?: number;
+  discretionaryAmt?: number;
+  tif?: "DAY" | "GTC" | "IOC" | "GTD";
+  goodTillDate?: string;
+  outsideRth?: boolean;
+  secType?: string;
+  exchange?: string;
+  currency?: string;
+}
+
+export interface PlaceOrderResponse {
+  orderId: number;
+  symbol: string;
+  action: string;
+  orderType: string;
+  totalQuantity: number;
+  lmtPrice: number | null;
+  auxPrice: number | null;
+  status: string;
+  correlation_id: string;
+}
+
+export interface QuoteResponse {
+  symbol: string;
+  last: number | null;
+  bid: number | null;
+  ask: number | null;
+  volume: number | null;
+  open: number | null;
+  high: number | null;
+  low: number | null;
+  prevClose: number | null;
+  source: "ibkr" | "yahoo";
+}
+
 // Executions API types
 export interface Execution {
   execId: string;
