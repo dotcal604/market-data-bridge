@@ -104,9 +104,14 @@ const columns = [
   }),
   col.accessor("marketValue", {
     header: "Market Value",
-    cell: (info) => (
-      <span className="font-mono text-sm">{formatCurrency(info.getValue())}</span>
-    ),
+    cell: (info) => {
+      const value = info.getValue();
+      return (
+        <span className="font-mono text-sm">
+          {value > 0 ? formatCurrency(value) : "—"}
+        </span>
+      );
+    },
   }),
 ];
 
@@ -149,14 +154,15 @@ export function PositionsTable({ refreshInterval = 10_000 }: PositionsTableProps
     return positionsQuery.data.positions.map((position) => {
       const currentPrice = quotesQuery.data[position.symbol] ?? null;
       // Market value is always positive (absolute value of position × price)
+      // If current price unavailable, market value is 0 to indicate stale/unknown value
       const marketValue = currentPrice !== null 
         ? Math.abs(currentPrice * position.position)
-        : Math.abs(position.avgCost * position.position);
+        : 0;
       const unrealizedPnL = currentPrice !== null
         ? (currentPrice - position.avgCost) * position.position
         : 0;
-      const unrealizedPnLPercent = position.avgCost !== 0
-        ? ((currentPrice ?? position.avgCost) - position.avgCost) / position.avgCost * 100
+      const unrealizedPnLPercent = currentPrice !== null && position.avgCost !== 0
+        ? (currentPrice - position.avgCost) / position.avgCost * 100
         : 0;
 
       return {
@@ -190,7 +196,7 @@ export function PositionsTable({ refreshInterval = 10_000 }: PositionsTableProps
       <CardContent>
         {hasApiError && (
           <div className="text-sm text-red-400">
-            {(positionsQuery.data as any).error}
+            {positionsQuery.data?.error || "Unknown error"}
           </div>
         )}
 

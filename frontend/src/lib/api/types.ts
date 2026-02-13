@@ -201,6 +201,7 @@ export interface Position {
 export interface PositionsResponse {
   count: number;
   positions: Position[];
+  error?: string;
 }
 
 export interface AccountSummaryResponse {
