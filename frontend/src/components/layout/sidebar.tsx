@@ -13,12 +13,15 @@ import {
   Receipt,
   Wallet,
   MessageSquare,
+  GitCompare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/evals", label: "Evaluations", icon: History },
+  { href: "/evals", label: "Evaluations", icon: History, children: [
+    { href: "/evals/compare", label: "Compare", icon: GitCompare },
+  ]},
   { href: "/journal", label: "Journal", icon: BookOpen },
   { href: "/executions", label: "Executions", icon: Receipt },
   { href: "/model-stats", label: "Model Stats", icon: BarChart3 },
@@ -43,23 +46,52 @@ export function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 space-y-1 px-2 py-3">
-        {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+        {NAV_ITEMS.map((item) => {
+          const { href, label, icon: Icon } = item;
+          const children = "children" in item ? item.children : undefined;
+          const hasActiveChild = children?.some((child) => pathname.startsWith(child.href));
           const active =
-            href === "/" ? pathname === "/" : pathname.startsWith(href);
+            href === "/" 
+              ? pathname === "/" 
+              : (pathname === href || (pathname.startsWith(href) && !hasActiveChild));
           return (
-            <Link
-              key={href}
-              href={href}
-              className={cn(
-                "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                active
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                  : "text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+            <div key={href}>
+              <Link
+                href={href}
+                className={cn(
+                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                  active
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                    : "text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+                )}
+              >
+                <Icon className="h-4 w-4" />
+                {label}
+              </Link>
+              {children && (
+                <div className="ml-4 mt-1 space-y-1">
+                  {children.map((child) => {
+                    const childActive = pathname.startsWith(child.href);
+                    const ChildIcon = child.icon;
+                    return (
+                      <Link
+                        key={child.href}
+                        href={child.href}
+                        className={cn(
+                          "flex items-center gap-3 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                          childActive
+                            ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                            : "text-sidebar-foreground/50 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+                        )}
+                      >
+                        <ChildIcon className="h-3.5 w-3.5" />
+                        {child.label}
+                      </Link>
+                    );
+                  })}
+                </div>
               )}
-            >
-              <Icon className="h-4 w-4" />
-              {label}
-            </Link>
+            </div>
           );
         })}
       </nav>
