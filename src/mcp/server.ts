@@ -21,7 +21,7 @@ import { getAccountSummary, getPositions, getPnL } from "../ibkr/account.js";
 import { getOpenOrders, getCompletedOrders, getExecutions, placeOrder, placeBracketOrder, placeAdvancedBracket, cancelOrder, cancelAllOrders, flattenAllPositions, validateOrder } from "../ibkr/orders.js";
 import { setFlattenEnabled, getFlattenConfig } from "../scheduler.js";
 import { getContractDetails } from "../ibkr/contracts.js";
-import { getIBKRQuote } from "../ibkr/marketdata.js";
+import { getIBKRQuote, getHistoricalTicks } from "../ibkr/marketdata.js";
 import { readMessages, postMessage, clearMessages, getStats } from "../collab/store.js";
 import { checkRisk, getSessionState, recordTradeResult, lockSession, unlockSession, resetSession } from "../ibkr/risk-gate.js";
 import { runPortfolioStressTest, computePortfolioExposure } from "../ibkr/portfolio.js";
@@ -118,6 +118,50 @@ export function createMcpServer(): McpServer {
             {
               type: "text",
               text: JSON.stringify({ symbol: symbol.toUpperCase(), count: bars.length, bars }, null, 2),
+            },
+          ],
+        };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: get_historical_ticks ---
+  server.tool(
+    "get_historical_ticks",
+    "Get IBKR historical tick-by-tick data (trades, bid/ask, or midpoint). Requires IBKR connection.",
+    {
+      symbol: z.string().describe("Ticker symbol, e.g. AAPL"),
+      startTime: z.string().describe("Start datetime in IBKR format, e.g. 20240201 09:30:00 US/Eastern"),
+      endTime: z.string().describe("End datetime in IBKR format, e.g. 20240201 10:00:00 US/Eastern"),
+      type: z.enum(["TRADES", "BID_ASK", "MIDPOINT"]).default("TRADES"),
+      count: z.number().int().min(1).max(1000).default(1000),
+    },
+    async ({ symbol, startTime, endTime, type, count }) => {
+      try {
+        if (!isConnected()) {
+          return { content: [{ type: "text", text: "Error: IBKR not connected. Start TWS/Gateway for historical tick data." }], isError: true };
+        }
+
+        const ticks = await getHistoricalTicks(symbol.toUpperCase(), startTime, endTime, type, count);
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                {
+                  symbol: symbol.toUpperCase(),
+                  startTime,
+                  endTime,
+                  type,
+                  count: ticks.length,
+                  ticks,
+                  source: "ibkr",
+                },
+                null,
+                2
+              ),
             },
           ],
         };

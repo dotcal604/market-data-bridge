@@ -178,6 +178,68 @@ export const openApiSpec = {
         },
       },
     },
+    "/api/data/historical-ticks/{symbol}": {
+      get: {
+        operationId: "getHistoricalTicks",
+        summary: "Get IBKR historical tick-by-tick data for trades, bid/ask, or midpoint",
+        parameters: [
+          { name: "symbol", in: "path", required: true, schema: { type: "string" }, description: "Ticker symbol" },
+          {
+            name: "startTime",
+            in: "query",
+            required: true,
+            schema: { type: "string" },
+            description: "IBKR start datetime, e.g. 20240201 09:30:00 US/Eastern",
+          },
+          {
+            name: "endTime",
+            in: "query",
+            required: true,
+            schema: { type: "string" },
+            description: "IBKR end datetime, e.g. 20240201 10:00:00 US/Eastern",
+          },
+          {
+            name: "type",
+            in: "query",
+            schema: { type: "string", enum: ["TRADES", "BID_ASK", "MIDPOINT"], default: "TRADES" },
+            description: "Tick stream type",
+          },
+          {
+            name: "count",
+            in: "query",
+            schema: { type: "integer", minimum: 1, maximum: 1000, default: 1000 },
+            description: "Maximum number of ticks requested",
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Historical ticks",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    symbol: { type: "string" },
+                    startTime: { type: "string" },
+                    endTime: { type: "string" },
+                    type: { type: "string", enum: ["TRADES", "BID_ASK", "MIDPOINT"] },
+                    count: { type: "integer" },
+                    source: { type: "string", enum: ["ibkr"] },
+                    ticks: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        description: "Tick payload shape varies by type",
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
     "/api/details/{symbol}": {
       get: {
         operationId: "getStockDetails",

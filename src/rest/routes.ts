@@ -22,7 +22,7 @@ import { getOpenOrders, getCompletedOrders, getExecutions, placeOrder, placeBrac
 import { computePortfolioExposure } from "../ibkr/portfolio.js";
 import { setFlattenEnabled, getFlattenConfig } from "../scheduler.js";
 import { getContractDetails } from "../ibkr/contracts.js";
-import { getIBKRQuote } from "../ibkr/marketdata.js";
+import { getIBKRQuote, getHistoricalTicks } from "../ibkr/marketdata.js";
 import { readMessages, postMessage, clearMessages, getStats } from "../collab/store.js";
 import { getGptInstructions } from "./gpt-instructions.js";
 import { checkRisk, getSessionState, recordTradeResult, lockSession, unlockSession, resetSession } from "../ibkr/risk-gate.js";
@@ -73,6 +73,13 @@ const portfolioStressTestRequestSchema = z.object({
   betaAdjusted: z.boolean().default(true),
 });
 
+const historicalTicksQuerySchema = z.object({
+  startTime: z.string().min(1, "startTime is required"),
+  endTime: z.string().min(1, "endTime is required"),
+  type: z.enum(["TRADES", "BID_ASK", "MIDPOINT"]).default("TRADES"),
+  count: z.coerce.number().int().min(1).max(1000).default(1000),
+});
+
 // GET /api/status
 router.get("/status", (_req, res) => {
   res.json(getStatus());
@@ -115,6 +122,49 @@ router.get("/history/:symbol", async (req, res) => {
     res.json({ symbol: symbol.toUpperCase(), count: bars.length, bars });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/data/historical-ticks/:symbol
+router.get("/data/historical-ticks/:symbol", async (req, res) => {
+  if (!isConnected()) {
+    res.status(503).json({ error: "IBKR not connected. Start TWS/Gateway for historical tick data." });
+    return;
+  }
+
+  const symErr = validateSymbol(req.params.symbol);
+  if (symErr) {
+    res.status(400).json({ error: symErr });
+    return;
+  }
+
+  const parsedQuery = historicalTicksQuerySchema.safeParse(req.query);
+  if (!parsedQuery.success) {
+    res.status(400).json({ error: parsedQuery.error.issues[0]?.message ?? "Invalid query params" });
+    return;
+  }
+
+  try {
+    const ticks = await getHistoricalTicks(
+      req.params.symbol.toUpperCase(),
+      parsedQuery.data.startTime,
+      parsedQuery.data.endTime,
+      parsedQuery.data.type,
+      parsedQuery.data.count
+    );
+
+    res.json({
+      symbol: req.params.symbol.toUpperCase(),
+      startTime: parsedQuery.data.startTime,
+      endTime: parsedQuery.data.endTime,
+      type: parsedQuery.data.type,
+      count: ticks.length,
+      ticks,
+      source: "ibkr",
+    });
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "Unknown error";
+    res.status(500).json({ error: message });
   }
 });
 

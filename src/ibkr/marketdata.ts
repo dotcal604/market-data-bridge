@@ -1,5 +1,14 @@
-import { EventName, ErrorCode, Contract, isNonFatalError } from "@stoqey/ib";
-import { getIB, getNextReqId } from "./connection.js";
+import {
+  EventName,
+  ErrorCode,
+  Contract,
+  HistoricalTick,
+  HistoricalTickBidAsk,
+  HistoricalTickLast,
+  isNonFatalError,
+} from "@stoqey/ib";
+import { logger } from "../logging.js";
+import { getIB, getNextReqId, isConnected } from "./connection.js";
 
 // TickType is a type-only union — use numeric constants, NOT the enum.
 const TICK_BID = 1;
@@ -10,6 +19,45 @@ const TICK_LOW = 7;
 const TICK_VOLUME = 8;
 const TICK_CLOSE = 9;
 const TICK_OPEN = 14;
+const HISTORICAL_TICKS_TIMEOUT_MS = 30000;
+
+const log = logger.child({ subsystem: "ibkr-marketdata" });
+
+export type HistoricalTickType = "TRADES" | "BID_ASK" | "MIDPOINT";
+
+export interface IBKRHistoricalMidpointTick {
+  type: "MIDPOINT";
+  time: number;
+  price: number;
+  size: number;
+}
+
+export interface IBKRHistoricalBidAskTick {
+  type: "BID_ASK";
+  time: number;
+  bidPrice: number;
+  askPrice: number;
+  bidSize: number;
+  askSize: number;
+  bidPastLow: boolean;
+  askPastHigh: boolean;
+}
+
+export interface IBKRHistoricalTradeTick {
+  type: "TRADES";
+  time: number;
+  price: number;
+  size: number;
+  exchange: string;
+  specialConditions: string;
+  pastLimit: boolean;
+  unreported: boolean;
+}
+
+export type IBKRHistoricalTick =
+  | IBKRHistoricalMidpointTick
+  | IBKRHistoricalBidAskTick
+  | IBKRHistoricalTradeTick;
 
 export interface IBKRQuoteData {
   symbol: string;
@@ -119,5 +167,126 @@ export async function getIBKRQuote(params: {
 
     // snapshot=true, regulatorySnapshot=false
     ib.reqMktData(reqId, contract, "", true, false);
+  });
+}
+
+export async function getHistoricalTicks(
+  symbol: string,
+  startTime: string,
+  endTime: string,
+  type: HistoricalTickType,
+  count: number
+): Promise<IBKRHistoricalTick[]> {
+  if (!isConnected()) {
+    throw new Error("IBKR not connected. Start TWS/Gateway for historical tick data.");
+  }
+
+  const ib = getIB();
+  const reqId = getNextReqId();
+
+  const contract: Contract = {
+    symbol,
+    secType: "STK" as any,
+    exchange: "SMART",
+    currency: "USD",
+  };
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const ticks: IBKRHistoricalTick[] = [];
+
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error(`Historical ticks request timed out after ${HISTORICAL_TICKS_TIMEOUT_MS / 1000} seconds`));
+    }, HISTORICAL_TICKS_TIMEOUT_MS);
+
+    const onHistoricalTicks = (id: number, historicalTicks: HistoricalTick[], done: boolean) => {
+      if (id !== reqId || type !== "MIDPOINT") return;
+
+      for (const tick of historicalTicks) {
+        ticks.push({
+          type: "MIDPOINT",
+          time: tick.time,
+          price: tick.price,
+          size: tick.size,
+        });
+      }
+
+      if (!done || settled) return;
+      settled = true;
+      cleanup();
+      resolve(ticks);
+    };
+
+    const onHistoricalTicksBidAsk = (id: number, historicalTicks: HistoricalTickBidAsk[], done: boolean) => {
+      if (id !== reqId || type !== "BID_ASK") return;
+
+      for (const tick of historicalTicks) {
+        ticks.push({
+          type: "BID_ASK",
+          time: tick.time ?? 0,
+          bidPrice: tick.priceBid ?? 0,
+          askPrice: tick.priceAsk ?? 0,
+          bidSize: tick.sizeBid ?? 0,
+          askSize: tick.sizeAsk ?? 0,
+          bidPastLow: Boolean(tick.tickAttribBidAsk?.bidPastLow),
+          askPastHigh: Boolean(tick.tickAttribBidAsk?.askPastHigh),
+        });
+      }
+
+      if (!done || settled) return;
+      settled = true;
+      cleanup();
+      resolve(ticks);
+    };
+
+    const onHistoricalTicksLast = (id: number, historicalTicks: HistoricalTickLast[], done: boolean) => {
+      if (id !== reqId || type !== "TRADES") return;
+
+      for (const tick of historicalTicks) {
+        ticks.push({
+          type: "TRADES",
+          time: tick.time ?? 0,
+          price: tick.price ?? 0,
+          size: tick.size ?? 0,
+          exchange: tick.exchange ?? "",
+          specialConditions: tick.specialConditions ?? "",
+          pastLimit: Boolean(tick.tickAttribLast?.pastLimit),
+          unreported: Boolean(tick.tickAttribLast?.unreported),
+        });
+      }
+
+      if (!done || settled) return;
+      settled = true;
+      cleanup();
+      resolve(ticks);
+    };
+
+    const onError = (err: Error, code: ErrorCode, id: number) => {
+      if (id !== reqId) return;
+      if (isNonFatalError(code, err)) return;
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error(`Historical ticks error (${code}): ${err.message}`));
+    };
+
+    const cleanup = () => {
+      clearTimeout(timeout);
+      ib.off(EventName.historicalTicks, onHistoricalTicks);
+      ib.off(EventName.historicalTicksBidAsk, onHistoricalTicksBidAsk);
+      ib.off(EventName.historicalTicksLast, onHistoricalTicksLast);
+      ib.off(EventName.error, onError);
+    };
+
+    ib.on(EventName.historicalTicks, onHistoricalTicks);
+    ib.on(EventName.historicalTicksBidAsk, onHistoricalTicksBidAsk);
+    ib.on(EventName.historicalTicksLast, onHistoricalTicksLast);
+    ib.on(EventName.error, onError);
+
+    log.info({ reqId, symbol, type, count }, "Requesting IBKR historical ticks");
+    ib.reqHistoricalTicks(reqId, contract, startTime, endTime, count, type, 1, false);
   });
 }
