@@ -33,3 +33,14 @@ export function useEnsembleWeights() {
     queryFn: () => evalClient.getWeights(),
   });
 }
+
+export function useMultipleEvals(ids: string[]) {
+  return useQuery({
+    queryKey: ["eval-multiple", ids],
+    queryFn: async () => {
+      const results = await Promise.all(ids.map((id) => evalClient.getById(id)));
+      return results;
+    },
+    enabled: ids.length > 0,
+  });
+}

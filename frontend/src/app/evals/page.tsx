@@ -2,7 +2,7 @@
 
 import { Suspense, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Plus } from "lucide-react";
+import { Plus, GitCompare } from "lucide-react";
 import { useEvalHistory } from "@/lib/hooks/use-evals";
 import { EvalTable } from "@/components/eval-table/eval-table";
 import { EvalFilters } from "@/components/eval-table/eval-filters";
@@ -29,6 +29,8 @@ function EvalsContent() {
   const router = useRouter();
   const { data, isLoading } = useEvalHistory(100);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [compareMode, setCompareMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [filters, setFilters] = useState<EvalFilterState>({
     symbol: "",
     dateFrom: null,
@@ -41,6 +43,12 @@ function EvalsContent() {
   const handleEvalSuccess = (result: EvalResponse) => {
     setDialogOpen(false);
     router.push(`/evals/${result.id}`);
+  };
+
+  const handleCompare = () => {
+    if (selectedIds.length >= 2) {
+      router.push(`/evals/compare?ids=${selectedIds.join(",")}`);
+    }
   };
 
   // Apply filters client-side
@@ -90,17 +98,42 @@ function EvalsContent() {
             Full history of trade evaluations
           </p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              New Evaluation
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl">
-            <EvalTriggerForm onSuccess={handleEvalSuccess} />
-          </DialogContent>
-        </Dialog>
+        <div className="flex items-center gap-2">
+          {compareMode ? (
+            <>
+              <Button variant="outline" onClick={() => {
+                setCompareMode(false);
+                setSelectedIds([]);
+              }}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleCompare}
+                disabled={selectedIds.length < 2}
+              >
+                Compare Selected ({selectedIds.length})
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button variant="outline" onClick={() => setCompareMode(true)}>
+                <GitCompare className="mr-2 h-4 w-4" />
+                Compare
+              </Button>
+              <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button>
+                    <Plus className="mr-2 h-4 w-4" />
+                    New Evaluation
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-2xl">
+                  <EvalTriggerForm onSuccess={handleEvalSuccess} />
+                </DialogContent>
+              </Dialog>
+            </>
+          )}
+        </div>
       </div>
 
       <EvalFilters onFilterChange={setFilters} />
@@ -112,7 +145,12 @@ function EvalsContent() {
           ))}
         </div>
       ) : data ? (
-        <EvalTable evaluations={filteredEvaluations} />
+        <EvalTable
+          evaluations={filteredEvaluations}
+          selectionMode={compareMode}
+          selectedIds={selectedIds}
+          onSelectionChange={setSelectedIds}
+        />
       ) : (
         <p className="text-sm text-muted-foreground">Failed to load evaluations</p>
       )}

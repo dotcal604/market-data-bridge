@@ -19,18 +19,36 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ArrowUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Props {
   evaluations: Evaluation[];
+  selectedIds?: string[];
+  onSelectionChange?: (ids: string[]) => void;
+  selectionMode?: boolean;
 }
 
-export function EvalTable({ evaluations }: Props) {
+export function EvalTable({ evaluations, selectedIds = [], onSelectionChange, selectionMode = false }: Props) {
   const router = useRouter();
   const [sorting, setSorting] = useState<SortingState>([
     { id: "timestamp", desc: true },
   ]);
+
+  const handleCheckboxChange = (id: string, checked: boolean) => {
+    if (!onSelectionChange) return;
+    
+    if (checked) {
+      // Add to selection (max 5)
+      if (selectedIds.length < 5) {
+        onSelectionChange([...selectedIds, id]);
+      }
+    } else {
+      // Remove from selection
+      onSelectionChange(selectedIds.filter((selectedId) => selectedId !== id));
+    }
+  };
 
   const table = useReactTable({
     data: evaluations,
@@ -47,6 +65,11 @@ export function EvalTable({ evaluations }: Props) {
         <TableHeader>
           {table.getHeaderGroups().map((headerGroup) => (
             <TableRow key={headerGroup.id}>
+              {selectionMode && (
+                <TableHead className="w-12">
+                  <span className="text-xs text-muted-foreground">Select</span>
+                </TableHead>
+              )}
               {headerGroup.headers.map((header) => (
                 <TableHead
                   key={header.id}
@@ -68,23 +91,48 @@ export function EvalTable({ evaluations }: Props) {
           ))}
         </TableHeader>
         <TableBody>
-          {table.getRowModel().rows.map((row) => (
-            <TableRow
-              key={row.id}
-              className="cursor-pointer transition-colors hover:bg-accent/50"
-              onClick={() => router.push(`/evals/${row.original.id}`)}
-            >
-              {row.getVisibleCells().map((cell) => (
-                <TableCell key={cell.id} className="py-2">
-                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                </TableCell>
-              ))}
-            </TableRow>
-          ))}
+          {table.getRowModel().rows.map((row) => {
+            const isSelected = selectedIds.includes(row.original.id);
+            const isDisabled = selectionMode && !isSelected && selectedIds.length >= 5;
+            
+            return (
+              <TableRow
+                key={row.id}
+                className={cn(
+                  "transition-colors",
+                  !selectionMode && "cursor-pointer hover:bg-accent/50",
+                  isSelected && "bg-accent/30"
+                )}
+                onClick={() => {
+                  if (!selectionMode) {
+                    router.push(`/evals/${row.original.id}`);
+                  }
+                }}
+              >
+                {selectionMode && (
+                  <TableCell className="py-2">
+                    <Checkbox
+                      checked={isSelected}
+                      disabled={isDisabled}
+                      onCheckedChange={(checked) =>
+                        handleCheckboxChange(row.original.id, checked === true)
+                      }
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </TableCell>
+                )}
+                {row.getVisibleCells().map((cell) => (
+                  <TableCell key={cell.id} className="py-2">
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  </TableCell>
+                ))}
+              </TableRow>
+            );
+          })}
           {table.getRowModel().rows.length === 0 && (
             <TableRow>
               <TableCell
-                colSpan={evalColumns.length}
+                colSpan={evalColumns.length + (selectionMode ? 1 : 0)}
                 className="py-8 text-center text-sm text-muted-foreground"
               >
                 No evaluations found
