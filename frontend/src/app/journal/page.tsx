@@ -1,76 +1,42 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useJournalEntries } from "@/lib/hooks/use-journal";
+import { JournalTable } from "@/components/journal/journal-table";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { formatTimestamp } from "@/lib/utils/formatters";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Plus } from "lucide-react";
 
-interface JournalEntry {
-  id: number;
-  symbol: string | null;
-  strategy_version: string | null;
-  reasoning: string;
-  tags: string | null;
-  spy_price: number | null;
-  vix_level: number | null;
-  gap_pct: number | null;
-  time_of_day: string | null;
-  created_at: string;
-}
+const ITEMS_PER_PAGE = 25;
 
 export default function JournalPage() {
-  const router = useRouter();
-  const [entries, setEntries] = useState<JournalEntry[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [symbolFilter, setSymbolFilter] = useState("");
+  const [debouncedSymbol, setDebouncedSymbol] = useState("");
 
+  // Debounce symbol filter
   useEffect(() => {
-    fetchEntries();
-  }, []);
+    const timer = setTimeout(() => {
+      setDebouncedSymbol(symbolFilter);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [symbolFilter]);
 
-  const fetchEntries = async () => {
-    try {
-      const res = await fetch("/api/journal?limit=100");
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-      const data = await res.json();
-      setEntries(data.entries || []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to fetch journal entries");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const parseTags = (tagsJson: string | null): string[] => {
-    if (!tagsJson) return [];
-    try {
-      return JSON.parse(tagsJson);
-    } catch {
-      return [];
-    }
-  };
-
-  if (isLoading) {
-    return (
-      <div className="container mx-auto py-6">
-        <p className="text-muted-foreground">Loading journal entries...</p>
-      </div>
-    );
-  }
+  const { data: entries, isLoading, error } = useJournalEntries({
+    symbol: debouncedSymbol || undefined,
+    limit: ITEMS_PER_PAGE,
+  });
 
   return (
-    <div className="container mx-auto py-6">
-      <div className="flex items-center justify-between mb-6">
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Trade Journal</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {entries.length} {entries.length === 1 ? "entry" : "entries"}
+          <h1 className="text-2xl font-bold tracking-tight">Journal</h1>
+          <p className="text-sm text-muted-foreground">
+            Trade journal entries and post-trade reflections
           </p>
         </div>
         <Link href="/journal/new">
@@ -81,83 +47,57 @@ export default function JournalPage() {
         </Link>
       </div>
 
-      {error && (
-        <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive mb-4">
-          {error}
+      {/* Search Filter */}
+      <div className="flex items-end gap-4">
+        <div className="w-64 space-y-2">
+          <Label htmlFor="symbol" className="text-sm">
+            Filter by Symbol
+          </Label>
+          <Input
+            id="symbol"
+            type="text"
+            placeholder="e.g., AAPL"
+            value={symbolFilter}
+            onChange={(e) => setSymbolFilter(e.target.value.toUpperCase())}
+            className="font-mono"
+          />
         </div>
-      )}
+        {symbolFilter && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setSymbolFilter("")}
+          >
+            Clear
+          </Button>
+        )}
+      </div>
 
-      {entries.length === 0 ? (
-        <Card>
-          <CardContent className="py-10 text-center">
-            <p className="text-muted-foreground mb-4">No journal entries yet</p>
-            <Link href="/journal/new">
-              <Button>Create your first entry</Button>
-            </Link>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-4">
-          {entries.map((entry) => {
-            const tags = parseTags(entry.tags);
-            return (
-              <Card key={entry.id} className="bg-card hover:bg-muted/30 transition-colors">
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                      {entry.symbol && (
-                        <span className="font-mono text-lg font-bold">{entry.symbol}</span>
-                      )}
-                      {entry.strategy_version && (
-                        <Badge variant="outline" className="text-xs">
-                          {entry.strategy_version}
-                        </Badge>
-                      )}
-                    </div>
-                    <span className="text-xs text-muted-foreground">
-                      {formatTimestamp(entry.created_at)}
-                    </span>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div>
-                    <p className="text-sm whitespace-pre-wrap">{entry.reasoning}</p>
-                  </div>
-
-                  {tags.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {tags.map((tag) => (
-                        <Badge key={tag} variant="secondary" className="text-xs">
-                          {tag}
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Market Context Summary */}
-                  {(entry.spy_price !== null || entry.vix_level !== null || entry.gap_pct !== null) && (
-                    <div className="flex items-center gap-4 text-xs text-muted-foreground pt-2 border-t border-border">
-                      {entry.spy_price !== null && (
-                        <span>SPY: ${entry.spy_price.toFixed(2)}</span>
-                      )}
-                      {entry.vix_level !== null && (
-                        <span>VIX: {entry.vix_level.toFixed(2)}</span>
-                      )}
-                      {entry.gap_pct !== null && (
-                        <span>
-                          Gap: {entry.gap_pct >= 0 ? "+" : ""}
-                          {entry.gap_pct.toFixed(2)}%
-                        </span>
-                      )}
-                      {entry.time_of_day && <span>{entry.time_of_day}</span>}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })}
+      {/* Table */}
+      {isLoading ? (
+        <div className="space-y-2">
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-64 w-full" />
         </div>
-      )}
+      ) : error ? (
+        <div className="rounded-lg border border-border bg-card p-8 text-center">
+          <p className="text-sm text-destructive">
+            Error loading journal entries: {error.message}
+          </p>
+        </div>
+      ) : entries ? (
+        <>
+          <JournalTable entries={entries} />
+
+          {entries.length === 0 && !symbolFilter && (
+            <div className="rounded-lg border border-border bg-card p-8 text-center">
+              <p className="text-sm text-muted-foreground">
+                No journal entries yet. Create your first entry to get started.
+              </p>
+            </div>
+          )}
+        </>
+      ) : null}
     </div>
   );
 }
