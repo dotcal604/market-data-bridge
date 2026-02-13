@@ -195,11 +195,10 @@ export async function computePortfolioExposure(): Promise<PortfolioExposureRespo
   // Enrich positions with market value, sector, beta, and ATR
   const enrichedPositions: PositionWithValue[] = await Promise.all(
     positions.map(async (pos) => {
-      // Get current price from quote
-      let quote;
-      let currentPrice = pos.avgCost; // Fallback to avgCost if quote unavailable
+      // Get current price from quote (fallback to avgCost if unavailable)
+      let currentPrice: number;
       try {
-        quote = await getQuote(pos.symbol);
+        const quote = await getQuote(pos.symbol);
         if (quote.last !== null) {
           currentPrice = quote.last;
         } else {
@@ -207,12 +206,14 @@ export async function computePortfolioExposure(): Promise<PortfolioExposureRespo
             { symbol: pos.symbol },
             `Quote fetch succeeded but quote.last is null for ${pos.symbol}, using avgCost`
           );
+          currentPrice = pos.avgCost;
         }
       } catch (err: any) {
         logPortfolio.warn(
           { symbol: pos.symbol, error: err.message },
           `Failed to fetch quote for ${pos.symbol}, using avgCost as fallback`
         );
+        currentPrice = pos.avgCost;
       }
       const marketValue = pos.position * currentPrice;
       
