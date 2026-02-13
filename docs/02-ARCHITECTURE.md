@@ -7,39 +7,56 @@
 ```
 ┌──────────────┐     stdio (MCP)     ┌──────────────────┐      TCP socket       ┌──────────────┐
 │  Claude       │◄──────────────────►│                  │◄─────────────────────►│              │
-│  Desktop/Code │                    │   IBKR Market    │                       │  TWS /       │
+│  Desktop/Code │     56 tools       │   Market Data    │                       │  TWS /       │
 └──────────────┘                     │   Bridge         │                       │  IB Gateway  │
                                      │   (Node.js)      │                       │              │
-┌──────────────┐    HTTPS (REST)     │                  │                       │  Port 7496   │
-│  ChatGPT      │◄──────────────────►│  Port 3000       │                       │  or 7497     │
-│  Custom GPT   │    via ngrok       │                  │                       └──────────────┘
+┌──────────────┐    HTTPS (REST)     │                  │      Yahoo Finance    │  Port 7496   │
+│  ChatGPT      │◄──────────────────►│  Port 3000       │◄─────────────────────►│  or 7497     │
+│  Custom GPT   │  47 endpoints      │                  │     (fallback)        └──────────────┘
+└──────────────┘                     │                  │
+                                     │  ┌──────────────┐│
+┌──────────────┐    WebSocket        │  │  SQLite DB   ││
+│  Frontend     │◄──────────────────►│  │  - Evals     ││
+│  Next.js      │   real-time        │  │  - Journal   ││
+└──────────────┘                     │  │  - Orders    ││
+                                     │  └──────────────┘│
+┌──────────────┐                     │                  │
+│  Claude AI    │────┐                │  ┌──────────────┤
+│  GPT-4o       │    ├───API calls──►│  │  Eval Engine │
+│  Gemini Flash │────┘                │  └──────────────┘
 └──────────────┘                     └──────────────────┘
 ```
 
-The bridge is a process-level adapter. It converts TWS API's asynchronous event-driven protocol into two synchronous request/response interfaces: MCP (for Claude) and REST (for ChatGPT). Both interfaces share the same IBKR service layer and single TWS socket connection.
+The bridge is a full-featured trading platform adapter. It converts TWS API's asynchronous event-driven protocol into synchronous request/response interfaces: MCP (56 tools for Claude) and REST (47 endpoints for ChatGPT). It includes a multi-model AI evaluation engine, risk management system, and trade journal. All interfaces share the same IBKR service layer and single TWS socket connection.
 
 ---
 
 ## 2. Architectural Style
 
-**Layered Architecture** with three tiers:
+**Layered Architecture** with five tiers:
 
 | Layer | Responsibility | Files |
 |---|---|---|
-| **Interface** | Accept requests from AI clients, format responses | `mcp/server.ts`, `rest/routes.ts`, `rest/server.ts`, `rest/openapi.ts` |
-| **Service** | Business logic — request TWS data, aggregate events, resolve Promises | `ibkr/market-data.ts`, `ibkr/account.ts`, `ibkr/contracts.ts` |
-| **Infrastructure** | TWS socket lifecycle, configuration | `ibkr/connection.ts`, `config.ts` |
+| **Interface** | Accept requests from AI clients, format responses | `mcp/server.ts` (56 tools), `rest/routes.ts` (48 endpoints), `eval/routes.ts` (16 endpoints), `rest/server.ts`, `rest/openapi.ts`, `ws/server.ts` |
+| **Service** | Business logic — request TWS data, order execution, risk checks, position sizing | `ibkr/marketdata.ts`, `ibkr/account.ts`, `ibkr/orders.ts`, `ibkr/portfolio.ts`, `ibkr/risk.ts`, `ibkr/risk-gate.ts`, `providers/yahoo.ts` |
+| **Evaluation** | Multi-model AI evaluation, feature computation, ensemble scoring, guardrails | `eval/features/compute.ts`, `eval/models/runner.ts`, `eval/ensemble/scorer.ts`, `eval/guardrails/` |
+| **Data** | Persistent storage, queries, reconciliation | `db/database.ts`, `collab/store.ts`, `eval/ensemble/weights.ts` |
+| **Infrastructure** | TWS socket lifecycle, configuration, logging, scheduling | `ibkr/connection.ts`, `config.ts`, `logging.ts`, `scheduler.ts` |
 
 ### Key Architectural Decisions
 
 | # | Decision | Rationale |
 |---|---|---|
-| AD-1 | Single process, dual interface | Simplifies deployment. MCP (stdio) and REST (TCP) can coexist because MCP uses stdin/stdout while REST uses a TCP port — no conflict. |
+| AD-1 | Single process, triple interface | Simplifies deployment. MCP (stdio), REST (TCP), and WebSocket (HTTP upgrade) coexist without conflict. |
 | AD-2 | Singleton IBApi instance | TWS allows one socket per `clientId`. A singleton ensures all requests share the connection and avoids ID conflicts. |
 | AD-3 | Promise wrapping with `settled` guard | TWS events are asynchronous and can fire multiple times (or race with timeouts). A `settled` flag ensures each Promise resolves or rejects exactly once. |
 | AD-4 | Request ID isolation | Every TWS request gets a unique monotonic `reqId`. Event handlers filter on `reqId` so concurrent requests don't interfere. |
-| AD-5 | Read-only by design | No order-related API calls exist in the codebase. This is a deliberate safety constraint — the bridge cannot modify account state. |
-| AD-6 | Graceful degradation | The server starts even if TWS is offline. Auto-reconnect runs on a 5-second interval. Tools return errors until TWS is available. |
+| AD-5 | Yahoo Finance fallback | When IBKR disconnected, Yahoo Finance provides delayed quotes. Allows market research when TWS unavailable. |
+| AD-6 | Assist discretion mode | Evaluation engine produces scores and flags. Trader makes execution decision. No automated trading. |
+| AD-7 | Multi-model ensemble | Three AI models (Claude + GPT-4o + Gemini) provide independent evaluations. Weighted consensus reduces single-model bias. |
+| AD-8 | SQLite for persistence | better-sqlite3 with WAL mode provides fast synchronous queries for eval history, journal, and orders. |
+| AD-9 | Pure feature functions | Feature computation is deterministic math with no side effects. Testable and reproducible. |
+| AD-10 | Graceful degradation | The server starts even if TWS is offline. Auto-reconnect runs on a 5-second interval. Tools return errors until TWS is available. |
 
 ---
 

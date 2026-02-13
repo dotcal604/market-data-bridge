@@ -36,20 +36,125 @@ node build/index.js --mode mcp
 
 The server starts even if TWS isn't running yet — auto-reconnect retries every 5 seconds.
 
-## Available Tools / Endpoints
+## Available Tools / Endpoints (56 MCP Tools)
+
+The system provides **56 MCP tools** and **47 REST endpoints** across 11 functional categories:
+
+### Market Data & Research (14 tools)
 
 | Tool | REST Endpoint | Description |
 |------|--------------|-------------|
-| `get_quote` | `GET /api/quote/:symbol` | Real-time bid/ask/last/volume |
-| `get_historical_bars` | `GET /api/history/:symbol` | OHLCV bars |
-| `get_contract_details` | `GET /api/contract/:symbol` | Contract info |
-| `get_options_chain` | `GET /api/options/:symbol` | Expirations & strikes |
-| `get_option_quote` | `GET /api/options/:symbol/quote` | Option contract quote |
-| `get_account_summary` | `GET /api/account/summary` | Net liq, cash, margin |
-| `get_positions` | `GET /api/account/positions` | All positions |
-| `get_pnl` | `GET /api/account/pnl` | Daily P&L |
-| `search_contracts` | `GET /api/search?q=...` | Search by name/symbol |
-| `connection_status` | `GET /api/status` | Check TWS connection |
+| `get_status` | `GET /api/status` | Bridge status, market session, IBKR connection state |
+| `get_quote` | `GET /api/quote/:symbol` | Real-time quote (IBKR → Yahoo fallback) |
+| `get_historical_bars` | `GET /api/history/:symbol` | Historical OHLCV bars |
+| `get_stock_details` | `GET /api/details/:symbol` | Company info, sector, market cap, PE ratio |
+| `get_options_chain` | `GET /api/options/:symbol` | Option expirations, strikes, full chain |
+| `get_option_quote` | `GET /api/options/:symbol/quote` | Specific option contract quote |
+| `search_symbols` | `GET /api/search` | Search stocks/ETFs by name or symbol |
+| `get_news` | `GET /api/news/:query` | Recent news articles |
+| `get_financials` | `GET /api/financials/:symbol` | Revenue, margins, debt, analyst targets |
+| `get_earnings` | `GET /api/earnings/:symbol` | Earnings history, actual vs estimate |
+| `get_trending` | `GET /api/trending` | Currently trending symbols |
+| `get_screener_filters` | `GET /api/screener/filters` | Available screener IDs |
+| `run_screener` | `POST /api/screener/run` | Run stock screener (gainers, losers, etc.) |
+| `run_screener_with_quotes` | `POST /api/screener/run-with-quotes` | Screener with full quote data |
+
+### Account & Positions (4 tools)
+
+| Tool | REST Endpoint | Description |
+|------|--------------|-------------|
+| `get_account_summary` | `GET /api/account/summary` | Net liquidation, cash, buying power, margin |
+| `get_positions` | `GET /api/account/positions` | All current positions with P&L |
+| `get_pnl` | `GET /api/account/pnl` | Daily profit and loss breakdown |
+| `get_ibkr_quote` | `GET /api/ibkr/quote/:symbol` | Direct IBKR real-time quote snapshot |
+
+### Order Management (8 tools)
+
+| Tool | REST Endpoint | Description |
+|------|--------------|-------------|
+| `get_open_orders` | `GET /api/account/orders` | All open orders across clients |
+| `get_completed_orders` | `GET /api/account/orders/completed` | Filled/cancelled order history |
+| `get_executions` | `GET /api/account/executions` | Today's executions with commission |
+| `place_order` | `POST /api/order` | Single order (MKT, LMT, STP, TRAIL, etc.) |
+| `place_bracket_order` | `POST /api/order/bracket` | Simple bracket (entry + TP + SL) |
+| `place_advanced_bracket` | `POST /api/order/bracket-advanced` | Advanced bracket with OCA, trailing stops |
+| `cancel_order` | `DELETE /api/order/:orderId` | Cancel specific order by ID |
+| `cancel_all_orders` | `DELETE /api/orders/all` | Cancel ALL open orders globally |
+
+### Portfolio Analytics (3 tools)
+
+| Tool | REST Endpoint | Description |
+|------|--------------|-------------|
+| `portfolio_exposure` | `GET /api/portfolio/exposure` | Gross/net exposure, sector breakdown, beta, portfolio heat |
+| `stress_test` | `POST /api/portfolio/stress-test` | Portfolio stress test with beta-adjusted shocks |
+| `size_position` | `POST /api/risk/size-position` | Calculate safe position size (risk/capital/margin constraints) |
+
+### Flatten & EOD (2 tools)
+
+| Tool | REST Endpoint | Description |
+|------|--------------|-------------|
+| `flatten_positions` | `POST /api/positions/flatten` | Close all positions immediately with MKT orders |
+| `flatten_config` | `GET /api/flatten/config` | Get/set EOD auto-flatten schedule |
+
+### Collaboration Channel (4 tools)
+
+| Tool | REST Endpoint | Description |
+|------|--------------|-------------|
+| `collab_read` | `GET /api/collab/messages` | Read AI-to-AI collaboration messages |
+| `collab_post` | `POST /api/collab/message` | Post message to collaboration channel |
+| `collab_clear` | `DELETE /api/collab/messages` | Clear all collaboration messages |
+| `collab_stats` | `GET /api/collab/stats` | Collaboration channel statistics |
+
+### Risk & Session Management (5 tools)
+
+| Tool | REST Endpoint | Description |
+|------|--------------|-------------|
+| `session_state` | `GET /api/session` | Daily P&L, trade count, consecutive losses, cooldown status |
+| `session_record_trade` | `POST /api/session/trade` | Record completed trade for session tracking |
+| `session_lock` | `POST /api/session/lock` | Manually lock session to prevent new trades |
+| `session_unlock` | `POST /api/session/unlock` | Unlock session to resume trading |
+| `session_reset` | `POST /api/session/reset` | Reset session state at start of day |
+
+### Eval Engine (8 tools)
+
+| Tool | REST Endpoint | Description |
+|------|--------------|-------------|
+| `eval_stats` | `GET /api/eval/stats` | Model performance statistics, win rate, accuracy |
+| `simulate_weights` | `POST /api/eval/weights/simulate` | Re-score evaluations with custom weights |
+| `weight_history` | `GET /api/eval/weights/history` | Audit trail of weight changes |
+| `eval_outcomes` | `GET /api/eval/outcomes` | Evaluations with trade outcomes for calibration |
+| `record_outcome` | `POST /api/eval/outcome` | Record trade outcome for evaluation |
+| `eval_reasoning` | `GET /api/eval/:id/reasoning` | Per-model key drivers and conviction levels |
+| `drift_report` | `GET /api/eval/drift-report` | Model calibration drift analysis |
+| `daily_summary` | `GET /api/eval/daily-summary` | Daily session summaries with P&L and win rate |
+
+### Trade Journal (2 tools)
+
+| Tool | REST Endpoint | Description |
+|------|--------------|-------------|
+| `trade_journal_read` | `GET /api/journal` | Query journal entries by symbol or strategy |
+| `trade_journal_write` | `POST /api/journal` | Add or update journal entry with tags and outcome |
+
+### History & Reconciliation (2 tools)
+
+| Tool | REST Endpoint | Description |
+|------|--------------|-------------|
+| `orders_history` | `GET /api/orders/history` | Historical orders from local database |
+| `executions_history` | `GET /api/executions/history` | Historical executions from local database |
+
+### TraderSync Integration (3 tools)
+
+| Tool | REST Endpoint | Description |
+|------|--------------|-------------|
+| `tradersync_import` | `POST /api/eval/tradersync/import` | Import TraderSync CSV trade data |
+| `tradersync_stats` | `GET /api/eval/tradersync/stats` | Aggregate stats from imported trades |
+| `tradersync_trades` | `GET /api/eval/tradersync/trades` | Query imported TraderSync trades |
+
+### Contract Details (1 tool)
+
+| Tool | REST Endpoint | Description |
+|------|--------------|-------------|
+| `get_contract_details` | `GET /api/contract/:symbol` | IBKR contract metadata, trading hours, exchanges |
 
 ---
 
@@ -112,7 +217,7 @@ ngrok will give you a URL like `https://abc123.ngrok-free.app`.
 1. Go to [ChatGPT](https://chat.openai.com) > Explore GPTs > Create
 2. In the **Configure** tab, scroll to **Actions** > **Create new action**
 3. Click **Import from URL** and enter: `https://abc123.ngrok-free.app/openapi.json`
-4. It will import all 10 endpoints automatically
+4. It will import all 47 endpoints automatically
 5. Set the **Server URL** to your ngrok URL if not auto-detected
 6. Save and test
 
