@@ -30,6 +30,9 @@ import {
   insertJournalEntry,
   updateJournalEntry,
   getJournalById,
+  getDailySummaries,
+  getTodaysTrades,
+  getEvalStats,
 } from "../db/database.js";
 
 export function createMcpServer(): McpServer {
@@ -801,6 +804,67 @@ export function createMcpServer(): McpServer {
       try {
         const executions = queryExecutions(params);
         return { content: [{ type: "text", text: JSON.stringify({ count: (executions as any[]).length, executions }, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: daily_summary ---
+  server.tool(
+    "daily_summary",
+    "Get daily session summaries — P&L, win rate, avg R, best/worst R per day. Query params: date (single day, e.g. '2026-02-13') or days (last N days, e.g. 30). Returns sessions array + rolling totals.",
+    {
+      date: z.string().optional().describe("Single date filter (YYYY-MM-DD)"),
+      days: z.number().optional().describe("Last N days to include (default: all)"),
+    },
+    async (params) => {
+      try {
+        const summaries = getDailySummaries({
+          date: params.date,
+          days: params.days,
+        });
+
+        const trades = params.date ? getTodaysTrades() : undefined;
+
+        let totalTrades = 0, totalWins = 0, totalLosses = 0, totalR = 0;
+        for (const s of summaries) {
+          totalTrades += s.total_trades;
+          totalWins += s.wins;
+          totalLosses += s.losses;
+          totalR += s.total_r ?? 0;
+        }
+
+        const result = {
+          sessions: summaries,
+          ...(trades ? { trades } : {}),
+          rolling: {
+            total_trades: totalTrades,
+            wins: totalWins,
+            losses: totalLosses,
+            win_rate: totalTrades > 0 ? totalWins / totalTrades : null,
+            avg_r: totalTrades > 0 ? totalR / totalTrades : null,
+            total_r: totalR,
+            days_with_trades: summaries.length,
+          },
+        };
+
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: eval_stats ---
+  server.tool(
+    "eval_stats",
+    "Get model performance statistics — total evaluations, average scores, win rate, model accuracy. Includes per-model breakdown.",
+    {},
+    async () => {
+      try {
+        const stats = getEvalStats();
+        return { content: [{ type: "text", text: JSON.stringify(stats, null, 2) }] };
       } catch (e: any) {
         return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
       }

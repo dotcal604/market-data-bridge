@@ -649,7 +649,7 @@ export function getEvalStats(): Record<string, unknown> {
 
   // Calculate aggregate stats
   const evalAggregates = db.prepare(`
-    SELECT 
+    SELECT
       AVG(ensemble_trade_score) as avg_score,
       AVG(total_latency_ms) as avg_latency_ms,
       SUM(CASE WHEN ensemble_should_trade = 1 THEN 1 ELSE 0 END) * 1.0 / COUNT(*) as trade_rate,
@@ -659,10 +659,18 @@ export function getEvalStats(): Record<string, unknown> {
   `).get() as any;
 
   const outcomeAggregates = db.prepare(`
-    SELECT AVG(r_multiple) as avg_r_multiple, COUNT(*) as outcomes_recorded
+    SELECT
+      AVG(r_multiple) as avg_r_multiple,
+      COUNT(*) as outcomes_recorded,
+      SUM(CASE WHEN r_multiple > 0 THEN 1 ELSE 0 END) as wins,
+      SUM(CASE WHEN r_multiple <= 0 THEN 1 ELSE 0 END) as losses
     FROM outcomes
     WHERE trade_taken = 1 AND r_multiple IS NOT NULL
   `).get() as any;
+
+  const wins = outcomeAggregates?.wins ?? 0;
+  const losses = outcomeAggregates?.losses ?? 0;
+  const totalTrades = wins + losses;
 
   // Build model_compliance map
   const modelCompliance: Record<string, number> = {};
@@ -681,8 +689,102 @@ export function getEvalStats(): Record<string, unknown> {
     model_compliance: modelCompliance,
     outcomes_recorded: outcomeAggregates?.outcomes_recorded ?? 0,
     avg_r_multiple: outcomeAggregates?.avg_r_multiple ?? null,
-    model_stats: modelStats, // Include raw model stats for detailed breakdown
+    wins,
+    losses,
+    win_rate: totalTrades > 0 ? wins / totalTrades : null,
+    model_stats: modelStats,
   };
+}
+
+// ── Daily Session Summary ────────────────────────────────────────────────
+
+export interface DailySummaryRow {
+  session_date: string;
+  total_trades: number;
+  wins: number;
+  losses: number;
+  win_rate: number;
+  avg_r: number | null;
+  best_r: number | null;
+  worst_r: number | null;
+  total_r: number | null;
+  symbols_traded: string;
+}
+
+/**
+ * Get daily session summaries — P&L, win rate, avg R grouped by date.
+ * Win = r_multiple > 0, Loss = r_multiple <= 0.
+ */
+export function getDailySummaries(opts: { days?: number; date?: string } = {}): DailySummaryRow[] {
+  if (opts.date) {
+    // Single day
+    return db.prepare(`
+      SELECT
+        DATE(o.recorded_at) as session_date,
+        COUNT(*) as total_trades,
+        SUM(CASE WHEN o.r_multiple > 0 THEN 1 ELSE 0 END) as wins,
+        SUM(CASE WHEN o.r_multiple <= 0 THEN 1 ELSE 0 END) as losses,
+        CAST(SUM(CASE WHEN o.r_multiple > 0 THEN 1 ELSE 0 END) AS FLOAT) / COUNT(*) as win_rate,
+        AVG(o.r_multiple) as avg_r,
+        MAX(o.r_multiple) as best_r,
+        MIN(o.r_multiple) as worst_r,
+        SUM(o.r_multiple) as total_r,
+        GROUP_CONCAT(DISTINCT e.symbol) as symbols_traded
+      FROM outcomes o
+      JOIN evaluations e ON o.evaluation_id = e.id
+      WHERE o.trade_taken = 1 AND o.r_multiple IS NOT NULL
+        AND DATE(o.recorded_at) = ?
+      GROUP BY DATE(o.recorded_at)
+    `).all(opts.date) as DailySummaryRow[];
+  }
+
+  // Multiple days (default: last 30)
+  const days = opts.days ?? 30;
+  return db.prepare(`
+    SELECT
+      DATE(o.recorded_at) as session_date,
+      COUNT(*) as total_trades,
+      SUM(CASE WHEN o.r_multiple > 0 THEN 1 ELSE 0 END) as wins,
+      SUM(CASE WHEN o.r_multiple <= 0 THEN 1 ELSE 0 END) as losses,
+      CAST(SUM(CASE WHEN o.r_multiple > 0 THEN 1 ELSE 0 END) AS FLOAT) / COUNT(*) as win_rate,
+      AVG(o.r_multiple) as avg_r,
+      MAX(o.r_multiple) as best_r,
+      MIN(o.r_multiple) as worst_r,
+      SUM(o.r_multiple) as total_r,
+      GROUP_CONCAT(DISTINCT e.symbol) as symbols_traded
+    FROM outcomes o
+    JOIN evaluations e ON o.evaluation_id = e.id
+    WHERE o.trade_taken = 1 AND o.r_multiple IS NOT NULL
+      AND o.recorded_at >= datetime('now', ? || ' days')
+    GROUP BY DATE(o.recorded_at)
+    ORDER BY session_date DESC
+  `).all(`-${days}`) as DailySummaryRow[];
+}
+
+/**
+ * Get today's trades as individual rows (for detailed session view).
+ */
+export function getTodaysTrades(): Array<Record<string, unknown>> {
+  return db.prepare(`
+    SELECT
+      e.id as evaluation_id,
+      e.symbol,
+      e.direction,
+      e.ensemble_trade_score,
+      e.ensemble_should_trade,
+      e.time_of_day,
+      o.actual_entry_price,
+      o.actual_exit_price,
+      o.r_multiple,
+      o.exit_reason,
+      o.notes,
+      o.recorded_at
+    FROM outcomes o
+    JOIN evaluations e ON o.evaluation_id = e.id
+    WHERE o.trade_taken = 1
+      AND DATE(o.recorded_at) = DATE('now')
+    ORDER BY o.recorded_at DESC
+  `).all() as Array<Record<string, unknown>>;
 }
 
 export function isDbWritable(): boolean {

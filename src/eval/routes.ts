@@ -18,6 +18,8 @@ import {
   getRecentEvaluations,
   getRecentOutcomes,
   getEvalStats,
+  getDailySummaries,
+  getTodaysTrades,
 } from "../db/database.js";
 import { logger } from "../logging.js";
 
@@ -254,6 +256,50 @@ evalRouter.get("/stats", (_req, res) => {
 // GET /weights — current ensemble weights
 evalRouter.get("/weights", (_req, res) => {
   res.json(getWeights());
+});
+
+// GET /daily-summary — session-level P&L, win rate, avg R
+// Query params: ?date=2026-02-13 (single day) or ?days=30 (range)
+evalRouter.get("/daily-summary", (req, res) => {
+  try {
+    const date = typeof req.query.date === "string" ? req.query.date : undefined;
+    const daysStr = typeof req.query.days === "string" ? req.query.days : undefined;
+    const days = daysStr ? parseInt(daysStr, 10) : undefined;
+
+    const summaries = getDailySummaries({
+      date,
+      days: isNaN(days as number) ? undefined : days,
+    });
+
+    // If asking for a specific date, also return individual trades
+    const trades = date ? getTodaysTrades() : undefined;
+
+    // Compute rolling totals across all returned days
+    let totalTrades = 0, totalWins = 0, totalLosses = 0, totalR = 0;
+    for (const s of summaries) {
+      totalTrades += s.total_trades;
+      totalWins += s.wins;
+      totalLosses += s.losses;
+      totalR += s.total_r ?? 0;
+    }
+
+    res.json({
+      sessions: summaries,
+      ...(trades ? { trades } : {}),
+      rolling: {
+        total_trades: totalTrades,
+        wins: totalWins,
+        losses: totalLosses,
+        win_rate: totalTrades > 0 ? totalWins / totalTrades : null,
+        avg_r: totalTrades > 0 ? totalR / totalTrades : null,
+        total_r: totalR,
+        days_with_trades: summaries.length,
+      },
+    });
+  } catch (e: any) {
+    logger.error({ err: e }, "[Eval] daily-summary failed");
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // GET /:id — single evaluation with model outputs and outcome
