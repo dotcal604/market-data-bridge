@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
+import { evalReasoningSchemaSql } from "./schema.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dataDir = path.join(__dirname, "../../data");
@@ -10,6 +11,10 @@ if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
 const dbPath = path.join(dataDir, "bridge.db");
 const db: DatabaseType = new Database(dbPath);
+
+export function getDb(): DatabaseType {
+  return db;
+}
 
 // WAL mode — prevents event loop blocking during concurrent reads/writes
 db.pragma("journal_mode = WAL");
@@ -242,20 +247,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_model_model_id ON model_outputs(model_id);
   CREATE INDEX IF NOT EXISTS idx_outcome_eval_id ON outcomes(evaluation_id);
 
-  -- Structured reasoning extracted from model responses
-  CREATE TABLE IF NOT EXISTS eval_reasoning (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    evaluation_id TEXT NOT NULL REFERENCES evaluations(id),
-    model_id TEXT NOT NULL,
-    key_drivers TEXT NOT NULL,     -- JSON array of {feature, direction, weight}
-    risk_factors TEXT NOT NULL,    -- JSON array of strings
-    uncertainties TEXT NOT NULL,   -- JSON array of strings
-    conviction TEXT,               -- "high" | "medium" | "low"
-    timestamp TEXT NOT NULL DEFAULT (datetime('now')),
-    UNIQUE(evaluation_id, model_id)
-  );
-  CREATE INDEX IF NOT EXISTS idx_reasoning_eval_id ON eval_reasoning(evaluation_id);
-  CREATE INDEX IF NOT EXISTS idx_reasoning_model_id ON eval_reasoning(model_id);
+  ${evalReasoningSchemaSql}
 
   -- TraderSync imported trades (actual trade history for calibration + analytics)
   CREATE TABLE IF NOT EXISTS tradersync_trades (

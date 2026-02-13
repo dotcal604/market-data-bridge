@@ -30,11 +30,26 @@ import {
   getWeightHistory,
 } from "../db/database.js";
 import { importTraderSyncCSV } from "../tradersync/importer.js";
-import { generateDriftReport } from "./drift-detector.js";
+import { computeDriftReport } from "./drift.js";
 import { extractStructuredReasoning } from "./reasoning/extractor.js";
 import { logger } from "../logging.js";
 
 export const evalRouter = Router();
+
+
+function buildReasoningResponse(evalId: string): { evaluation_id: string; models: Record<string, unknown> } {
+  const rows = getReasoningForEval(evalId);
+  const models: Record<string, unknown> = {};
+  for (const row of rows) {
+    models[row.model_id as string] = {
+      key_drivers: JSON.parse(row.key_drivers as string),
+      risk_factors: JSON.parse(row.risk_factors as string),
+      uncertainties: JSON.parse(row.uncertainties as string),
+      conviction: row.conviction,
+    };
+  }
+  return { evaluation_id: evalId, models };
+}
 
 // POST /evaluate — full evaluation pipeline
 evalRouter.post("/evaluate", async (req, res) => {
@@ -621,13 +636,13 @@ evalRouter.get("/outcomes", (req, res) => {
 
 // ── Drift Detection ──────────────────────────────────────────────────────
 
-// GET /drift-report — model calibration drift report
-evalRouter.get("/drift-report", (req, res) => {
+// GET /drift — model accuracy and calibration drift report
+evalRouter.get("/drift", (_req, res) => {
   try {
-    const days = Number(req.query.days) || 90;
-    const report = generateDriftReport(days);
-    res.json(report);
+    const report = computeDriftReport();
+    res.json({ data: report });
   } catch (e: any) {
+    logger.error({ err: e }, "[Eval] drift failed");
     res.status(500).json({ error: e.message });
   }
 });
@@ -675,25 +690,33 @@ evalRouter.get("/tradersync/trades", (req, res) => {
   }
 });
 
-// GET /:id/reasoning — structured reasoning for an evaluation
-evalRouter.get("/:id/reasoning", (req, res) => {
+// GET /reasoning/:evalId — structured reasoning for an evaluation
+evalRouter.get("/reasoning/:evalId", (req, res) => {
   try {
-    const evaluation = getEvaluationById(req.params.id);
+    const evalId = req.params.evalId;
+    const evaluation = getEvaluationById(evalId);
     if (!evaluation) {
       res.status(404).json({ error: "Evaluation not found" });
       return;
     }
-    const rows = getReasoningForEval(req.params.id);
-    const models: Record<string, unknown> = {};
-    for (const row of rows) {
-      models[row.model_id as string] = {
-        key_drivers: JSON.parse(row.key_drivers as string),
-        risk_factors: JSON.parse(row.risk_factors as string),
-        uncertainties: JSON.parse(row.uncertainties as string),
-        conviction: row.conviction,
-      };
+
+    res.json(buildReasoningResponse(evalId));
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /:id/reasoning — backwards-compatible alias
+evalRouter.get("/:id/reasoning", (req, res) => {
+  try {
+    const evalId = req.params.id;
+    const evaluation = getEvaluationById(evalId);
+    if (!evaluation) {
+      res.status(404).json({ error: "Evaluation not found" });
+      return;
     }
-    res.json({ evaluation_id: req.params.id, models });
+
+    res.json(buildReasoningResponse(evalId));
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }

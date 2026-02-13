@@ -62,7 +62,7 @@ import {
   getTraderSyncStats,
   getWeightHistory,
 } from "../db/database.js";
-import { generateDriftReport } from "../eval/drift-detector.js";
+import { computeDriftReport } from "../eval/drift.js";
 import { importTraderSyncCSV } from "../tradersync/importer.js";
 import { computeEnsembleWithWeights } from "../eval/ensemble/scorer.js";
 import { getWeights } from "../eval/ensemble/weights.js";
@@ -1846,15 +1846,22 @@ export function createMcpServer(): McpServer {
     "eval_reasoning",
     "Get structured reasoning for an evaluation. Returns per-model key_drivers (which features drove the decision), risk_factors, uncertainties, and conviction level. Use for drift detection and disagreement diagnosis.",
     {
-      evaluation_id: z.string().describe("Evaluation ID"),
+      evalId: z.string().optional().describe("Evaluation ID"),
+      evaluation_id: z.string().optional().describe("Legacy alias for evaluation ID"),
     },
     async (params) => {
       try {
-        const evaluation = getEvaluationById(params.evaluation_id);
-        if (!evaluation) {
-          return { content: [{ type: "text", text: JSON.stringify({ error: `Evaluation ${params.evaluation_id} not found` }) }], isError: true };
+        const evalId = params.evalId ?? params.evaluation_id;
+        if (!evalId) {
+          return { content: [{ type: "text", text: JSON.stringify({ error: "evalId is required" }) }], isError: true };
         }
-        const rows = getReasoningForEval(params.evaluation_id);
+
+        const evaluation = getEvaluationById(evalId);
+        if (!evaluation) {
+          return { content: [{ type: "text", text: JSON.stringify({ error: `Evaluation ${evalId} not found` }) }], isError: true };
+        }
+
+        const rows = getReasoningForEval(evalId);
         const models: Record<string, unknown> = {};
         for (const row of rows) {
           models[row.model_id as string] = {
@@ -1864,7 +1871,7 @@ export function createMcpServer(): McpServer {
             conviction: row.conviction,
           };
         }
-        return { content: [{ type: "text", text: JSON.stringify({ evaluation_id: params.evaluation_id, models }, null, 2) }] };
+        return { content: [{ type: "text", text: JSON.stringify({ evaluation_id: evalId, models }, null, 2) }] };
       } catch (e: any) {
         return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
       }
@@ -1874,13 +1881,11 @@ export function createMcpServer(): McpServer {
   // --- Tool: drift_report ---
   server.tool(
     "drift_report",
-    "Generate model calibration drift report. Compares per-model confidence buckets (0-25, 25-50, 50-75, 75-100) against actual win rates. Flags models where any bucket deviates >15% from expected. Use to detect when models need recalibration.",
-    {
-      days: z.number().optional().default(90).describe("Lookback period in days (default: 90)"),
-    },
-    async (params) => {
+    "Generate a drift report with rolling model accuracy (last 50/20/10), calibration error by score decile, and regime-shift detection.",
+    {},
+    async () => {
       try {
-        const report = generateDriftReport(params.days);
+        const report = computeDriftReport();
         return { content: [{ type: "text", text: JSON.stringify(report, null, 2) }] };
       } catch (e: any) {
         return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
