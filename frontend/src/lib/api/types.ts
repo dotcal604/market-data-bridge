@@ -173,6 +173,26 @@ export interface EvalResponse {
   latency_ms: Record<string, number>;
 }
 
+// Collaboration types
+export interface CollabMessage {
+  id: string;
+  author: "claude" | "chatgpt" | "user";
+  content: string;
+  timestamp: string;
+  replyTo?: string;
+  tags?: string[];
+}
+
+export interface CollabStats {
+  totalMessages: number;
+  byAuthor: Record<string, number>;
+}
+
+export interface PostMessageInput {
+  content: string;
+  tags?: string;
+}
+
 // Account types
 export interface IBKRStatus {
   connected: boolean;

@@ -12,6 +12,7 @@ import {
   ShoppingCart,
   Receipt,
   Wallet,
+  MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -24,6 +25,7 @@ const NAV_ITEMS = [
   { href: "/weights", label: "Weights", icon: SlidersHorizontal },
   { href: "/orders", label: "Orders", icon: ShoppingCart },
   { href: "/account", label: "Account", icon: Wallet },
+  { href: "/collab", label: "Collaboration", icon: MessageSquare },
 ] as const;
 
 export function Sidebar() {
