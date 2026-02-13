@@ -499,6 +499,44 @@ export const openApiSpec = {
         },
       },
     },
+    "/api/data/recommendations/{symbol}": {
+      get: {
+        operationId: "getRecommendations",
+        summary: "Get Yahoo analyst recommendation trend counts by period",
+        parameters: [
+          { name: "symbol", in: "path", required: true, schema: { type: "string" }, description: "Ticker symbol" },
+        ],
+        responses: {
+          "200": {
+            description: "Analyst recommendation trend",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    symbol: { type: "string" },
+                    trend: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          period: { type: "string" },
+                          strongBuy: { type: "integer" },
+                          buy: { type: "integer" },
+                          hold: { type: "integer" },
+                          sell: { type: "integer" },
+                          strongSell: { type: "integer" },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
     "/api/trending": {
       get: {
         operationId: "getTrending",

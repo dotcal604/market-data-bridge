@@ -185,6 +185,18 @@ export interface EarningsData {
   } | null;
 }
 
+export interface RecommendationTrendData {
+  symbol: string;
+  trend: Array<{
+    period: string;
+    strongBuy: number;
+    buy: number;
+    hold: number;
+    sell: number;
+    strongSell: number;
+  }>;
+}
+
 export interface ScreenerResult {
   rank: number;
   symbol: string;
@@ -494,6 +506,23 @@ export async function getEarnings(symbol: string): Promise<EarningsData> {
   }
 
   return { symbol, earningsChart, financialsChart };
+}
+
+export async function getRecommendations(symbol: string): Promise<RecommendationTrendData> {
+  const qs = await yahooCall(symbol, () =>
+    yf.quoteSummary(symbol, { modules: ["recommendationTrend"] })
+  );
+
+  const trend = (qs.recommendationTrend?.trend ?? []).map((item: any) => ({
+    period: item.period ?? "",
+    strongBuy: item.strongBuy ?? 0,
+    buy: item.buy ?? 0,
+    hold: item.hold ?? 0,
+    sell: item.sell ?? 0,
+    strongSell: item.strongSell ?? 0,
+  }));
+
+  return { symbol, trend };
 }
 
 export async function getTrendingSymbols(
