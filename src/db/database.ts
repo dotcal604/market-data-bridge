@@ -213,6 +213,10 @@ db.exec(`
     evaluation_id TEXT NOT NULL UNIQUE REFERENCES evaluations(id),
     trade_taken INTEGER NOT NULL,
     decision_type TEXT,         -- "took_trade", "passed_setup", "ensemble_no", "risk_gate_blocked"
+    -- Behavioral fields (tag post-session alongside outcome recording)
+    confidence_rating INTEGER,  -- 1=low, 2=medium, 3=high (trader's subjective confidence)
+    rule_followed INTEGER,      -- 1=yes, 0=no (did trader follow their own rules?)
+    setup_type TEXT,            -- e.g. "breakout", "pullback", "reversal", "gap_fill", "momentum"
     actual_entry_price REAL,
     actual_exit_price REAL,
     r_multiple REAL,
@@ -249,13 +253,16 @@ function addColumnIfMissing(table: string, column: string, type: string): void {
   }
 }
 
-// v2: Behavioral fields on trade_journal
+// v2: Behavioral fields on trade_journal (legacy — kept for existing data)
 addColumnIfMissing("trade_journal", "confidence_rating", "INTEGER");
 addColumnIfMissing("trade_journal", "rule_followed", "INTEGER");
 addColumnIfMissing("trade_journal", "setup_type", "TEXT");
 
-// v2: Decision type on outcomes (took_trade / passed_setup / ensemble_no / risk_gate_blocked)
+// v2: Decision type + behavioral fields on outcomes (primary location)
 addColumnIfMissing("outcomes", "decision_type", "TEXT");
+addColumnIfMissing("outcomes", "confidence_rating", "INTEGER");
+addColumnIfMissing("outcomes", "rule_followed", "INTEGER");
+addColumnIfMissing("outcomes", "setup_type", "TEXT");
 
 // ── Prepared Statements ──────────────────────────────────────────────────
 
@@ -741,6 +748,10 @@ export interface EvalOutcomeRow {
   liquidity_bucket: string;
   rvol: number;
   trade_taken: number;
+  decision_type: string | null;
+  confidence_rating: number | null;
+  rule_followed: number | null;
+  setup_type: string | null;
   r_multiple: number | null;
   exit_reason: string | null;
   recorded_at: string;
@@ -789,6 +800,10 @@ export function getEvalOutcomes(opts: {
       e.liquidity_bucket,
       e.rvol,
       o.trade_taken,
+      o.decision_type,
+      o.confidence_rating,
+      o.rule_followed,
+      o.setup_type,
       o.r_multiple,
       o.exit_reason,
       o.recorded_at

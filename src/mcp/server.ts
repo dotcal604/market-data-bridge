@@ -1024,12 +1024,15 @@ export function createMcpServer(): McpServer {
   // --- Tool: record_outcome ---
   server.tool(
     "record_outcome",
-    "Record a trade outcome for an evaluation. Supports both executed trades (with R-multiple) and passed setups (decision_type='passed_setup' for negative examples).",
+    "Record a trade outcome for an evaluation. Tag behavioral fields (confidence, rule_followed, setup_type) alongside the outcome for edge analytics. Supports passed setups as negative examples (decision_type='passed_setup').",
     {
       evaluation_id: z.string().describe("Evaluation ID to record outcome for"),
       trade_taken: z.boolean().optional().describe("Whether the trade was executed (default: false)"),
       decision_type: z.enum(["took_trade", "passed_setup", "ensemble_no", "risk_gate_blocked"]).optional()
         .describe("Why this outcome exists: took_trade (executed), passed_setup (saw it, chose not to), ensemble_no (model said no), risk_gate_blocked"),
+      confidence_rating: z.number().min(1).max(3).optional().describe("Trader confidence: 1=low, 2=medium, 3=high"),
+      rule_followed: z.boolean().optional().describe("Did trader follow their own rules?"),
+      setup_type: z.string().optional().describe("Setup type: breakout, pullback, reversal, gap_fill, momentum"),
       actual_entry_price: z.number().optional().describe("Actual entry price"),
       actual_exit_price: z.number().optional().describe("Actual exit price"),
       r_multiple: z.number().optional().describe("Risk-reward outcome (positive = win)"),
@@ -1047,6 +1050,9 @@ export function createMcpServer(): McpServer {
           evaluation_id: params.evaluation_id,
           trade_taken: params.trade_taken ? 1 : 0,
           decision_type: params.decision_type ?? null,
+          confidence_rating: params.confidence_rating ?? null,
+          rule_followed: params.rule_followed != null ? (params.rule_followed ? 1 : 0) : null,
+          setup_type: params.setup_type ?? null,
           actual_entry_price: params.actual_entry_price ?? null,
           actual_exit_price: params.actual_exit_price ?? null,
           r_multiple: params.r_multiple ?? null,

@@ -198,6 +198,9 @@ evalRouter.post("/outcome", (req, res) => {
       evaluation_id,
       trade_taken = false,
       decision_type = null,
+      confidence_rating = null,
+      rule_followed = null,
+      setup_type = null,
       actual_entry_price = null,
       actual_exit_price = null,
       r_multiple = null,
@@ -215,6 +218,11 @@ evalRouter.post("/outcome", (req, res) => {
       return;
     }
 
+    if (confidence_rating != null && (confidence_rating < 1 || confidence_rating > 3)) {
+      res.status(400).json({ error: "confidence_rating must be 1 (low), 2 (medium), or 3 (high)" });
+      return;
+    }
+
     const existing = getEvaluationById(evaluation_id);
     if (!existing) {
       res.status(404).json({ error: `Evaluation ${evaluation_id} not found` });
@@ -225,6 +233,9 @@ evalRouter.post("/outcome", (req, res) => {
       evaluation_id,
       trade_taken: trade_taken ? 1 : 0,
       decision_type,
+      confidence_rating,
+      rule_followed: rule_followed != null ? (rule_followed ? 1 : 0) : null,
+      setup_type,
       actual_entry_price,
       actual_exit_price,
       r_multiple,

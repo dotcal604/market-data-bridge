@@ -165,7 +165,8 @@ def load_eval_outcomes(
         evaluation_id, symbol, direction, timestamp,
         ensemble_trade_score, ensemble_confidence, ensemble_expected_rr,
         ensemble_should_trade, time_of_day, volatility_regime, liquidity_bucket,
-        rvol, trade_taken, r_multiple, exit_reason, recorded_at
+        rvol, trade_taken, decision_type, confidence_rating, rule_followed,
+        setup_type, r_multiple, exit_reason, recorded_at
     """
     conn = _connect()
     conditions: list[str] = []
@@ -192,7 +193,9 @@ def load_eval_outcomes(
             e.ensemble_expected_rr, e.ensemble_should_trade,
             e.time_of_day, e.volatility_regime, e.liquidity_bucket,
             e.rvol, e.minutes_since_open,
-            o.trade_taken, o.r_multiple, o.exit_reason, o.recorded_at
+            o.trade_taken, o.decision_type,
+            o.confidence_rating, o.rule_followed, o.setup_type,
+            o.r_multiple, o.exit_reason, o.recorded_at
         FROM evaluations e
         JOIN outcomes o ON o.evaluation_id = e.id
         {where}
