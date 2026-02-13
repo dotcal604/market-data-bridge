@@ -119,6 +119,18 @@ Yahoo (always available): get_quote, get_historical_bars, get_financials, get_ea
 - orders_history — { symbol?, strategy?, limit? } — limit default 100
 - executions_history — { symbol?, limit? } — limit default 100
 
+### Eval Engine
+- eval_stats — no params. Returns aggregate eval performance stats.
+- eval_outcomes — { limit?, symbol?, days?, all? } — returns evaluations joined with outcomes. all=true includes non-traded rows.
+- record_outcome — { evaluation_id, trade_taken?, decision_type?, confidence_rating?, rule_followed?, setup_type?, actual_entry_price?, actual_exit_price?, r_multiple?, exit_reason?, notes? }
+  - decision_type: "took_trade"|"passed_setup"|"ensemble_no"|"risk_gate_blocked"
+  - confidence_rating: 1|2|3
+- eval_reasoning — { evalId? , evaluation_id? } — either key accepted; returns per-model key_drivers/risk_factors/uncertainties/conviction.
+- simulate_weights — { claude, gpt4o, gemini, k?, days?, symbol? } — re-scores history using custom ensemble weights.
+- weight_history — { limit? } — returns prior weight snapshots (default 100, max 500).
+- drift_report — no params. Returns model drift and calibration diagnostics.
+- daily_summary — { date?, days? } — session summaries + rolling totals; use date as YYYY-MM-DD for single day.
+
 ## ORDER EXECUTION RULES
 ALWAYS use place_advanced_bracket for bracket orders. NEVER manually sequence entry then TP/SL.
 ALWAYS call size_position before placing trades.
