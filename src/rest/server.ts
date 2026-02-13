@@ -4,6 +4,8 @@ import rateLimit from "express-rate-limit";
 import path from "path";
 import { fileURLToPath } from "url";
 import { existsSync } from "fs";
+import { spawn } from "child_process";
+import { createProxyMiddleware } from "http-proxy-middleware";
 import { router } from "./routes.js";
 import { evalRouter } from "../eval/routes.js";
 import { openApiSpec } from "./openapi.js";
@@ -119,17 +121,62 @@ export function startRestServer(): Promise<void> {
       res.json(health);
     });
 
-    // Serve static frontend files from frontend/out (production build)
-    const frontendPath = path.join(__dirname, "../../frontend/out");
-    if (existsSync(frontendPath)) {
-      logRest.info({ path: frontendPath }, "Serving static frontend from /");
-      
-      // Serve static files
-      app.use(express.static(frontendPath));
+    // Check for Next.js standalone build
+    const standaloneServerPath = path.join(__dirname, "../../frontend/.next/standalone/frontend/server.js");
+    const nextFrontendPort = 3001;
+    
+    if (existsSync(standaloneServerPath)) {
+      // Start Next.js standalone server on port 3001
+      logRest.info("Starting Next.js standalone server...");
+      const nextProcess = spawn("node", [standaloneServerPath], {
+        env: { ...process.env, PORT: String(nextFrontendPort), HOSTNAME: "127.0.0.1" },
+        stdio: "pipe",
+      });
+
+      nextProcess.stdout?.on("data", (data) => {
+        logRest.debug(`Next.js: ${data.toString().trim()}`);
+      });
+
+      nextProcess.stderr?.on("data", (data) => {
+        logRest.error(`Next.js: ${data.toString().trim()}`);
+      });
+
+      nextProcess.on("exit", (code) => {
+        logRest.error({ code }, "Next.js server exited");
+      });
+
+      // Mount API routes
+      app.use("/api", apiKeyAuth, globalLimiter, router);
+      app.use("/api/eval", apiKeyAuth, evalLimiter, evalRouter);
+      app.use("/api/order", orderLimiter);
+      app.use("/api/orders", orderLimiter);
+      app.use("/api/collab", collabLimiter);
+
+      // Proxy all other requests to Next.js
+      app.use(
+        "*",
+        createProxyMiddleware({
+          target: `http://127.0.0.1:${nextFrontendPort}`,
+          changeOrigin: true,
+          ws: true,
+        })
+      );
+
+      app.listen(config.rest.port, () => {
+        logRest.info({ port: config.rest.port }, "REST server listening (with Next.js frontend)");
+        logRest.info({ nextPort: nextFrontendPort }, "Next.js proxied internally");
+        logRest.info({ url: `http://localhost:${config.rest.port}/openapi.json` }, "OpenAPI spec available");
+        if (config.rest.apiKey) {
+          logRest.info("API key authentication enabled");
+        } else {
+          logRest.warn("No REST_API_KEY set — endpoints are unauthenticated");
+        }
+        resolve();
+      });
     } else {
-      logRest.info("Frontend build not found — serving API info at /");
-      
-      // Fallback: serve API info when frontend not built
+      // API-only mode (no frontend)
+      logRest.info("Next.js standalone build not found — API-only mode");
+
       app.get("/", (_req, res) => {
         res.json({
           name: "market-data-bridge",
@@ -138,35 +185,24 @@ export function startRestServer(): Promise<void> {
           api: "/api/status",
         });
       });
-    }
 
-    // Mount API routes with rate limiting (authenticated)
-    app.use("/api", apiKeyAuth, globalLimiter, router);
+      // Mount API routes
+      app.use("/api", apiKeyAuth, globalLimiter, router);
+      app.use("/api/eval", apiKeyAuth, evalLimiter, evalRouter);
+      app.use("/api/order", orderLimiter);
+      app.use("/api/orders", orderLimiter);
+      app.use("/api/collab", collabLimiter);
 
-    // Mount eval router (under /api/eval, inside auth)
-    app.use("/api/eval", apiKeyAuth, evalLimiter, evalRouter);
-
-    // Apply stricter rate limits to order and collab routes
-    app.use("/api/order", orderLimiter);
-    app.use("/api/orders", orderLimiter);
-    app.use("/api/collab", collabLimiter);
-
-    // SPA fallback: serve index.html for all client-side routes
-    if (existsSync(frontendPath)) {
-      app.get("*", (_req, res) => {
-        res.sendFile(path.join(frontendPath, "index.html"));
+      app.listen(config.rest.port, () => {
+        logRest.info({ port: config.rest.port }, "REST server listening (API-only)");
+        logRest.info({ url: `http://localhost:${config.rest.port}/openapi.json` }, "OpenAPI spec available");
+        if (config.rest.apiKey) {
+          logRest.info("API key authentication enabled");
+        } else {
+          logRest.warn("No REST_API_KEY set — endpoints are unauthenticated");
+        }
+        resolve();
       });
     }
-
-    app.listen(config.rest.port, () => {
-      logRest.info({ port: config.rest.port }, "REST server listening");
-      logRest.info({ url: `http://localhost:${config.rest.port}/openapi.json` }, "OpenAPI spec available");
-      if (config.rest.apiKey) {
-        logRest.info("API key authentication enabled");
-      } else {
-        logRest.warn("No REST_API_KEY set — endpoints are unauthenticated");
-      }
-      resolve();
-    });
   });
 }
