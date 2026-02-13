@@ -4,10 +4,11 @@
 
 ## Current State
 
-- **Backend**: 41 REST endpoints, 34 MCP tools, 10 SQLite tables, 3-model eval engine
-- **Frontend**: 5 pages (dashboard, evals, eval detail, weights, weights demo) — **~15% of backend exposed**
-- **Tests**: Zero test files
-- **Agent PRs merged**: #11 (score scatter), #12 (weight sliders), #13 (time-of-day), #23 (feature radar)
+- **Backend**: 35 REST endpoints, 34 MCP tools, 10 SQLite tables, 3-model eval engine
+- **Frontend**: 7 pages (dashboard, evals, eval detail, weights, weights demo, model stats, + eval filters) — **~25% of backend exposed**
+- **Tests**: 201 passing (16 test files) — Vitest + in-memory SQLite
+- **Agent PRs merged**: #11, #12, #13, #23, #29-38, #44 (16 total)
+- **SDK versions**: @anthropic-ai/sdk 0.39, openai 6.21, @google/genai 1.0, @stoqey/ib 1.5.3
 - **IBKR API gap**: @stoqey/ib targets TWS API 10.32; current is 10.42. Backwards compatible — no action needed until library updates.
 
 ## Priority Framework
@@ -19,16 +20,17 @@
 
 ---
 
-## Phase 0: Foundation (P0 — blocking)
+## Phase 0: Foundation (P0 — COMPLETE)
 
-Testing infrastructure. Without this, every subsequent phase ships untested code.
+Testing infrastructure. 201 tests passing across 16 test files.
 
-| Task | Agent | Status |
-|------|-------|--------|
-| Vitest + in-memory SQLite setup (vitest.config.ts, test/setup.ts, test/helpers.ts) | Copilot | TODO |
-| Ensemble scorer unit tests (Issue #1) | Copilot | Open |
-| Feature engine unit tests (all 14 modules in src/eval/features/) | Copilot | TODO |
-| Risk gate unit tests (src/ibkr/risk-gate.ts) | Copilot | TODO |
+| Task | Agent | PR | Status |
+|------|-------|-----|--------|
+| Vitest + in-memory SQLite setup | Copilot | #30 | **Merged** |
+| Feature engine unit tests (14 modules) | Copilot | #31 | **Merged** |
+| Ensemble scorer unit tests | Copilot | #34 | **Merged** |
+| Risk gate unit tests | Copilot | #36 | **Merged** |
+| Infrastructure tests | Copilot | #30 | **Merged** |
 
 ---
 
@@ -46,11 +48,11 @@ Testing infrastructure. Without this, every subsequent phase ships untested code
 
 ---
 
-## Phase 2: Complete Eval UI (P1)
+## Phase 2: Complete Eval UI (COMPLETE)
 
-Close the eval loop — trigger evaluations and record outcomes from the browser.
+Eval loop closed — trigger evaluations and record outcomes from the browser.
 
-### Agent-delegated components (from Phase 1 overflow)
+### Agent-delegated components
 
 | Issue | Component | Agent | PR | Status |
 |-------|-----------|-------|----|--------|
@@ -58,16 +60,11 @@ Close the eval loop — trigger evaluations and record outcomes from the browser
 | #7 | Feature radar chart | Codex | #23 | **Merged** |
 | #8 | Time-of-day bar chart | Copilot | #13 | **Merged** |
 | #9 | Weight sliders | Copilot | #12 | **Merged** |
-| #10 | CSV/JSON export utility | Codex | — | Re-submit |
-
-### New work
-
-| Task | Agent | Priority |
-|------|-------|----------|
-| **Evaluation trigger form** — symbol autocomplete, direction picker, entry/stop prices, feature preview before submit, POST /api/eval/evaluate | Copilot | P1 |
-| **Outcome recording form** — trade_taken toggle, entry/exit prices, auto-calc R-multiple, exit reason dropdown, POST /api/eval/outcome. Embedded in eval detail page | Copilot | P1 |
-| **Eval history filters** — symbol search, date range, score range, should_trade toggle. Zustand store for filter state, URL query param sync | Copilot | P1 |
-| **Model performance stats page** — per-model accuracy bars, compliance rates, avg confidence, Brier score (if available). GET /api/eval/stats | Copilot | P1 |
+| #10 | CSV/JSON export utility | Codex | #33 | **Merged** |
+| — | Evaluation trigger form | Copilot | #29 | **Merged** |
+| — | Outcome recording form | Copilot | #32 | **Merged** |
+| #19 | Eval history filters (Zustand + URL sync) | Copilot | #37 | **Merged** |
+| #20 | Model performance stats page | Copilot | #38 | **Merged** |
 
 ### Backend additions (Claude Code)
 
@@ -78,17 +75,17 @@ Close the eval loop — trigger evaluations and record outcomes from the browser
 
 ---
 
-## Phase 3: Trading Workflow (P1)
+## Phase 3: Trading Workflow (P1 — IN PROGRESS)
 
-Expose IBKR account data and order management. All backend endpoints exist — this is pure frontend work.
+Expose IBKR account data and order management. All backend endpoints exist — this is pure frontend work. Issues #39-42 assigned, awaiting Copilot PRs.
 
-| Task | Agent | Endpoints used |
-|------|-------|----------------|
-| **Account summary + P&L page** — net liquidation, cash, buying power, daily P&L cards. IBKR connection status indicator | Copilot | GET /api/status, GET /api/account/summary, GET /api/account/pnl |
-| **Positions table** — symbol, qty, avg cost, current price, unrealized P&L %, market value. Auto-refresh 10s | Copilot | GET /api/account/positions |
-| **Order management** — tabs for open/completed orders, cancel button with confirm dialog, "Cancel All" with double confirm | Copilot | GET /api/account/orders, GET /api/account/orders/completed, DELETE /api/order/:id, DELETE /api/orders/all |
-| **Order entry form** — single + bracket modes, symbol autocomplete, real-time quote, risk summary (notional, penny stock check) | Copilot | GET /api/quote/:symbol, POST /api/order, POST /api/order/bracket |
-| **Executions log** — exec_id, timestamp, symbol, side, shares, price, commission, realized P&L. Filter by symbol/date | Copilot | GET /api/account/executions |
+| Task | Agent | Issue | Status |
+|------|-------|-------|--------|
+| **Account summary + P&L page** | Copilot | #39 | Assigned |
+| **Positions table** (auto-refresh 10s) | Copilot | #40 | Assigned |
+| **Order management** (open/completed tabs, cancel w/ confirm) | Copilot | #41 | Assigned |
+| **Executions log** (filterable table) | Copilot | #42 | Assigned |
+| **Order entry form** (single + bracket, risk preview) | Copilot | — | Not yet created |
 
 ---
 
@@ -198,10 +195,11 @@ Automated weekly audit via `.github/workflows/api-audit.yml` + `scripts/api-audi
 | Deadline | Item | Severity | Action |
 |----------|------|----------|--------|
 | 2026-03-31 | gemini-2.0-flash shutdown | ~~Done~~ | Migrated to `gemini-2.5-flash` |
-| 2026-06-24 | @google/generative-ai SDK deprecated | Warning | Migrate to `@google/genai` unified SDK |
-| 2026-06-30 | yahoo-finance2 v3 breaking changes | Warning | Pin v2.x; v3 is ESM-only + new API |
+| 2026-06-24 | @google/generative-ai SDK deprecated | ~~Done~~ | Migrated to `@google/genai` (PR #44) |
+| ~~TBD~~ | openai SDK v4→v6 major | ~~Done~~ | Upgraded to openai 6.21, zero code changes |
+| TBD | @anthropic-ai/sdk 0.39→0.74+ | Warning | Issue #28 — low-risk upgrade, messages.create() API stable |
+| 2026-06-30 | yahoo-finance2 v3 breaking changes | Warning | Issue #27 — pin v2.x; v3 is ESM-only + new API |
 | TBD | @stoqey/ib 10.42 features | Info | Watch releases for one-message brackets |
-| TBD | openai SDK v4→v6 major | Warning | Review breaking changes before upgrading |
 
 ---
 

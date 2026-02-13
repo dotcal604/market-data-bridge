@@ -87,7 +87,7 @@ src/
       providers/
         claude.ts     — Anthropic SDK (@anthropic-ai/sdk)
         openai.ts     — OpenAI SDK (openai)
-        gemini.ts     — Google GenAI SDK (@google/generative-ai)
+        gemini.ts     — Google GenAI SDK (@google/genai)
 
     ensemble/
       types.ts        — EnsembleWeights, EnsembleScore
@@ -114,11 +114,13 @@ frontend/                 — Next.js 14 dashboard (App Router)
       layout/             — app-shell.tsx, sidebar.tsx, top-bar.tsx
       dashboard/          — stats-cards.tsx, recent-evals-mini.tsx
       eval-table/         — eval-table.tsx, eval-table-columns.tsx
+      eval-table/         — eval-table.tsx, eval-table-columns.tsx, eval-filters.tsx
       eval-detail/        — model-card.tsx, model-comparison.tsx, ensemble-summary.tsx,
-                            guardrail-badges.tsx, feature-table.tsx, outcome-panel.tsx
-      shared/             — score-badge.tsx, direction-badge.tsx, model-avatar.tsx
-      analytics/          — (Phase 2) score-scatter.tsx, feature-radar.tsx, time-of-day-chart.tsx
-      weights/            — (Phase 2) weight-sliders.tsx
+                            guardrail-badges.tsx, feature-table.tsx, outcome-panel.tsx, outcome-form.tsx
+      model-stats/        — model-comparison.tsx, stats-summary.tsx
+      shared/             — score-badge.tsx, direction-badge.tsx, model-avatar.tsx, export-button.tsx
+      analytics/          — score-scatter.tsx, feature-radar.tsx, time-of-day-chart.tsx
+      weights/            — weight-sliders.tsx
       ui/                 — shadcn/ui primitives (button, card, table, badge, etc.)
     lib/
       api/
@@ -126,10 +128,12 @@ frontend/                 — Next.js 14 dashboard (App Router)
         eval-client.ts    — typed fetch wrappers for /api/eval endpoints
       hooks/
         use-evals.ts      — React Query hooks (useEvalHistory, useEvalDetail, useEvalStats, etc.)
+      stores/
+        eval-filters.ts   — Zustand store for eval history filter state
       utils/
         formatters.ts     — formatScore, formatPrice, formatMs, formatTimestamp, etc.
         colors.ts         — scoreColor, scoreBg, modelColor, directionColor, etc.
-        export.ts         — (Phase 2) exportToCsv, exportToJson
+        export.ts         — exportToCsv, exportToJson
       providers.tsx       — QueryClientProvider wrapper
       utils.ts            — cn() helper (clsx + tailwind-merge)
 ```

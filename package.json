@@ -20,7 +20,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.39.0",
+    "@anthropic-ai/sdk": "^0.74.0",
     "@google/genai": "^1.0.0",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "@stoqey/ib": "^1.5.3",

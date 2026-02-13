@@ -23,8 +23,10 @@ Claude (MCP stdio) ←→ Market Data Bridge ←→ ChatGPT (REST + OpenAPI)
                        └─ Ensemble scorer → guardrails → response
                             ↕
                      Admin Dashboard (Next.js 14)
-                       ├─ Eval history + detail (3-model comparison)
-                       ├─ Ensemble weights display
+                       ├─ Eval history + filters + detail (3-model comparison)
+                       ├─ Model performance stats + compliance
+                       ├─ Ensemble weights display + sliders
+                       ├─ Analytics (scatter, radar, time-of-day)
                        └─ Stats cards + real-time polling
 ```
 
@@ -277,10 +279,11 @@ A Next.js 14 (App Router) admin dashboard for reviewing evaluations and monitori
 | Route | Purpose |
 |-------|---------|
 | `/` | Dashboard home — stats cards (total evals, trade rate, avg latency, avg R) + last 10 evals |
-| `/evals` | Full eval history — sortable TanStack Table with symbol, direction, score, confidence, guardrail status |
-| `/evals/[id]` | Eval detail — 3-model side-by-side comparison, ensemble summary, guardrail badges, feature table, outcome panel |
+| `/evals` | Full eval history — sortable TanStack Table with symbol/date/score filters, Zustand + URL sync |
+| `/evals/[id]` | Eval detail — 3-model side-by-side comparison, ensemble summary, guardrail badges, feature radar, outcome form |
 | `/weights` | Current ensemble weights per model with progress bars |
 | `/weights/demo` | Interactive weight sliders demo |
+| `/model-stats` | Per-model compliance rates, latency comparison, guardrail block rate, outcome stats |
 
 ### Development Agents
 
