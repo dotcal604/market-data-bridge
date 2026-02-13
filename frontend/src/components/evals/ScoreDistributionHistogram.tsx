@@ -23,9 +23,9 @@ const BUCKETS = Array.from({ length: 10 }, (_, index) => ({
 }));
 
 const MODEL_COLORS = {
-  claude: "#8b5cf6",
-  gpt: "#10b981",
-  gemini: "#3b82f6",
+  claude: "#8b5cf6",  // purple
+  gpt: "#10b981",     // emerald/green
+  gemini: "#f59e0b",  // amber/yellow
 } as const;
 
 function classifyOutcome(outcome: EvalOutcome): boolean | null {
@@ -143,9 +143,9 @@ export function ScoreDistributionHistogram() {
                 }}
               />
               <Legend />
-              <Bar dataKey="claude" name="Claude" fill={MODEL_COLORS.claude} radius={[4, 4, 0, 0]} />
-              <Bar dataKey="gpt" name="GPT" fill={MODEL_COLORS.gpt} radius={[4, 4, 0, 0]} />
-              <Bar dataKey="gemini" name="Gemini" fill={MODEL_COLORS.gemini} radius={[4, 4, 0, 0]} />
+              <Bar dataKey="claude" name="Claude" fill={MODEL_COLORS.claude} fillOpacity={0.5} radius={[4, 4, 0, 0]} />
+              <Bar dataKey="gpt" name="GPT" fill={MODEL_COLORS.gpt} fillOpacity={0.5} radius={[4, 4, 0, 0]} />
+              <Bar dataKey="gemini" name="Gemini" fill={MODEL_COLORS.gemini} fillOpacity={0.5} radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         )}
