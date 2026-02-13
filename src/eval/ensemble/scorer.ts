@@ -1,13 +1,15 @@
 import type { ModelEvaluation, ModelId } from "../models/types.js";
-import type { EnsembleScore } from "./types.js";
+import type { EnsembleScore, EnsembleWeights } from "./types.js";
 import { getWeights } from "./weights.js";
 
 /**
- * Compute ensemble score from compliant model evaluations.
- * Weighted mean with quadratic disagreement penalty.
+ * Core ensemble scoring logic. Accepts explicit weights for simulation,
+ * or reads live weights from disk when omitted.
  */
-export function computeEnsemble(evaluations: ModelEvaluation[]): EnsembleScore {
-  const weights = getWeights();
+function scoreEnsemble(
+  evaluations: ModelEvaluation[],
+  weights: { claude: number; gpt4o: number; gemini: number; k: number },
+): EnsembleScore {
   const compliant = evaluations.filter((e) => e.compliant && e.output);
 
   if (compliant.length === 0) {
@@ -63,4 +65,24 @@ export function computeEnsemble(evaluations: ModelEvaluation[]): EnsembleScore {
     majority_trade: majorityTrade,
     weights_used: { claude: weights.claude, gpt4o: weights.gpt4o, gemini: weights.gemini },
   };
+}
+
+/**
+ * Compute ensemble score from compliant model evaluations.
+ * Uses live weights from disk/memory.
+ */
+export function computeEnsemble(evaluations: ModelEvaluation[]): EnsembleScore {
+  const weights = getWeights();
+  return scoreEnsemble(evaluations, weights);
+}
+
+/**
+ * Compute ensemble score with explicit custom weights.
+ * Used by weight simulation endpoint to re-score historical evals.
+ */
+export function computeEnsembleWithWeights(
+  evaluations: ModelEvaluation[],
+  weights: { claude: number; gpt4o: number; gemini: number; k: number },
+): EnsembleScore {
+  return scoreEnsemble(evaluations, weights);
 }

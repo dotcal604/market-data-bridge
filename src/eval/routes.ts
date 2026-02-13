@@ -5,9 +5,10 @@ import { stripMetadata } from "./features/types.js";
 import type { FeatureVector } from "./features/types.js";
 import { runPrefilters } from "./guardrails/prefilter.js";
 import { evaluateAllModels } from "./models/runner.js";
-import { computeEnsemble } from "./ensemble/scorer.js";
+import { computeEnsemble, computeEnsembleWithWeights } from "./ensemble/scorer.js";
 import { runGuardrails } from "./guardrails/behavioral.js";
 import { getWeights } from "./ensemble/weights.js";
+import type { ModelEvaluation } from "./models/types.js";
 import {
   insertEvaluation,
   insertModelOutput,
@@ -20,6 +21,7 @@ import {
   getEvalStats,
   getDailySummaries,
   getTodaysTrades,
+  getEvalsForSimulation,
 } from "../db/database.js";
 import { logger } from "../logging.js";
 
@@ -256,6 +258,171 @@ evalRouter.get("/stats", (_req, res) => {
 // GET /weights — current ensemble weights
 evalRouter.get("/weights", (_req, res) => {
   res.json(getWeights());
+});
+
+// POST /weights/simulate — "what if" re-scoring with custom weights
+// Body: { claude: 0.5, gpt4o: 0.3, gemini: 0.2, k?: 1.5, days?: 90, symbol?: "AAPL" }
+evalRouter.post("/weights/simulate", (req, res) => {
+  try {
+    const { claude, gpt4o, gemini, k, days, symbol } = req.body ?? {};
+
+    // Validate weights
+    if (typeof claude !== "number" || typeof gpt4o !== "number" || typeof gemini !== "number") {
+      res.status(400).json({ error: "Required: claude, gpt4o, gemini (numbers)" });
+      return;
+    }
+    if (claude < 0 || gpt4o < 0 || gemini < 0) {
+      res.status(400).json({ error: "Weights must be non-negative" });
+      return;
+    }
+    const weightSum = claude + gpt4o + gemini;
+    if (weightSum <= 0) {
+      res.status(400).json({ error: "At least one weight must be > 0" });
+      return;
+    }
+
+    const currentWeights = getWeights();
+    const simWeights = {
+      claude,
+      gpt4o,
+      gemini,
+      k: typeof k === "number" && k >= 0 ? k : currentWeights.k,
+    };
+
+    // Pull historical evals with model outputs
+    const rawEvals = getEvalsForSimulation({
+      days: typeof days === "number" ? days : 90,
+      symbol: typeof symbol === "string" ? symbol : undefined,
+    });
+
+    if (rawEvals.length === 0) {
+      res.json({
+        simulated_weights: simWeights,
+        current_weights: { claude: currentWeights.claude, gpt4o: currentWeights.gpt4o, gemini: currentWeights.gemini, k: currentWeights.k },
+        evaluations_count: 0,
+        message: "No evaluations found for simulation",
+      });
+      return;
+    }
+
+    // Re-score each eval with both current and simulated weights
+    let currentTradeCount = 0, simTradeCount = 0;
+    let currentScoreSum = 0, simScoreSum = 0;
+    let currentCorrect = 0, simCorrect = 0;
+    let outcomesWithTrades = 0;
+
+    const details: Array<{
+      evaluation_id: string;
+      symbol: string;
+      timestamp: string;
+      current_score: number;
+      current_should_trade: boolean;
+      sim_score: number;
+      sim_should_trade: boolean;
+      r_multiple: number | null;
+      decision_changed: boolean;
+    }> = [];
+
+    for (const row of rawEvals) {
+      // Reconstruct ModelEvaluation[] from DB rows
+      const modelEvals: ModelEvaluation[] = row.model_outputs.map((mo) => ({
+        model_id: mo.model_id as ModelEvaluation["model_id"],
+        output: mo.compliant && mo.trade_score != null ? {
+          trade_score: mo.trade_score,
+          extension_risk: 0,
+          exhaustion_risk: 0,
+          float_rotation_risk: 0,
+          market_alignment: 0,
+          expected_rr: mo.expected_rr ?? 0,
+          confidence: mo.confidence ?? 0,
+          should_trade: mo.should_trade === 1,
+          reasoning: "",
+        } : null,
+        raw_response: "",
+        latency_ms: 0,
+        error: null,
+        compliant: mo.compliant === 1,
+        model_version: "",
+        prompt_hash: "",
+        token_count: 0,
+        api_response_id: "",
+        timestamp: row.timestamp,
+      }));
+
+      const currentResult = computeEnsembleWithWeights(modelEvals, {
+        claude: currentWeights.claude,
+        gpt4o: currentWeights.gpt4o,
+        gemini: currentWeights.gemini,
+        k: currentWeights.k,
+      });
+      const simResult = computeEnsembleWithWeights(modelEvals, simWeights);
+
+      currentScoreSum += currentResult.trade_score;
+      simScoreSum += simResult.trade_score;
+      if (currentResult.should_trade) currentTradeCount++;
+      if (simResult.should_trade) simTradeCount++;
+
+      // Track accuracy against outcomes
+      if (row.trade_taken === 1 && row.r_multiple != null) {
+        outcomesWithTrades++;
+        const isWin = row.r_multiple > 0;
+        // "Correct" = recommended trade that won, or didn't recommend a trade that lost
+        if ((currentResult.should_trade && isWin) || (!currentResult.should_trade && !isWin)) {
+          currentCorrect++;
+        }
+        if ((simResult.should_trade && isWin) || (!simResult.should_trade && !isWin)) {
+          simCorrect++;
+        }
+      }
+
+      details.push({
+        evaluation_id: row.evaluation_id,
+        symbol: row.symbol,
+        timestamp: row.timestamp,
+        current_score: currentResult.trade_score,
+        current_should_trade: currentResult.should_trade,
+        sim_score: simResult.trade_score,
+        sim_should_trade: simResult.should_trade,
+        r_multiple: row.r_multiple,
+        decision_changed: currentResult.should_trade !== simResult.should_trade,
+      });
+    }
+
+    const n = rawEvals.length;
+    const changedDecisions = details.filter((d) => d.decision_changed).length;
+
+    res.json({
+      simulated_weights: simWeights,
+      current_weights: { claude: currentWeights.claude, gpt4o: currentWeights.gpt4o, gemini: currentWeights.gemini, k: currentWeights.k },
+      evaluations_count: n,
+      outcomes_with_trades: outcomesWithTrades,
+      comparison: {
+        current: {
+          avg_score: Math.round((currentScoreSum / n) * 100) / 100,
+          trade_rate: Math.round((currentTradeCount / n) * 1000) / 1000,
+          accuracy: outcomesWithTrades > 0 ? Math.round((currentCorrect / outcomesWithTrades) * 1000) / 1000 : null,
+        },
+        simulated: {
+          avg_score: Math.round((simScoreSum / n) * 100) / 100,
+          trade_rate: Math.round((simTradeCount / n) * 1000) / 1000,
+          accuracy: outcomesWithTrades > 0 ? Math.round((simCorrect / outcomesWithTrades) * 1000) / 1000 : null,
+        },
+        delta: {
+          avg_score: Math.round(((simScoreSum - currentScoreSum) / n) * 100) / 100,
+          trade_rate: Math.round(((simTradeCount - currentTradeCount) / n) * 1000) / 1000,
+          accuracy: outcomesWithTrades > 0
+            ? Math.round(((simCorrect - currentCorrect) / outcomesWithTrades) * 1000) / 1000
+            : null,
+          decisions_changed: changedDecisions,
+          decisions_changed_pct: Math.round((changedDecisions / n) * 1000) / 1000,
+        },
+      },
+      evaluations: details,
+    });
+  } catch (e: any) {
+    logger.error({ err: e }, "[Eval] weights/simulate failed");
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // GET /daily-summary — session-level P&L, win rate, avg R

@@ -56,7 +56,7 @@ These directly increase or measure trading edge. **Priority over everything else
 | **Drift reconciliation** | 4 | B,C | Not started | Claude Code | Detect when model predictions diverge from recent outcomes. Alert when ensemble is miscalibrated. |
 | **Model agreement analysis** | 4 | B | Not started | Codex | Unanimous/majority/split classification. Track: does agreement predict outcome? |
 | **Risk gate tuning** | 4 | A | Not started | Claude Code | Parameterize risk limits from data (max position size by regime, volatility-adjusted sizing) |
-| **Weight simulation endpoint** | 4 | B | Not started | Claude Code | `POST /api/eval/weights/simulate` — re-score historical evals with custom weights. "What if" before committing. |
+| **Weight simulation endpoint** | 4 | B | **Done** | Claude Code | `POST /api/eval/weights/simulate` + `simulate_weights` MCP tool. Re-scores historical evals with custom weights. |
 
 ---
 

@@ -696,6 +696,100 @@ export function getEvalStats(): Record<string, unknown> {
   };
 }
 
+// ── Weight Simulation Data ────────────────────────────────────────────────
+
+export interface SimulationEvalRow {
+  evaluation_id: string;
+  symbol: string;
+  direction: string;
+  timestamp: string;
+  ensemble_trade_score: number;
+  ensemble_should_trade: number;
+  r_multiple: number | null;
+  trade_taken: number | null;
+  model_outputs: Array<{
+    model_id: string;
+    trade_score: number | null;
+    expected_rr: number | null;
+    confidence: number | null;
+    should_trade: number | null;
+    compliant: number;
+  }>;
+}
+
+/**
+ * Pull historical evaluations with model outputs and outcomes for weight simulation.
+ * Only includes evals that passed pre-filter (real scoring decisions).
+ */
+export function getEvalsForSimulation(opts: { days?: number; symbol?: string } = {}): SimulationEvalRow[] {
+  const days = opts.days ?? 90;
+
+  let whereClause = "WHERE e.prefilter_passed = 1 AND e.timestamp >= datetime('now', ? || ' days')";
+  const params: unknown[] = [`-${days}`];
+
+  if (opts.symbol) {
+    whereClause += " AND e.symbol = ?";
+    params.push(opts.symbol);
+  }
+
+  const evals = db.prepare(`
+    SELECT
+      e.id as evaluation_id,
+      e.symbol,
+      e.direction,
+      e.timestamp,
+      e.ensemble_trade_score,
+      e.ensemble_should_trade,
+      o.r_multiple,
+      o.trade_taken
+    FROM evaluations e
+    LEFT JOIN outcomes o ON o.evaluation_id = e.id
+    ${whereClause}
+    ORDER BY e.timestamp DESC
+  `).all(...params) as Array<{
+    evaluation_id: string;
+    symbol: string;
+    direction: string;
+    timestamp: string;
+    ensemble_trade_score: number;
+    ensemble_should_trade: number;
+    r_multiple: number | null;
+    trade_taken: number | null;
+  }>;
+
+  // Batch-load model outputs for all evals
+  const evalIds = evals.map((e) => e.evaluation_id);
+  if (evalIds.length === 0) return [];
+
+  const placeholders = evalIds.map(() => "?").join(",");
+  const outputs = db.prepare(`
+    SELECT evaluation_id, model_id, trade_score, expected_rr, confidence, should_trade, compliant
+    FROM model_outputs
+    WHERE evaluation_id IN (${placeholders})
+  `).all(...evalIds) as Array<{
+    evaluation_id: string;
+    model_id: string;
+    trade_score: number | null;
+    expected_rr: number | null;
+    confidence: number | null;
+    should_trade: number | null;
+    compliant: number;
+  }>;
+
+  // Group outputs by evaluation_id
+  const outputMap = new Map<string, typeof outputs>();
+  for (const o of outputs) {
+    const arr = outputMap.get(o.evaluation_id) ?? [];
+    arr.push(o);
+    outputMap.set(o.evaluation_id, arr);
+  }
+
+  return evals.map((e) => ({
+    ...e,
+    model_outputs: outputMap.get(e.evaluation_id) ?? [],
+  }));
+}
+
 // ── Daily Session Summary ────────────────────────────────────────────────
 
 export interface DailySummaryRow {

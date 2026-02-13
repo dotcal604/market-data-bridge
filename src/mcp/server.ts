@@ -33,7 +33,11 @@ import {
   getDailySummaries,
   getTodaysTrades,
   getEvalStats,
+  getEvalsForSimulation,
 } from "../db/database.js";
+import { computeEnsembleWithWeights } from "../eval/ensemble/scorer.js";
+import { getWeights } from "../eval/ensemble/weights.js";
+import type { ModelEvaluation } from "../eval/models/types.js";
 
 export function createMcpServer(): McpServer {
   const server = new McpServer({
@@ -865,6 +869,121 @@ export function createMcpServer(): McpServer {
       try {
         const stats = getEvalStats();
         return { content: [{ type: "text", text: JSON.stringify(stats, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: simulate_weights ---
+  server.tool(
+    "simulate_weights",
+    "Re-score historical evaluations with custom weights. Shows comparison: current vs simulated avg score, trade rate, accuracy. Use to answer 'what if I weighted claude higher?' before committing.",
+    {
+      claude: z.number().describe("Weight for Claude model (e.g. 0.5)"),
+      gpt4o: z.number().describe("Weight for GPT-4o model (e.g. 0.3)"),
+      gemini: z.number().describe("Weight for Gemini model (e.g. 0.2)"),
+      k: z.number().optional().describe("Disagreement penalty factor (default: current)"),
+      days: z.number().optional().describe("Historical window in days (default: 90)"),
+      symbol: z.string().optional().describe("Filter to specific symbol"),
+    },
+    async (params) => {
+      try {
+        if (params.claude < 0 || params.gpt4o < 0 || params.gemini < 0) {
+          return { content: [{ type: "text", text: "Error: Weights must be non-negative" }], isError: true };
+        }
+        const weightSum = params.claude + params.gpt4o + params.gemini;
+        if (weightSum <= 0) {
+          return { content: [{ type: "text", text: "Error: At least one weight must be > 0" }], isError: true };
+        }
+
+        const currentWeights = getWeights();
+        const simWeights = {
+          claude: params.claude,
+          gpt4o: params.gpt4o,
+          gemini: params.gemini,
+          k: params.k ?? currentWeights.k,
+        };
+
+        const rawEvals = getEvalsForSimulation({
+          days: params.days ?? 90,
+          symbol: params.symbol,
+        });
+
+        if (rawEvals.length === 0) {
+          return { content: [{ type: "text", text: JSON.stringify({ message: "No evaluations found for simulation", simulated_weights: simWeights }, null, 2) }] };
+        }
+
+        let currentTradeCount = 0, simTradeCount = 0;
+        let currentScoreSum = 0, simScoreSum = 0;
+        let currentCorrect = 0, simCorrect = 0;
+        let outcomesWithTrades = 0;
+        let changedDecisions = 0;
+
+        for (const row of rawEvals) {
+          const modelEvals: ModelEvaluation[] = row.model_outputs.map((mo) => ({
+            model_id: mo.model_id as ModelEvaluation["model_id"],
+            output: mo.compliant && mo.trade_score != null ? {
+              trade_score: mo.trade_score,
+              extension_risk: 0, exhaustion_risk: 0, float_rotation_risk: 0, market_alignment: 0,
+              expected_rr: mo.expected_rr ?? 0,
+              confidence: mo.confidence ?? 0,
+              should_trade: mo.should_trade === 1,
+              reasoning: "",
+            } : null,
+            raw_response: "", latency_ms: 0, error: null,
+            compliant: mo.compliant === 1,
+            model_version: "", prompt_hash: "", token_count: 0, api_response_id: "",
+            timestamp: row.timestamp,
+          }));
+
+          const currentResult = computeEnsembleWithWeights(modelEvals, {
+            claude: currentWeights.claude, gpt4o: currentWeights.gpt4o, gemini: currentWeights.gemini, k: currentWeights.k,
+          });
+          const simResult = computeEnsembleWithWeights(modelEvals, simWeights);
+
+          currentScoreSum += currentResult.trade_score;
+          simScoreSum += simResult.trade_score;
+          if (currentResult.should_trade) currentTradeCount++;
+          if (simResult.should_trade) simTradeCount++;
+          if (currentResult.should_trade !== simResult.should_trade) changedDecisions++;
+
+          if (row.trade_taken === 1 && row.r_multiple != null) {
+            outcomesWithTrades++;
+            const isWin = row.r_multiple > 0;
+            if ((currentResult.should_trade && isWin) || (!currentResult.should_trade && !isWin)) currentCorrect++;
+            if ((simResult.should_trade && isWin) || (!simResult.should_trade && !isWin)) simCorrect++;
+          }
+        }
+
+        const n = rawEvals.length;
+        const result = {
+          simulated_weights: simWeights,
+          current_weights: { claude: currentWeights.claude, gpt4o: currentWeights.gpt4o, gemini: currentWeights.gemini, k: currentWeights.k },
+          evaluations_count: n,
+          outcomes_with_trades: outcomesWithTrades,
+          comparison: {
+            current: {
+              avg_score: Math.round((currentScoreSum / n) * 100) / 100,
+              trade_rate: Math.round((currentTradeCount / n) * 1000) / 1000,
+              accuracy: outcomesWithTrades > 0 ? Math.round((currentCorrect / outcomesWithTrades) * 1000) / 1000 : null,
+            },
+            simulated: {
+              avg_score: Math.round((simScoreSum / n) * 100) / 100,
+              trade_rate: Math.round((simTradeCount / n) * 1000) / 1000,
+              accuracy: outcomesWithTrades > 0 ? Math.round((simCorrect / outcomesWithTrades) * 1000) / 1000 : null,
+            },
+            delta: {
+              avg_score: Math.round(((simScoreSum - currentScoreSum) / n) * 100) / 100,
+              trade_rate: Math.round(((simTradeCount - currentTradeCount) / n) * 1000) / 1000,
+              accuracy: outcomesWithTrades > 0 ? Math.round(((simCorrect - currentCorrect) / outcomesWithTrades) * 1000) / 1000 : null,
+              decisions_changed: changedDecisions,
+              decisions_changed_pct: Math.round((changedDecisions / n) * 1000) / 1000,
+            },
+          },
+        };
+
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       } catch (e: any) {
         return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
       }
