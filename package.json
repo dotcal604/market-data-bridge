@@ -21,7 +21,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
-    "@google/generative-ai": "^0.24.0",
+    "@google/genai": "^1.0.0",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "@stoqey/ib": "^1.5.3",
     "better-sqlite3": "^12.6.2",
