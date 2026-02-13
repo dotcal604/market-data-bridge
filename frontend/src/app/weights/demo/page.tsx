@@ -4,7 +4,7 @@ import { useState } from "react";
 import { WeightSliders } from "@/components/weights/weight-sliders";
 
 export default function WeightsDemoPage() {
-  const [weights, setWeights] = useState({
+  const [weights, setWeights] = useState<Record<string, number>>({
     "gpt-4o": 0.4,
     "claude-sonnet": 0.35,
     "gemini-flash": 0.25,
@@ -22,7 +22,7 @@ export default function WeightsDemoPage() {
       <div className="max-w-2xl">
         <WeightSliders 
           weights={weights} 
-          onChange={(newWeights) => setWeights(newWeights as typeof weights)} 
+          onChange={setWeights} 
         />
       </div>
 
