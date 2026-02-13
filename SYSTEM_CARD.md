@@ -280,6 +280,7 @@ A Next.js 14 (App Router) admin dashboard for reviewing evaluations and monitori
 | `/evals` | Full eval history — sortable TanStack Table with symbol, direction, score, confidence, guardrail status |
 | `/evals/[id]` | Eval detail — 3-model side-by-side comparison, ensemble summary, guardrail badges, feature table, outcome panel |
 | `/weights` | Current ensemble weights per model with progress bars |
+| `/weights/demo` | Interactive weight sliders demo |
 
 ### Development Agents
 
@@ -320,5 +321,7 @@ Session is determined by `/api/status` → `marketSession` field. Never infer fr
 - **Rate limiting:** 100 req/min global, 10/min for orders, 10/min for eval
 - **Pre-trade risk gate:** max order size, max notional, orders/min throttle, penny stock rejection
 - **Eval pre-filters:** save API costs by rejecting obviously bad setups before calling 3 models
-- **Boot reconciliation:** on startup, reconciles local DB with IBKR live state
+- **Boot reconciliation:** on startup, reconciles local DB with IBKR live state (Phase 1: mark RECONCILING, Phase 2: active order comparison, Phase 3: bracket integrity audit)
+- **Bracket integrity audit:** detects incomplete brackets, unprotected positions, zombie children, partial presence on IBKR
 - **Periodic snapshots:** account + positions captured every 5 min during market hours
+- **API dependency monitoring:** weekly automated audit via GitHub Actions (deprecation calendar, model name checks, npm outdated)

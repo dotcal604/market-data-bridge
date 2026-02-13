@@ -4,8 +4,8 @@
 
 ## Current State
 
-- **Backend**: 43 REST endpoints, 27 MCP tools, 10 SQLite tables, 3-model eval engine
-- **Frontend**: 4 pages (dashboard, evals, eval detail, weights) — **~15% of backend exposed**
+- **Backend**: 41 REST endpoints, 34 MCP tools, 10 SQLite tables, 3-model eval engine
+- **Frontend**: 5 pages (dashboard, evals, eval detail, weights, weights demo) — **~15% of backend exposed**
 - **Tests**: Zero test files
 - **Agent PRs merged**: #11 (score scatter), #12 (weight sliders), #13 (time-of-day), #23 (feature radar)
 - **IBKR API gap**: @stoqey/ib targets TWS API 10.32; current is 10.42. Backwards compatible — no action needed until library updates.
