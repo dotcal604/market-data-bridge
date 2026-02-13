@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
+import { RISK_CONFIG_DEFAULTS, RISK_CONFIG_SCHEMA_SQL, type RiskConfigParam } from "./schema.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dataDir = path.join(__dirname, "../../data");
@@ -305,6 +306,8 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_ts_batch ON tradersync_trades(import_batch);
 `);
 
+db.exec(RISK_CONFIG_SCHEMA_SQL);
+
 // ── Column Migrations (safe for existing DBs — silently ignored if column exists) ──
 
 function addColumnIfMissing(table: string, column: string, type: string): void {
@@ -328,6 +331,28 @@ addColumnIfMissing("outcomes", "decision_type", "TEXT");
 addColumnIfMissing("outcomes", "confidence_rating", "INTEGER");
 addColumnIfMissing("outcomes", "rule_followed", "INTEGER");
 addColumnIfMissing("outcomes", "setup_type", "TEXT");
+
+// v4: risk config source label for older DBs that may have only param/value
+addColumnIfMissing("risk_config", "source", "TEXT NOT NULL DEFAULT 'manual'");
+addColumnIfMissing("risk_config", "updated_at", "TEXT NOT NULL DEFAULT (datetime('now'))");
+
+function ensureRiskConfigDefaults(): void {
+  const upsert = db.prepare(`
+    INSERT INTO risk_config (param, value, source)
+    VALUES (?, ?, 'manual')
+    ON CONFLICT(param) DO NOTHING
+  `);
+
+  const tx = db.transaction(() => {
+    (Object.entries(RISK_CONFIG_DEFAULTS) as Array<[RiskConfigParam, number]>).forEach(([param, value]) => {
+      upsert.run(param, value);
+    });
+  });
+
+  tx();
+}
+
+ensureRiskConfigDefaults();
 
 // ── Prepared Statements ──────────────────────────────────────────────────
 
@@ -1108,6 +1133,45 @@ export interface WeightHistoryRow {
   sample_size: number | null;
   reason: string | null;
   created_at: string;
+}
+
+export interface RiskConfigRow {
+  param: string;
+  value: number;
+  source: string;
+  updated_at: string;
+}
+
+export function getRiskConfigRows(): RiskConfigRow[] {
+  return db.prepare(`
+    SELECT param, value, source, updated_at
+    FROM risk_config
+    ORDER BY param ASC
+  `).all() as RiskConfigRow[];
+}
+
+export function getRiskConfigValue(param: string): number | null {
+  const row = db.prepare(`SELECT value FROM risk_config WHERE param = ? ORDER BY updated_at DESC LIMIT 1`).get(param) as { value: number } | undefined;
+  return row?.value ?? null;
+}
+
+export function upsertRiskConfig(entries: Array<{ param: string; value: number; source?: string }>): void {
+  const stmt = db.prepare(`
+    INSERT INTO risk_config (param, value, source, updated_at)
+    VALUES (@param, @value, @source, datetime('now'))
+    ON CONFLICT(param) DO UPDATE SET
+      value = excluded.value,
+      source = excluded.source,
+      updated_at = datetime('now')
+  `);
+
+  const tx = db.transaction((rows: Array<{ param: string; value: number; source?: string }>) => {
+    rows.forEach((row) => {
+      stmt.run({ param: row.param, value: row.value, source: row.source ?? "manual" });
+    });
+  });
+
+  tx(entries);
 }
 
 /**

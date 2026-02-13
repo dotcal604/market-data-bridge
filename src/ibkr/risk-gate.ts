@@ -1,6 +1,8 @@
+import { getRiskConfigRows } from "../db/database.js";
+import { RISK_CONFIG_DEFAULTS } from "../db/schema.js";
 import { logRisk } from "../logging.js";
 
-// ── Per-Order Limits ────────────────────────────────────────────────────────
+const ACCOUNT_EQUITY_BASE = parseFloat(process.env.RISK_ACCOUNT_EQUITY_BASE ?? "25000");
 
 const LIMITS = {
   maxOrderSize: parseInt(process.env.RISK_MAX_ORDER_SIZE ?? "1000", 10),
@@ -9,43 +11,107 @@ const LIMITS = {
   minSharePrice: parseFloat(process.env.RISK_MIN_PRICE ?? "1"),
 };
 
-// ── Session Limits (the ones that actually change PnL) ──────────────────────
-
 const SESSION_LIMITS = {
-  maxDailyLoss: parseFloat(process.env.RISK_MAX_DAILY_LOSS ?? "500"),         // $ — stop trading after this much realized loss
-  maxDailyTrades: parseInt(process.env.RISK_MAX_DAILY_TRADES ?? "20", 10),    // count — prevent overtrading
-  consecutiveLossLimit: parseInt(process.env.RISK_CONSEC_LOSS_LIMIT ?? "3", 10), // after N consecutive losses...
-  cooldownMinutes: parseInt(process.env.RISK_COOLDOWN_MINUTES ?? "15", 10),   // ...wait this many minutes
-  lateDayLockoutMinutes: parseInt(process.env.RISK_LATE_LOCKOUT_MIN ?? "15", 10), // no new entries within N min of close (16:00 ET)
-  marketOpenHour: 9,   // ET
-  marketOpenMinute: 30, // ET
-  marketCloseHour: 16,  // ET
-  marketCloseMinute: 0, // ET
+  maxDailyLoss: parseFloat(process.env.RISK_MAX_DAILY_LOSS ?? "500"),
+  maxDailyTrades: parseInt(process.env.RISK_MAX_DAILY_TRADES ?? "20", 10),
+  consecutiveLossLimit: parseInt(process.env.RISK_CONSEC_LOSS_LIMIT ?? "3", 10),
+  cooldownMinutes: parseInt(process.env.RISK_COOLDOWN_MINUTES ?? "15", 10),
+  lateDayLockoutMinutes: parseInt(process.env.RISK_LATE_LOCKOUT_MIN ?? "15", 10),
+  marketOpenHour: 9,
+  marketOpenMinute: 30,
+  marketCloseHour: 16,
+  marketCloseMinute: 0,
 };
 
-// ── Session State (in-memory, resets daily) ─────────────────────────────────
+const MANUAL_RISK_LIMITS = {
+  max_position_pct: parseFloat(process.env.RISK_MAX_POSITION_PCT ?? `${RISK_CONFIG_DEFAULTS.max_position_pct}`),
+  max_daily_loss_pct: parseFloat(process.env.RISK_MAX_DAILY_LOSS_PCT ?? `${RISK_CONFIG_DEFAULTS.max_daily_loss_pct}`),
+  max_concentration_pct: parseFloat(process.env.RISK_MAX_CONCENTRATION_PCT ?? `${RISK_CONFIG_DEFAULTS.max_concentration_pct}`),
+  volatility_scalar: parseFloat(process.env.RISK_VOLATILITY_SCALAR ?? `${RISK_CONFIG_DEFAULTS.volatility_scalar}`),
+};
+
+interface EffectiveRiskConfig {
+  max_position_pct: number;
+  max_daily_loss_pct: number;
+  max_concentration_pct: number;
+  volatility_scalar: number;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function getEffectiveRiskConfig(): EffectiveRiskConfig {
+  const rows = getRiskConfigRows();
+  const dbValues: Partial<EffectiveRiskConfig> = {};
+  rows.forEach((row) => {
+    if (row.param in RISK_CONFIG_DEFAULTS) {
+      (dbValues as Record<string, number>)[row.param] = row.value;
+    }
+  });
+
+  const maxPositionPct = Math.min(
+    RISK_CONFIG_DEFAULTS.max_position_pct,
+    MANUAL_RISK_LIMITS.max_position_pct,
+    dbValues.max_position_pct ?? RISK_CONFIG_DEFAULTS.max_position_pct
+  );
+  const maxDailyLossPct = Math.min(
+    RISK_CONFIG_DEFAULTS.max_daily_loss_pct,
+    MANUAL_RISK_LIMITS.max_daily_loss_pct,
+    dbValues.max_daily_loss_pct ?? RISK_CONFIG_DEFAULTS.max_daily_loss_pct
+  );
+  const maxConcentrationPct = Math.min(
+    RISK_CONFIG_DEFAULTS.max_concentration_pct,
+    MANUAL_RISK_LIMITS.max_concentration_pct,
+    dbValues.max_concentration_pct ?? RISK_CONFIG_DEFAULTS.max_concentration_pct
+  );
+  const volatilityScalar = Math.min(
+    RISK_CONFIG_DEFAULTS.volatility_scalar,
+    MANUAL_RISK_LIMITS.volatility_scalar,
+    dbValues.volatility_scalar ?? RISK_CONFIG_DEFAULTS.volatility_scalar
+  );
+
+  return {
+    max_position_pct: clamp(maxPositionPct, 0.001, RISK_CONFIG_DEFAULTS.max_position_pct),
+    max_daily_loss_pct: clamp(maxDailyLossPct, 0.001, RISK_CONFIG_DEFAULTS.max_daily_loss_pct),
+    max_concentration_pct: clamp(maxConcentrationPct, 0.01, RISK_CONFIG_DEFAULTS.max_concentration_pct),
+    volatility_scalar: clamp(volatilityScalar, 0.1, RISK_CONFIG_DEFAULTS.volatility_scalar),
+  };
+}
+
+export function getRiskGateConfig(): {
+  effective: EffectiveRiskConfig;
+  floors: typeof RISK_CONFIG_DEFAULTS;
+  manual: typeof MANUAL_RISK_LIMITS;
+  rows: ReturnType<typeof getRiskConfigRows>;
+} {
+  return {
+    effective: getEffectiveRiskConfig(),
+    floors: { ...RISK_CONFIG_DEFAULTS },
+    manual: { ...MANUAL_RISK_LIMITS },
+    rows: getRiskConfigRows(),
+  };
+}
 
 interface SessionState {
-  date: string;           // YYYY-MM-DD in ET
+  date: string;
   realizedPnl: number;
   tradeCount: number;
   consecutiveLosses: number;
-  lastTradeTime: number;  // Date.now() timestamp
-  lastLossTime: number;   // timestamp of most recent loss
-  locked: boolean;        // manual override: session locked
+  lastTradeTime: number;
+  lastLossTime: number;
+  locked: boolean;
   lockReason: string | null;
 }
 
 function getTodayET(): string {
-  // Get current date in US Eastern
   const now = new Date();
-  const et = new Intl.DateTimeFormat("en-CA", {
+  return new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/New_York",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
   }).format(now);
-  return et; // "YYYY-MM-DD"
 }
 
 function getNowET(): { hours: number; minutes: number } {
@@ -84,7 +150,6 @@ function ensureToday(): void {
   }
 }
 
-// Sliding window for order frequency
 const recentOrderTimestamps: number[] = [];
 
 export interface RiskCheckParams {
@@ -95,7 +160,7 @@ export interface RiskCheckParams {
   lmtPrice?: number;
   auxPrice?: number;
   secType?: string;
-  estimatedPrice?: number; // current market price for notional calculation
+  estimatedPrice?: number;
 }
 
 export interface RiskCheckResult {
@@ -105,31 +170,31 @@ export interface RiskCheckResult {
 
 export function checkRisk(params: RiskCheckParams): RiskCheckResult {
   ensureToday();
+  const effective = getEffectiveRiskConfig();
+  const dynamicMaxNotional = Math.min(
+    LIMITS.maxNotionalValue,
+    ACCOUNT_EQUITY_BASE * Math.min(effective.max_position_pct, effective.max_concentration_pct) * effective.volatility_scalar
+  );
+  const dynamicMaxDailyLoss = Math.min(SESSION_LIMITS.maxDailyLoss, ACCOUNT_EQUITY_BASE * effective.max_daily_loss_pct);
 
-  // ── Session-level checks (behavioral guardrails) ──────────────────────
-
-  // S1. Manual lock
   if (session.locked) {
     const reason = `Session locked: ${session.lockReason ?? "manual override"}`;
     logRisk.warn({ ...params }, reason);
     return { allowed: false, reason };
   }
 
-  // S2. Daily loss limit
-  if (session.realizedPnl <= -SESSION_LIMITS.maxDailyLoss) {
-    const reason = `Daily loss limit hit: $${session.realizedPnl.toFixed(2)} realized (max -$${SESSION_LIMITS.maxDailyLoss})`;
+  if (session.realizedPnl <= -dynamicMaxDailyLoss) {
+    const reason = `Daily loss limit hit: $${session.realizedPnl.toFixed(2)} realized (max -$${dynamicMaxDailyLoss.toFixed(2)})`;
     logRisk.warn({ ...params, pnl: session.realizedPnl }, reason);
     return { allowed: false, reason };
   }
 
-  // S3. Max daily trades
   if (session.tradeCount >= SESSION_LIMITS.maxDailyTrades) {
     const reason = `Daily trade limit hit: ${session.tradeCount}/${SESSION_LIMITS.maxDailyTrades} trades`;
     logRisk.warn({ ...params, count: session.tradeCount }, reason);
     return { allowed: false, reason };
   }
 
-  // S4. Consecutive loss cooldown
   if (session.consecutiveLosses >= SESSION_LIMITS.consecutiveLossLimit && session.lastLossTime > 0) {
     const cooldownMs = SESSION_LIMITS.cooldownMinutes * 60_000;
     const elapsed = Date.now() - session.lastLossTime;
@@ -141,7 +206,6 @@ export function checkRisk(params: RiskCheckParams): RiskCheckResult {
     }
   }
 
-  // S5. Late-day lockout
   const et = getNowET();
   const minutesSinceOpen =
     (et.hours - SESSION_LIMITS.marketOpenHour) * 60 +
@@ -156,34 +220,28 @@ export function checkRisk(params: RiskCheckParams): RiskCheckResult {
     return { allowed: false, reason };
   }
 
-  // S6. Pre-market / after-hours block (only allow during RTH)
   if (minutesSinceOpen < 0 || minutesBeforeClose < 0) {
     const reason = `Outside regular trading hours (${et.hours}:${String(et.minutes).padStart(2, "0")} ET)`;
     logRisk.warn({ ...params, time: `${et.hours}:${et.minutes}` }, reason);
     return { allowed: false, reason };
   }
 
-  // ── Per-order checks ──────────────────────────────────────────────────
-
-  // 1. Max order size
   if (params.totalQuantity > LIMITS.maxOrderSize) {
     const reason = `Order size ${params.totalQuantity} exceeds max ${LIMITS.maxOrderSize} shares`;
     logRisk.warn({ ...params, limit: LIMITS.maxOrderSize }, reason);
     return { allowed: false, reason };
   }
 
-  // 2. Max notional value
   const price = params.estimatedPrice ?? params.lmtPrice ?? params.auxPrice ?? 0;
   if (price > 0) {
     const notional = params.totalQuantity * price;
-    if (notional > LIMITS.maxNotionalValue) {
-      const reason = `Notional value $${notional.toFixed(2)} exceeds max $${LIMITS.maxNotionalValue}`;
-      logRisk.warn({ ...params, notional, limit: LIMITS.maxNotionalValue }, reason);
+    if (notional > dynamicMaxNotional) {
+      const reason = `Notional value $${notional.toFixed(2)} exceeds max $${dynamicMaxNotional.toFixed(2)}`;
+      logRisk.warn({ ...params, notional, limit: dynamicMaxNotional }, reason);
       return { allowed: false, reason };
     }
   }
 
-  // 3. Max orders per minute
   const now = Date.now();
   const oneMinuteAgo = now - 60_000;
   while (recentOrderTimestamps.length > 0 && recentOrderTimestamps[0] < oneMinuteAgo) {
@@ -195,25 +253,17 @@ export function checkRisk(params: RiskCheckParams): RiskCheckResult {
     return { allowed: false, reason };
   }
 
-  // 4. Penny stock / minimum price check
   if (price > 0 && price < LIMITS.minSharePrice) {
     const reason = `Share price $${price} below minimum $${LIMITS.minSharePrice} — penny stock rejected`;
     logRisk.warn({ ...params, price, limit: LIMITS.minSharePrice }, reason);
     return { allowed: false, reason };
   }
 
-  // All checks passed — record timestamp
   recentOrderTimestamps.push(now);
   logRisk.debug({ symbol: params.symbol, action: params.action, qty: params.totalQuantity }, "Risk check passed");
   return { allowed: true };
 }
 
-// ── Session State Management ────────────────────────────────────────────────
-
-/**
- * Call this after a trade completes to update session state.
- * realizedPnl: the P&L of this individual trade (positive = win, negative = loss)
- */
 export function recordTradeResult(realizedPnl: number): void {
   ensureToday();
   session.realizedPnl += realizedPnl;
@@ -229,14 +279,10 @@ export function recordTradeResult(realizedPnl: number): void {
     );
   } else {
     session.consecutiveLosses = 0;
-    logRisk.info(
-      { pnl: realizedPnl, dailyPnl: session.realizedPnl },
-      "Win recorded — consecutive loss counter reset"
-    );
+    logRisk.info({ pnl: realizedPnl, dailyPnl: session.realizedPnl }, "Win recorded — consecutive loss counter reset");
   }
 }
 
-/** Lock the session manually (e.g., "I'm tilting, stop me"). */
 export function lockSession(reason?: string): void {
   ensureToday();
   session.locked = true;
@@ -244,7 +290,6 @@ export function lockSession(reason?: string): void {
   logRisk.warn({ reason: session.lockReason }, "Session manually locked");
 }
 
-/** Unlock the session. */
 export function unlockSession(): void {
   ensureToday();
   session.locked = false;
@@ -252,23 +297,30 @@ export function unlockSession(): void {
   logRisk.info({}, "Session unlocked");
 }
 
-/** Reset session state (new day or manual reset). */
 export function resetSession(): void {
   session = freshSession(getTodayET());
   logRisk.info({}, "Session state reset");
 }
 
-/** Get current session state for display. */
 export function getSessionState(): SessionState & { limits: typeof SESSION_LIMITS } {
   ensureToday();
   return { ...session, limits: { ...SESSION_LIMITS } };
 }
 
 export function getRiskLimits() {
-  return { ...LIMITS, ...SESSION_LIMITS };
+  const effective = getEffectiveRiskConfig();
+  return {
+    ...LIMITS,
+    ...SESSION_LIMITS,
+    maxNotionalValue: Math.min(
+      LIMITS.maxNotionalValue,
+      ACCOUNT_EQUITY_BASE * Math.min(effective.max_position_pct, effective.max_concentration_pct) * effective.volatility_scalar
+    ),
+    maxDailyLoss: Math.min(SESSION_LIMITS.maxDailyLoss, ACCOUNT_EQUITY_BASE * effective.max_daily_loss_pct),
+    riskConfig: effective,
+  };
 }
 
-// For testing: allow injecting time functions
 export const _testing = {
   getNowET,
   getTodayET,

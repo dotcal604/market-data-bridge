@@ -40,7 +40,7 @@ import {
   reqSmartComponents,
 } from "../ibkr/data.js";
 import { readMessages, postMessage, clearMessages, getStats } from "../collab/store.js";
-import { checkRisk, getSessionState, recordTradeResult, lockSession, unlockSession, resetSession } from "../ibkr/risk-gate.js";
+import { checkRisk, getSessionState, recordTradeResult, lockSession, unlockSession, resetSession, getRiskGateConfig } from "../ibkr/risk-gate.js";
 import { runPortfolioStressTest, computePortfolioExposure } from "../ibkr/portfolio.js";
 import { calculatePositionSize } from "../ibkr/risk.js";
 import {
@@ -66,6 +66,7 @@ import { generateDriftReport } from "../eval/drift-detector.js";
 import { importTraderSyncCSV } from "../tradersync/importer.js";
 import { computeEnsembleWithWeights } from "../eval/ensemble/scorer.js";
 import { getWeights } from "../eval/ensemble/weights.js";
+import { tuneRiskParams } from "../eval/risk-tuning.js";
 import type { ModelEvaluation } from "../eval/models/types.js";
 
 export function createMcpServer(): McpServer {
@@ -1438,6 +1439,37 @@ export function createMcpServer(): McpServer {
       try {
         resetSession();
         return { content: [{ type: "text", text: JSON.stringify(getSessionState(), null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "get_risk_config",
+    "Get persisted and effective risk configuration values used by the risk gate.",
+    {},
+    async () => {
+      try {
+        return {
+          content: [{ type: "text", text: JSON.stringify(getRiskGateConfig(), null, 2) }],
+        };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "tune_risk_params",
+    "Auto-tune risk parameters from the last 100 outcomes using half-Kelly sizing and store them in risk_config.",
+    {},
+    async () => {
+      try {
+        const tune = tuneRiskParams();
+        return {
+          content: [{ type: "text", text: JSON.stringify({ tune, config: getRiskGateConfig() }, null, 2) }],
+        };
       } catch (e: any) {
         return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
       }
