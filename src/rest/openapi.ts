@@ -1066,6 +1066,105 @@ export const openApiSpec = {
         },
       },
     },
+    "/api/data/historical-ticks/{symbol}": {
+      get: {
+        operationId: "getHistoricalTicks",
+        summary: "Get historical tick-level data from IBKR. Supports TRADES (last trades), BID_ASK (bid/ask quotes), and MIDPOINT tick types. Maximum 1000 ticks per request. Requires TWS/Gateway with market data subscription.",
+        parameters: [
+          { name: "symbol", in: "path", required: true, schema: { type: "string" }, description: "Ticker symbol, e.g. AAPL, MSFT" },
+          { name: "startTime", in: "query", required: true, schema: { type: "string" }, description: "Start time in format: YYYYMMDD HH:MM:SS or YYYYMMDD-HH:MM:SS" },
+          { name: "endTime", in: "query", required: true, schema: { type: "string" }, description: "End time in format: YYYYMMDD HH:MM:SS or YYYYMMDD-HH:MM:SS" },
+          { name: "type", in: "query", required: true, schema: { type: "string", enum: ["TRADES", "BID_ASK", "MIDPOINT"] }, description: "Type of tick data: TRADES (last trades), BID_ASK (bid/ask quotes), MIDPOINT (midpoint prices)" },
+          { name: "count", in: "query", required: true, schema: { type: "integer", minimum: 1, maximum: 1000 }, description: "Number of ticks to retrieve (max 1000)" },
+          { name: "secType", in: "query", schema: { type: "string" }, description: "Security type: STK (default), OPT, FUT" },
+          { name: "exchange", in: "query", schema: { type: "string" }, description: "Exchange: SMART (default), NYSE" },
+          { name: "currency", in: "query", schema: { type: "string" }, description: "Currency: USD (default), EUR, GBP" },
+        ],
+        responses: {
+          "200": {
+            description: "Historical tick data",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    symbol: { type: "string", description: "Symbol of the security" },
+                    type: { type: "string", enum: ["TRADES", "BID_ASK", "MIDPOINT"], description: "Type of tick data" },
+                    count: { type: "integer", description: "Number of ticks returned" },
+                    ticks: {
+                      type: "array",
+                      description: "Array of tick data. Schema varies by type.",
+                      items: {
+                        oneOf: [
+                          {
+                            description: "TRADES tick (HistoricalTickLast)",
+                            type: "object",
+                            properties: {
+                              time: { type: "integer", description: "UNIX timestamp" },
+                              price: { type: "number", description: "Trade price" },
+                              size: { type: "number", description: "Trade size" },
+                              exchange: { type: "string", description: "Exchange code" },
+                              specialConditions: { type: "string", description: "Trade conditions" },
+                              tickAttribLast: {
+                                type: "object",
+                                properties: {
+                                  pastLimit: { type: "boolean" },
+                                  unreported: { type: "boolean" },
+                                },
+                              },
+                            },
+                          },
+                          {
+                            description: "BID_ASK tick (HistoricalTickBidAsk)",
+                            type: "object",
+                            properties: {
+                              time: { type: "integer", description: "UNIX timestamp" },
+                              priceBid: { type: "number", description: "Bid price" },
+                              priceAsk: { type: "number", description: "Ask price" },
+                              sizeBid: { type: "number", description: "Bid size" },
+                              sizeAsk: { type: "number", description: "Ask size" },
+                              tickAttribBidAsk: {
+                                type: "object",
+                                properties: {
+                                  bidPastLow: { type: "boolean" },
+                                  askPastHigh: { type: "boolean" },
+                                },
+                              },
+                            },
+                          },
+                          {
+                            description: "MIDPOINT tick (HistoricalTick)",
+                            type: "object",
+                            properties: {
+                              time: { type: "integer", description: "UNIX timestamp" },
+                              price: { type: "number", description: "Midpoint price" },
+                              size: { type: "number", description: "Size" },
+                            },
+                          },
+                        ],
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "400": {
+            description: "Invalid parameters",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    error: { type: "string" },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
     // =====================================================================
     // ORDER EXECUTION (IBKR — requires TWS/Gateway)
     // =====================================================================

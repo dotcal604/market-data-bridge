@@ -22,7 +22,7 @@ import { getOpenOrders, getCompletedOrders, getExecutions, placeOrder, placeBrac
 import { computePortfolioExposure } from "../ibkr/portfolio.js";
 import { setFlattenEnabled, getFlattenConfig } from "../scheduler.js";
 import { getContractDetails } from "../ibkr/contracts.js";
-import { getIBKRQuote } from "../ibkr/marketdata.js";
+import { getIBKRQuote, getHistoricalTicks } from "../ibkr/marketdata.js";
 import { readMessages, postMessage, clearMessages, getStats } from "../collab/store.js";
 import { getGptInstructions } from "./gpt-instructions.js";
 import { checkRisk, getSessionState, recordTradeResult, lockSession, unlockSession, resetSession } from "../ibkr/risk-gate.js";
@@ -407,6 +407,58 @@ router.get("/ibkr/quote/:symbol", async (req, res) => {
       currency: qs(req.query.currency, "") || undefined,
     });
     res.json(quote);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/data/historical-ticks/:symbol
+router.get("/data/historical-ticks/:symbol", async (req, res) => {
+  if (!isConnected()) {
+    res.json({ error: "IBKR not connected. Start TWS/Gateway for historical ticks." });
+    return;
+  }
+  try {
+    const { symbol } = req.params;
+    const symErr = validateSymbol(symbol);
+    if (symErr) {
+      res.status(400).json({ error: symErr });
+      return;
+    }
+
+    const startTime = qs(req.query.startTime, "");
+    const endTime = qs(req.query.endTime, "");
+    const type = qs(req.query.type, "TRADES").toUpperCase();
+    const countRaw = qs(req.query.count, "100");
+
+    if (!startTime || !endTime) {
+      res.status(400).json({
+        error: "Required query params: startTime, endTime (format: YYYYMMDD HH:MM:SS or YYYYMMDD-HH:MM:SS)",
+      });
+      return;
+    }
+
+    if (type !== "TRADES" && type !== "BID_ASK" && type !== "MIDPOINT") {
+      res.status(400).json({
+        error: "Invalid type. Must be one of: TRADES, BID_ASK, MIDPOINT",
+      });
+      return;
+    }
+
+    const count = safeLimit(countRaw, 100, 1000);
+
+    const data = await getHistoricalTicks({
+      symbol,
+      startTime,
+      endTime,
+      type: type as "TRADES" | "BID_ASK" | "MIDPOINT",
+      count,
+      secType: qs(req.query.secType, "") || undefined,
+      exchange: qs(req.query.exchange, "") || undefined,
+      currency: qs(req.query.currency, "") || undefined,
+    });
+
+    res.json(data);
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }

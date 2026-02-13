@@ -1,4 +1,4 @@
-import { EventName, ErrorCode, Contract, isNonFatalError } from "@stoqey/ib";
+import { EventName, ErrorCode, Contract, isNonFatalError, WhatToShow, HistoricalTick, HistoricalTickBidAsk, HistoricalTickLast } from "@stoqey/ib";
 import { getIB, getNextReqId } from "./connection.js";
 
 // TickType is a type-only union — use numeric constants, NOT the enum.
@@ -119,5 +119,127 @@ export async function getIBKRQuote(params: {
 
     // snapshot=true, regulatorySnapshot=false
     ib.reqMktData(reqId, contract, "", true, false);
+  });
+}
+
+export type HistoricalTickType = "TRADES" | "BID_ASK" | "MIDPOINT";
+
+export interface HistoricalTickData {
+  symbol: string;
+  type: HistoricalTickType;
+  ticks: Array<HistoricalTick | HistoricalTickBidAsk | HistoricalTickLast>;
+  count: number;
+}
+
+export async function getHistoricalTicks(params: {
+  symbol: string;
+  startTime: string;
+  endTime: string;
+  type: HistoricalTickType;
+  count: number;
+  secType?: string;
+  exchange?: string;
+  currency?: string;
+}): Promise<HistoricalTickData> {
+  const ib = getIB();
+  const reqId = getNextReqId();
+
+  const contract: Contract = {
+    symbol: params.symbol,
+    secType: (params.secType ?? "STK") as any,
+    exchange: params.exchange ?? "SMART",
+    currency: params.currency ?? "USD",
+  };
+
+  const whatToShow: WhatToShow = params.type as WhatToShow;
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const ticks: Array<HistoricalTick | HistoricalTickBidAsk | HistoricalTickLast> = [];
+
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve({
+        symbol: params.symbol.toUpperCase(),
+        type: params.type,
+        ticks,
+        count: ticks.length,
+      });
+    }, 15000);
+
+    const onHistoricalTicks = (id: number, tickArray: HistoricalTick[], done: boolean) => {
+      if (id !== reqId) return;
+      ticks.push(...tickArray);
+      if (done) {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve({
+          symbol: params.symbol.toUpperCase(),
+          type: params.type,
+          ticks,
+          count: ticks.length,
+        });
+      }
+    };
+
+    const onHistoricalTicksBidAsk = (id: number, tickArray: HistoricalTickBidAsk[], done: boolean) => {
+      if (id !== reqId) return;
+      ticks.push(...tickArray);
+      if (done) {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve({
+          symbol: params.symbol.toUpperCase(),
+          type: params.type,
+          ticks,
+          count: ticks.length,
+        });
+      }
+    };
+
+    const onHistoricalTicksLast = (id: number, tickArray: HistoricalTickLast[], done: boolean) => {
+      if (id !== reqId) return;
+      ticks.push(...tickArray);
+      if (done) {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve({
+          symbol: params.symbol.toUpperCase(),
+          type: params.type,
+          ticks,
+          count: ticks.length,
+        });
+      }
+    };
+
+    const onError = (err: Error, code: ErrorCode, id: number) => {
+      if (id !== reqId) return;
+      if (isNonFatalError(code, err)) return;
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error(`Historical ticks error (${code}): ${err.message}`));
+    };
+
+    const cleanup = () => {
+      clearTimeout(timeout);
+      ib.off(EventName.historicalTicks, onHistoricalTicks);
+      ib.off(EventName.historicalTicksBidAsk, onHistoricalTicksBidAsk);
+      ib.off(EventName.historicalTicksLast, onHistoricalTicksLast);
+      ib.off(EventName.error, onError);
+    };
+
+    ib.on(EventName.historicalTicks, onHistoricalTicks);
+    ib.on(EventName.historicalTicksBidAsk, onHistoricalTicksBidAsk);
+    ib.on(EventName.historicalTicksLast, onHistoricalTicksLast);
+    ib.on(EventName.error, onError);
+
+    // useRTH: 1 for regular trading hours only, 0 for all available hours
+    ib.reqHistoricalTicks(reqId, contract, params.startTime, params.endTime, params.count, whatToShow, 1, false);
   });
 }

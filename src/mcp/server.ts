@@ -21,7 +21,7 @@ import { getAccountSummary, getPositions, getPnL } from "../ibkr/account.js";
 import { getOpenOrders, getCompletedOrders, getExecutions, placeOrder, placeBracketOrder, placeAdvancedBracket, cancelOrder, cancelAllOrders, flattenAllPositions, validateOrder } from "../ibkr/orders.js";
 import { setFlattenEnabled, getFlattenConfig } from "../scheduler.js";
 import { getContractDetails } from "../ibkr/contracts.js";
-import { getIBKRQuote } from "../ibkr/marketdata.js";
+import { getIBKRQuote, getHistoricalTicks } from "../ibkr/marketdata.js";
 import { readMessages, postMessage, clearMessages, getStats } from "../collab/store.js";
 import { checkRisk, getSessionState, recordTradeResult, lockSession, unlockSession, resetSession } from "../ibkr/risk-gate.js";
 import { runPortfolioStressTest, computePortfolioExposure } from "../ibkr/portfolio.js";
@@ -611,6 +611,37 @@ export function createMcpServer(): McpServer {
       try {
         const quote = await getIBKRQuote({ symbol, secType, exchange, currency });
         return { content: [{ type: "text", text: JSON.stringify(quote, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: get_historical_ticks (IBKR — requires TWS/Gateway) ---
+  server.tool(
+    "get_historical_ticks",
+    "Get historical tick-level data from IBKR. Supports TRADES, BID_ASK, and MIDPOINT tick types. Maximum 1000 ticks per request. Requires TWS/Gateway with market data subscription.",
+    {
+      symbol: z.string().describe("Ticker symbol, e.g. AAPL, MSFT"),
+      startTime: z.string().describe("Start time in format: YYYYMMDD HH:MM:SS or YYYYMMDD-HH:MM:SS"),
+      endTime: z.string().describe("End time in format: YYYYMMDD HH:MM:SS or YYYYMMDD-HH:MM:SS"),
+      type: z.enum(["TRADES", "BID_ASK", "MIDPOINT"]).describe("Type of tick data: TRADES (last trades), BID_ASK (bid/ask quotes), MIDPOINT (midpoint prices)"),
+      count: z.number().min(1).max(1000).describe("Number of ticks to retrieve (max 1000)"),
+      secType: z.string().optional().describe("Security type: STK (default), OPT, FUT, etc."),
+      exchange: z.string().optional().describe("Exchange: SMART (default), NYSE, etc."),
+      currency: z.string().optional().describe("Currency: USD (default), EUR, GBP, etc."),
+    },
+    async ({ symbol, startTime, endTime, type, count, secType, exchange, currency }) => {
+      if (!isConnected()) {
+        return {
+          content: [
+            { type: "text", text: JSON.stringify({ error: "IBKR not connected. Start TWS/Gateway for historical ticks." }, null, 2) },
+          ],
+        };
+      }
+      try {
+        const data = await getHistoricalTicks({ symbol, startTime, endTime, type, count, secType, exchange, currency });
+        return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
       } catch (e: any) {
         return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
       }
