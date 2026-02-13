@@ -23,6 +23,7 @@ import { getOpenOrders, getCompletedOrders, getExecutions, placeOrder, placeBrac
 import { setFlattenEnabled, getFlattenConfig } from "../scheduler.js";
 import { getContractDetails } from "../ibkr/contracts.js";
 import { getIBKRQuote, getHistoricalTicks } from "../ibkr/marketdata.js";
+import { reqHistoricalNews, reqNewsArticle, reqNewsBulletins, reqNewsProviders } from "../ibkr/news.js";
 import { readMessages, postMessage, clearMessages, getStats } from "../collab/store.js";
 import { checkRisk, getSessionState, recordTradeResult, lockSession, unlockSession, resetSession } from "../ibkr/risk-gate.js";
 import { runPortfolioStressTest, computePortfolioExposure } from "../ibkr/portfolio.js";
@@ -486,6 +487,155 @@ export function createMcpServer(): McpServer {
       try {
         const pnl = await getPnL();
         return { content: [{ type: "text", text: JSON.stringify(pnl, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: get_news_providers (IBKR — requires TWS/Gateway) ---
+  server.tool(
+    "get_news_providers",
+    "Get IBKR news providers. Returns provider codes used for historical/news article lookups.",
+    {},
+    async () => {
+      if (!isConnected()) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                { error: "IBKR not connected. Start TWS/Gateway for news provider data." },
+                null,
+                2
+              ),
+            },
+          ],
+        };
+      }
+      try {
+        const providers = await reqNewsProviders();
+        return {
+          content: [
+            { type: "text", text: JSON.stringify({ count: providers.length, providers }, null, 2) },
+          ],
+        };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: get_news_article (IBKR — requires TWS/Gateway) ---
+  server.tool(
+    "get_news_article",
+    "Get a full IBKR news article by provider code and article ID.",
+    {
+      providerCode: z.string().describe("News provider code, e.g. BRFG"),
+      articleId: z.string().describe("Article ID from historical news results"),
+    },
+    async ({ providerCode, articleId }) => {
+      if (!isConnected()) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                { error: "IBKR not connected. Start TWS/Gateway for news articles." },
+                null,
+                2
+              ),
+            },
+          ],
+        };
+      }
+      try {
+        const article = await reqNewsArticle(providerCode, articleId);
+        return { content: [{ type: "text", text: JSON.stringify(article, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: get_historical_news (IBKR — requires TWS/Gateway) ---
+  server.tool(
+    "get_historical_news",
+    "Get IBKR historical news headlines for a symbol and provider codes.",
+    {
+      symbol: z.string().describe("Ticker symbol, e.g. AAPL"),
+      providerCodes: z.string().describe("Provider codes separated by '+', e.g. BRFG+BRFUPDN"),
+      startDateTime: z.string().describe("Start datetime in IBKR format, e.g. 20240101-00:00:00"),
+      endDateTime: z.string().describe("End datetime in IBKR format, e.g. 20240131-23:59:59"),
+      secType: z.string().optional().describe("Security type (default STK)"),
+      exchange: z.string().optional().describe("Exchange (default SMART)"),
+      currency: z.string().optional().describe("Currency (default USD)"),
+    },
+    async ({ symbol, providerCodes, startDateTime, endDateTime, secType, exchange, currency }) => {
+      if (!isConnected()) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                { error: "IBKR not connected. Start TWS/Gateway for historical news." },
+                null,
+                2
+              ),
+            },
+          ],
+        };
+      }
+      try {
+        const [contract] = await getContractDetails({ symbol, secType, exchange, currency });
+        if (!contract) {
+          return {
+            content: [{ type: "text", text: JSON.stringify({ error: `No contract found for symbol ${symbol}` }, null, 2) }],
+            isError: true,
+          };
+        }
+        const headlines = await reqHistoricalNews(contract.conId, providerCodes, startDateTime, endDateTime);
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({ symbol: symbol.toUpperCase(), conId: contract.conId, count: headlines.length, headlines }, null, 2),
+            },
+          ],
+        };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: get_news_bulletins (IBKR — requires TWS/Gateway) ---
+  server.tool(
+    "get_news_bulletins",
+    "Subscribe to IBKR news bulletins for 3 seconds, then unsubscribe and return collected bulletins.",
+    {},
+    async () => {
+      if (!isConnected()) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                { error: "IBKR not connected. Start TWS/Gateway for news bulletins." },
+                null,
+                2
+              ),
+            },
+          ],
+        };
+      }
+      try {
+        const bulletins = await reqNewsBulletins();
+        return {
+          content: [
+            { type: "text", text: JSON.stringify({ count: bulletins.length, bulletins }, null, 2) },
+          ],
+        };
       } catch (e: any) {
         return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
       }

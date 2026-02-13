@@ -453,6 +453,142 @@ export const openApiSpec = {
         },
       },
     },
+    "/api/news/providers": {
+      get: {
+        operationId: "getIBKRNewsProviders",
+        summary: "Get IBKR news providers (requires TWS/Gateway connection)",
+        responses: {
+          "200": {
+            description: "News providers",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    count: { type: "integer" },
+                    providers: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          code: { type: "string" },
+                          name: { type: "string" },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/news/article/{providerId}/{articleId}": {
+      get: {
+        operationId: "getIBKRNewsArticle",
+        summary: "Get a full IBKR news article by provider and article ID",
+        parameters: [
+          { name: "providerId", in: "path", required: true, schema: { type: "string" }, description: "IBKR provider code" },
+          { name: "articleId", in: "path", required: true, schema: { type: "string" }, description: "IBKR article ID" },
+        ],
+        responses: {
+          "200": {
+            description: "News article",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    providerCode: { type: "string" },
+                    articleId: { type: "string" },
+                    articleType: { type: "integer" },
+                    articleText: { type: "string" },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/news/history/{symbol}": {
+      get: {
+        operationId: "getIBKRHistoricalNews",
+        summary: "Get historical IBKR news headlines for a symbol",
+        parameters: [
+          { name: "symbol", in: "path", required: true, schema: { type: "string" }, description: "Ticker symbol" },
+          { name: "providerCodes", in: "query", required: true, schema: { type: "string" }, description: "Provider codes joined with '+'" },
+          { name: "startDateTime", in: "query", required: true, schema: { type: "string" }, description: "IBKR datetime format" },
+          { name: "endDateTime", in: "query", required: true, schema: { type: "string" }, description: "IBKR datetime format" },
+          { name: "secType", in: "query", required: false, schema: { type: "string" }, description: "Security type, default STK" },
+          { name: "exchange", in: "query", required: false, schema: { type: "string" }, description: "Exchange, default SMART" },
+          { name: "currency", in: "query", required: false, schema: { type: "string" }, description: "Currency, default USD" },
+        ],
+        responses: {
+          "200": {
+            description: "Historical news headlines",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    symbol: { type: "string" },
+                    conId: { type: "integer" },
+                    count: { type: "integer" },
+                    headlines: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          time: { type: "string" },
+                          providerCode: { type: "string" },
+                          articleId: { type: "string" },
+                          headline: { type: "string" },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/news/bulletins": {
+      get: {
+        operationId: "getIBKRNewsBulletins",
+        summary: "Subscribe to IBKR news bulletins for 3 seconds and return collected bulletins",
+        responses: {
+          "200": {
+            description: "Collected bulletins",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    count: { type: "integer" },
+                    bulletins: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          msgId: { type: "integer" },
+                          msgType: { type: "integer" },
+                          message: { type: "string" },
+                          originatingExchange: { type: "string" },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
     "/api/financials/{symbol}": {
       get: {
         operationId: "getFinancials",
