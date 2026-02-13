@@ -1,8 +1,9 @@
-import { readFileSync, watchFile, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, watchFile, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { EnsembleWeights } from "./types.js";
 import { logger } from "../../logging.js";
+import { insertWeightHistory } from "../../db/database.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const WEIGHTS_PATH = join(__dirname, "..", "..", "..", "data", "weights.json");
@@ -55,4 +56,42 @@ export function initWeights(): void {
 
 export function getWeights(): EnsembleWeights {
   return { ...currentWeights };
+}
+
+/**
+ * Update weights (writes to disk, updates in-memory, records in weight_history).
+ * @param newWeights - Partial weights object (missing fields use current values)
+ * @param source - Source of the update (e.g., "manual", "recalibration", "simulation")
+ */
+export function updateWeights(
+  newWeights: Partial<Pick<EnsembleWeights, "claude" | "gpt4o" | "gemini" | "k" | "sample_size">>,
+  source: string = "manual"
+): EnsembleWeights {
+  const updated: EnsembleWeights = {
+    claude: newWeights.claude ?? currentWeights.claude,
+    gpt4o: newWeights.gpt4o ?? currentWeights.gpt4o,
+    gemini: newWeights.gemini ?? currentWeights.gemini,
+    k: newWeights.k ?? currentWeights.k,
+    sample_size: newWeights.sample_size ?? currentWeights.sample_size,
+    updated_at: new Date().toISOString(),
+    source,
+  };
+
+  // Validate weights sum to ~1.0
+  const sum = updated.claude + updated.gpt4o + updated.gemini;
+  if (Math.abs(sum - 1.0) > 0.01) {
+    throw new Error(`Weights must sum to 1.0 (got ${sum.toFixed(3)})`);
+  }
+
+  // Write to disk
+  writeFileSync(WEIGHTS_PATH, JSON.stringify(updated, null, 2), "utf-8");
+  logger.info(`[Weights] Updated: claude=${updated.claude} gpt4o=${updated.gpt4o} gemini=${updated.gemini} k=${updated.k} source=${source}`);
+
+  // Update in-memory (file watcher will also trigger, but this is immediate)
+  currentWeights = updated;
+
+  // Record in history (spread to plain object for DB function)
+  insertWeightHistory({ ...updated }, source);
+
+  return updated;
 }

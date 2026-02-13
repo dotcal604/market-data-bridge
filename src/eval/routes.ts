@@ -7,7 +7,7 @@ import { runPrefilters } from "./guardrails/prefilter.js";
 import { evaluateAllModels } from "./models/runner.js";
 import { computeEnsemble, computeEnsembleWithWeights } from "./ensemble/scorer.js";
 import { runGuardrails } from "./guardrails/behavioral.js";
-import { getWeights } from "./ensemble/weights.js";
+import { getWeights, updateWeights } from "./ensemble/weights.js";
 import type { ModelEvaluation } from "./models/types.js";
 import {
   insertEvaluation,
@@ -27,6 +27,7 @@ import {
   getEvalOutcomes,
   getTraderSyncTrades,
   getTraderSyncStats,
+  getWeightHistory,
 } from "../db/database.js";
 import { importTraderSyncCSV } from "../tradersync/importer.js";
 import { generateDriftReport } from "./drift-detector.js";
@@ -306,6 +307,84 @@ evalRouter.get("/stats", (_req, res) => {
 // GET /weights — current ensemble weights
 evalRouter.get("/weights", (_req, res) => {
   res.json(getWeights());
+});
+
+// POST /weights — update ensemble weights
+evalRouter.post("/weights", (req, res) => {
+  try {
+    const { claude, gpt4o, gemini, k, sample_size, source } = req.body ?? {};
+
+    // Validate at least one weight is provided
+    if (claude === undefined && gpt4o === undefined && gemini === undefined && k === undefined && sample_size === undefined) {
+      res.status(400).json({ error: "At least one of claude, gpt4o, gemini, k, or sample_size must be provided" });
+      return;
+    }
+
+    // Validate numeric types
+    if (claude !== undefined && typeof claude !== "number") {
+      res.status(400).json({ error: "claude must be a number" });
+      return;
+    }
+    if (gpt4o !== undefined && typeof gpt4o !== "number") {
+      res.status(400).json({ error: "gpt4o must be a number" });
+      return;
+    }
+    if (gemini !== undefined && typeof gemini !== "number") {
+      res.status(400).json({ error: "gemini must be a number" });
+      return;
+    }
+    if (k !== undefined && typeof k !== "number") {
+      res.status(400).json({ error: "k must be a number" });
+      return;
+    }
+    if (sample_size !== undefined && typeof sample_size !== "number") {
+      res.status(400).json({ error: "sample_size must be a number" });
+      return;
+    }
+
+    // Validate non-negative
+    if ((claude !== undefined && claude < 0) || (gpt4o !== undefined && gpt4o < 0) || (gemini !== undefined && gemini < 0)) {
+      res.status(400).json({ error: "Weights must be non-negative" });
+      return;
+    }
+    if (k !== undefined && k < 0) {
+      res.status(400).json({ error: "k must be non-negative" });
+      return;
+    }
+
+    const updated = updateWeights(
+      { claude, gpt4o, gemini, k, sample_size },
+      typeof source === "string" ? source : "manual"
+    );
+
+    logger.info(`[Weights] Updated via API: claude=${updated.claude} gpt4o=${updated.gpt4o} gemini=${updated.gemini} k=${updated.k}`);
+    res.json(updated);
+  } catch (e: any) {
+    logger.error({ err: e }, "[Eval] POST /weights failed");
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// GET /weights/history — weight change history
+evalRouter.get("/weights/history", (req, res) => {
+  try {
+    const limit = typeof req.query.limit === "string" ? parseInt(req.query.limit, 10) : 100;
+    const history = getWeightHistory(isNaN(limit) ? 100 : Math.min(limit, 500));
+    
+    // Parse weights_json for each record
+    const parsed = history.map((row) => ({
+      id: row.id,
+      weights: JSON.parse(row.weights_json),
+      sample_size: row.sample_size,
+      reason: row.reason,
+      created_at: row.created_at,
+    }));
+
+    res.json({ count: parsed.length, history: parsed });
+  } catch (e: any) {
+    logger.error({ err: e }, "[Eval] GET /weights/history failed");
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // POST /weights/simulate — "what if" re-scoring with custom weights

@@ -1100,6 +1100,44 @@ export function getModelOutcomesForDrift(days: number = 90): Array<Record<string
   `).all(`-${days}`) as Array<Record<string, unknown>>;
 }
 
+// ── Weight History ────────────────────────────────────────────────────────
+
+export interface WeightHistoryRow {
+  id: number;
+  weights_json: string;
+  sample_size: number | null;
+  reason: string | null;
+  created_at: string;
+}
+
+/**
+ * Insert a weight history record.
+ * @param weights - Object with claude, gpt4o, gemini, k, source, sample_size
+ * @param reason - Description of why weights changed (e.g., "manual", "recalibration", "simulation")
+ */
+export function insertWeightHistory(weights: Record<string, unknown>, reason: string | null = null): void {
+  const sample_size = (weights.sample_size as number) ?? null;
+  runEvalInsert("weight_history", {
+    weights_json: JSON.stringify(weights),
+    sample_size,
+    reason,
+    created_at: new Date().toISOString(),
+  });
+}
+
+/**
+ * Get weight history records, most recent first.
+ * @param limit - Number of records to return (default: 100)
+ */
+export function getWeightHistory(limit: number = 100): WeightHistoryRow[] {
+  return db.prepare(`
+    SELECT id, weights_json, sample_size, reason, created_at
+    FROM weight_history
+    ORDER BY created_at DESC
+    LIMIT ?
+  `).all(limit) as WeightHistoryRow[];
+}
+
 // ── TraderSync Import Helpers ─────────────────────────────────────────────
 
 export function insertTraderSyncTrade(row: Record<string, unknown>): void {
