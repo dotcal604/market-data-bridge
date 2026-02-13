@@ -1,13 +1,15 @@
 "use client";
 
-import { useEvalStats } from "@/lib/hooks/use-evals";
+import { useEvalStats, useModelAgreement } from "@/lib/hooks/use-evals";
 import { StatsSummary } from "@/components/model-stats/stats-summary";
 import { ModelComparison } from "@/components/model-stats/model-comparison";
+import { AgreementHeatmap, AgreementHeatmapSkeleton } from "@/components/charts/AgreementHeatmap";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 
 export default function ModelStatsPage() {
   const stats = useEvalStats();
+  const agreement = useModelAgreement(90); // Last 90 days
 
   return (
     <div className="space-y-6">
@@ -48,6 +50,21 @@ export default function ModelStatsPage() {
         <div className="space-y-6">
           <StatsSummary stats={stats.data} />
           <ModelComparison stats={stats.data} />
+          
+          {/* Model Agreement Heatmap */}
+          {agreement.isLoading ? (
+            <AgreementHeatmapSkeleton />
+          ) : agreement.error ? (
+            <Card className="bg-card">
+              <CardContent className="py-8 text-center">
+                <p className="text-sm text-muted-foreground">
+                  Failed to load agreement data: {(agreement.error as Error).message}
+                </p>
+              </CardContent>
+            </Card>
+          ) : agreement.data?.data ? (
+            <AgreementHeatmap data={agreement.data.data} />
+          ) : null}
         </div>
       )}
     </div>

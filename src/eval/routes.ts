@@ -25,6 +25,7 @@ import {
   getTodaysTrades,
   getEvalsForSimulation,
   getEvalOutcomes,
+  getModelScoresWithOutcomes,
   getTraderSyncTrades,
   getTraderSyncStats,
   getWeightHistory,
@@ -615,6 +616,25 @@ evalRouter.get("/outcomes", (req, res) => {
     res.json({ count: outcomes.length, outcomes });
   } catch (e: any) {
     logger.error({ err: e }, "[Eval] outcomes failed");
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /model-agreement — per-model scores with outcomes for agreement analysis
+// Query params: ?days=90&symbol=AAPL
+evalRouter.get("/model-agreement", (req, res) => {
+  try {
+    const days = typeof req.query.days === "string" ? parseInt(req.query.days, 10) : undefined;
+    const symbol = typeof req.query.symbol === "string" ? req.query.symbol : undefined;
+
+    const data = getModelScoresWithOutcomes({
+      days: isNaN(days as number) ? undefined : days,
+      symbol,
+    });
+
+    res.json({ count: data.length, data });
+  } catch (e: any) {
+    logger.error({ err: e }, "[Eval] model-agreement failed");
     res.status(500).json({ error: e.message });
   }
 });

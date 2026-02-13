@@ -52,3 +52,11 @@ export function useEvalOutcomes(limit = 500) {
     refetchInterval: 60_000,
   });
 }
+
+export function useModelAgreement(days?: number, symbol?: string) {
+  return useQuery({
+    queryKey: ["model-agreement", days, symbol],
+    queryFn: () => evalClient.getModelAgreement(days, symbol),
+    refetchInterval: 60_000,
+  });
+}

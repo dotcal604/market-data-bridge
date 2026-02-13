@@ -68,4 +68,19 @@ export const evalClient = {
     const params = new URLSearchParams({ limit: String(limit) });
     return fetchJson<EvalOutcomesResponse>(`${BASE}/outcomes?${params}`);
   },
+
+  getModelAgreement(days?: number, symbol?: string) {
+    const params = new URLSearchParams();
+    if (days) params.set("days", String(days));
+    if (symbol) params.set("symbol", symbol);
+    return fetchJson<{
+      count: number;
+      data: Array<{
+        evaluation_id: string;
+        model_id: string;
+        trade_score: number;
+        r_multiple: number | null;
+      }>;
+    }>(`${BASE}/model-agreement?${params}`);
+  },
 };

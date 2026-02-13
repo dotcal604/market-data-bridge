@@ -891,6 +891,52 @@ export function getEvalOutcomes(opts: {
   `).all(...params, limit) as EvalOutcomeRow[];
 }
 
+/**
+ * Get model scores with outcomes for agreement analysis.
+ * Returns each model's score alongside the outcome for agreement calculations.
+ */
+export function getModelScoresWithOutcomes(opts: {
+  days?: number;
+  symbol?: string;
+} = {}): Array<{
+  evaluation_id: string;
+  model_id: string;
+  trade_score: number;
+  r_multiple: number | null;
+}> {
+  const conditions: string[] = ["m.compliant = 1", "m.trade_score IS NOT NULL", "o.trade_taken = 1"];
+  const params: unknown[] = [];
+
+  if (opts.days) {
+    conditions.push("e.timestamp >= datetime('now', ? || ' days')");
+    params.push(`-${opts.days}`);
+  }
+  if (opts.symbol) {
+    conditions.push("e.symbol = ?");
+    params.push(opts.symbol);
+  }
+
+  const where = "WHERE " + conditions.join(" AND ");
+
+  return db.prepare(`
+    SELECT
+      m.evaluation_id,
+      m.model_id,
+      m.trade_score,
+      o.r_multiple
+    FROM model_outputs m
+    JOIN evaluations e ON m.evaluation_id = e.id
+    JOIN outcomes o ON o.evaluation_id = e.id
+    ${where}
+    ORDER BY e.timestamp DESC
+  `).all(...params) as Array<{
+    evaluation_id: string;
+    model_id: string;
+    trade_score: number;
+    r_multiple: number | null;
+  }>;
+}
+
 // ── Weight Simulation Data ────────────────────────────────────────────────
 
 export interface SimulationEvalRow {
