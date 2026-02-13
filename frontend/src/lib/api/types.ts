@@ -172,3 +172,28 @@ export interface EvalResponse {
   guardrail: { allowed: boolean; flags: string[] };
   latency_ms: Record<string, number>;
 }
+
+export interface JournalEntry {
+  id: number;
+  symbol: string | null;
+  strategy_version: string | null;
+  reasoning: string;
+  ai_recommendations: string | null;
+  tags: string | null;
+  outcome_tags: string | null;
+  notes: string | null;
+  spy_price: number | null;
+  vix_level: number | null;
+  gap_pct: number | null;
+  relative_volume: number | null;
+  time_of_day: string | null;
+  session_type: string | null;
+  spread_pct: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface JournalHistoryResponse {
+  count: number;
+  entries: JournalEntry[];
+}
