@@ -36,6 +36,28 @@ function qs(val: unknown, fallback: string): string {
   return fallback;
 }
 
+/** Validate a stock/index symbol — alphanumeric, dots, hyphens, carets, max 20 chars */
+const SYMBOL_RE = /^[A-Za-z0-9.\-^=%]{1,20}$/;
+function validateSymbol(symbol: string): string | null {
+  if (!symbol || !SYMBOL_RE.test(symbol)) {
+    return "Invalid symbol: must be 1-20 alphanumeric characters";
+  }
+  return null;
+}
+
+/** Validate a numeric value is a finite positive number */
+function isFinitePositive(val: unknown): val is number {
+  return typeof val === "number" && Number.isFinite(val) && val > 0;
+}
+
+/** Clamp a parsed limit to a safe range */
+function safeLimit(raw: string | undefined, defaultVal: number, max: number = 1000): number {
+  if (!raw) return defaultVal;
+  const n = parseInt(raw, 10);
+  if (isNaN(n) || n < 1) return defaultVal;
+  return Math.min(n, max);
+}
+
 export const router = Router();
 
 // GET /api/status
@@ -47,6 +69,8 @@ router.get("/status", (_req, res) => {
 router.get("/quote/:symbol", async (req, res) => {
   try {
     const symbol = req.params.symbol;
+    const symErr = validateSymbol(symbol);
+    if (symErr) { res.status(400).json({ error: symErr }); return; }
     // Try IBKR first if connected (real-time data)
     if (isConnected()) {
       try {
@@ -189,7 +213,8 @@ router.get("/screener/filters", (_req, res) => {
 router.post("/screener/run", async (req, res) => {
   try {
     const body = req.body ?? {};
-    const results = await runScreener(body.screener_id, body.count);
+    const count = typeof body.count === "number" ? Math.min(Math.max(1, body.count), 100) : 20;
+    const results = await runScreener(body.screener_id, count);
     res.json({ count: results.length, results });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
@@ -200,7 +225,8 @@ router.post("/screener/run", async (req, res) => {
 router.post("/screener/run-with-quotes", async (req, res) => {
   try {
     const body = req.body ?? {};
-    const results = await runScreenerWithQuotes(body.screener_id, body.count);
+    const count = typeof body.count === "number" ? Math.min(Math.max(1, body.count), 100) : 20;
+    const results = await runScreenerWithQuotes(body.screener_id, count);
     res.json({ count: results.length, results });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
@@ -353,6 +379,23 @@ router.post("/order", async (req, res) => {
       res.status(400).json({ error: "Required: symbol, action, orderType, totalQuantity" });
       return;
     }
+    const symErr = validateSymbol(symbol);
+    if (symErr) { res.status(400).json({ error: symErr }); return; }
+    if (!["BUY", "SELL"].includes(action)) {
+      res.status(400).json({ error: "action must be BUY or SELL" }); return;
+    }
+    if (!["MKT", "LMT", "STP", "STP LMT"].includes(orderType)) {
+      res.status(400).json({ error: "orderType must be MKT, LMT, STP, or STP LMT" }); return;
+    }
+    if (typeof totalQuantity !== "number" || !Number.isFinite(totalQuantity) || totalQuantity <= 0) {
+      res.status(400).json({ error: "totalQuantity must be a positive number" }); return;
+    }
+    if (lmtPrice !== undefined && !isFinitePositive(lmtPrice)) {
+      res.status(400).json({ error: "lmtPrice must be a positive number" }); return;
+    }
+    if (auxPrice !== undefined && !isFinitePositive(auxPrice)) {
+      res.status(400).json({ error: "auxPrice must be a positive number" }); return;
+    }
     // Pre-trade risk check
     const riskResult = checkRisk({ symbol, action, orderType, totalQuantity, lmtPrice, auxPrice, secType });
     if (!riskResult.allowed) {
@@ -377,6 +420,26 @@ router.post("/order/bracket", async (req, res) => {
     if (!symbol || !action || !totalQuantity || !entryType || takeProfitPrice == null || stopLossPrice == null) {
       res.status(400).json({ error: "Required: symbol, action, totalQuantity, entryType, takeProfitPrice, stopLossPrice" });
       return;
+    }
+    const symErr = validateSymbol(symbol);
+    if (symErr) { res.status(400).json({ error: symErr }); return; }
+    if (!["BUY", "SELL"].includes(action)) {
+      res.status(400).json({ error: "action must be BUY or SELL" }); return;
+    }
+    if (!["MKT", "LMT"].includes(entryType)) {
+      res.status(400).json({ error: "entryType must be MKT or LMT" }); return;
+    }
+    if (typeof totalQuantity !== "number" || !Number.isFinite(totalQuantity) || totalQuantity <= 0) {
+      res.status(400).json({ error: "totalQuantity must be a positive number" }); return;
+    }
+    if (!isFinitePositive(takeProfitPrice)) {
+      res.status(400).json({ error: "takeProfitPrice must be a positive number" }); return;
+    }
+    if (!isFinitePositive(stopLossPrice)) {
+      res.status(400).json({ error: "stopLossPrice must be a positive number" }); return;
+    }
+    if (entryPrice !== undefined && !isFinitePositive(entryPrice)) {
+      res.status(400).json({ error: "entryPrice must be a positive number" }); return;
     }
     // Pre-trade risk check
     const riskResult = checkRisk({ symbol, action, orderType: entryType, totalQuantity, lmtPrice: entryPrice, secType });
@@ -433,9 +496,8 @@ router.get("/journal", (req, res) => {
   try {
     const symbol = qs(req.query.symbol, "") || undefined;
     const strategy = qs(req.query.strategy, "") || undefined;
-    const limitStr = qs(req.query.limit, "");
-    const limit = limitStr ? parseInt(limitStr, 10) : undefined;
-    const entries = queryJournal({ symbol, strategy, limit: isNaN(limit as number) ? undefined : limit });
+    const limit = safeLimit(qs(req.query.limit, "") || undefined, 100);
+    const entries = queryJournal({ symbol, strategy, limit });
     res.json({ count: (entries as any[]).length, entries });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
@@ -483,9 +545,8 @@ router.get("/orders/history", (req, res) => {
   try {
     const symbol = qs(req.query.symbol, "") || undefined;
     const strategy = qs(req.query.strategy, "") || undefined;
-    const limitStr = qs(req.query.limit, "");
-    const limit = limitStr ? parseInt(limitStr, 10) : undefined;
-    const orders = queryOrders({ symbol, strategy, limit: isNaN(limit as number) ? undefined : limit });
+    const limit = safeLimit(qs(req.query.limit, "") || undefined, 100);
+    const orders = queryOrders({ symbol, strategy, limit });
     res.json({ count: (orders as any[]).length, orders });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
@@ -496,9 +557,8 @@ router.get("/orders/history", (req, res) => {
 router.get("/executions/history", (req, res) => {
   try {
     const symbol = qs(req.query.symbol, "") || undefined;
-    const limitStr = qs(req.query.limit, "");
-    const limit = limitStr ? parseInt(limitStr, 10) : undefined;
-    const executions = queryExecutions({ symbol, limit: isNaN(limit as number) ? undefined : limit });
+    const limit = safeLimit(qs(req.query.limit, "") || undefined, 100);
+    const executions = queryExecutions({ symbol, limit });
     res.json({ count: (executions as any[]).length, executions });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
@@ -515,8 +575,7 @@ router.get("/collab/messages", (req, res) => {
     const since = qs(req.query.since, "") || undefined;
     const author = qs(req.query.author, "") || undefined;
     const tag = qs(req.query.tag, "") || undefined;
-    const limitStr = qs(req.query.limit, "");
-    const limit = limitStr ? parseInt(limitStr, 10) : undefined;
+    const limit = safeLimit(qs(req.query.limit, "") || undefined, 50, 100);
 
     if (author && !["claude", "chatgpt", "user"].includes(author)) {
       res.status(400).json({ error: "author must be 'claude', 'chatgpt', or 'user'" });
@@ -527,7 +586,7 @@ router.get("/collab/messages", (req, res) => {
       since,
       author: author as "claude" | "chatgpt" | "user" | undefined,
       tag,
-      limit: isNaN(limit as number) ? undefined : limit,
+      limit,
     });
     res.json({ count: msgs.length, messages: msgs });
   } catch (e: any) {

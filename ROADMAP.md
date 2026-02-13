@@ -8,7 +8,7 @@
 - **Frontend**: 7 pages (dashboard, evals, eval detail, weights, weights demo, model stats, + eval filters) — **~25% of backend exposed**
 - **Tests**: 201 passing (16 test files) — Vitest + in-memory SQLite
 - **Agent PRs merged**: #11, #12, #13, #23, #29-38, #44 (16 total)
-- **SDK versions**: @anthropic-ai/sdk 0.39, openai 6.21, @google/genai 1.0, @stoqey/ib 1.5.3
+- **SDK versions**: @anthropic-ai/sdk 0.74, openai 6.21, @google/genai 1.0, @stoqey/ib 1.5.3
 - **IBKR API gap**: @stoqey/ib targets TWS API 10.32; current is 10.42. Backwards compatible — no action needed until library updates.
 
 ## Priority Framework
@@ -89,15 +89,15 @@ Expose IBKR account data and order management. All backend endpoints exist — t
 
 ---
 
-## Phase 4: Journal & Collaboration (P1)
+## Phase 4: Journal & Collaboration (P1 — QUEUED)
 
-Record trade reasoning before execution, review after. Enable human visibility into AI-to-AI chat.
+Record trade reasoning before execution, review after. Enable human visibility into AI-to-AI chat. Issues #45-47 created, awaiting Copilot PRs.
 
-| Task | Agent | Endpoints used |
-|------|-------|----------------|
-| **Journal entry form** — symbol, strategy_version, reasoning (textarea), tags. Auto-capture market context: SPY price, VIX, gap%, RVOL, time_of_day | Copilot | POST /api/journal, GET /api/quote/SPY |
-| **Journal history + detail** — searchable table, row click → full reasoning + market context + linked orders + outcome update form | Copilot | GET /api/journal, PATCH /api/journal/:id |
-| **Collab channel feed** — message feed with author badges (Claude=purple, ChatGPT=green, User=gray), post form, thread view, clear button | Copilot | GET /api/collab/messages, POST /api/collab/message, DELETE /api/collab/messages, GET /api/collab/stats |
+| Task | Agent | Issue | Status |
+|------|-------|-------|--------|
+| **Journal entry form** — symbol, reasoning, tags, auto market context (SPY/VIX/gap%) | Copilot | #45 | Assigned |
+| **Journal history + detail** — searchable table, detail view, outcome update form | Copilot | #46 | Assigned |
+| **Collab channel feed** — author badges, markdown, post form, auto-refresh, clear | Copilot | #47 | Assigned |
 
 ---
 
@@ -197,8 +197,8 @@ Automated weekly audit via `.github/workflows/api-audit.yml` + `scripts/api-audi
 | 2026-03-31 | gemini-2.0-flash shutdown | ~~Done~~ | Migrated to `gemini-2.5-flash` |
 | 2026-06-24 | @google/generative-ai SDK deprecated | ~~Done~~ | Migrated to `@google/genai` (PR #44) |
 | ~~TBD~~ | openai SDK v4→v6 major | ~~Done~~ | Upgraded to openai 6.21, zero code changes |
-| TBD | @anthropic-ai/sdk 0.39→0.74+ | Warning | Issue #28 — low-risk upgrade, messages.create() API stable |
-| 2026-06-30 | yahoo-finance2 v3 breaking changes | Warning | Issue #27 — pin v2.x; v3 is ESM-only + new API |
+| ~~TBD~~ | @anthropic-ai/sdk 0.39→0.74 | ~~Done~~ | Upgraded in commit 012b145. Zero code changes. |
+| 2026-06-30 | yahoo-finance2 v3 breaking changes | ~~Pinned~~ | Version pinned to ~3.13.0 (#27). Monitor for v3 release. |
 | TBD | @stoqey/ib 10.42 features | Info | Watch releases for one-message brackets |
 
 ---

@@ -83,6 +83,18 @@ async function main() {
   };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
+
+  // Catch unhandled async rejections — log and shut down cleanly
+  process.on("unhandledRejection", (reason, promise) => {
+    logger.error({ reason, promise }, "Unhandled promise rejection — shutting down");
+    shutdown();
+  });
+
+  // Catch uncaught sync exceptions
+  process.on("uncaughtException", (err) => {
+    logger.fatal({ err }, "Uncaught exception — shutting down");
+    shutdown();
+  });
 }
 
 main().catch((err) => {

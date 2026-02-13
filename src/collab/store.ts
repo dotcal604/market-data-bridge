@@ -18,6 +18,16 @@ export interface CollabMessage {
 const MAX_MESSAGES = 200;
 const MAX_CONTENT_LENGTH = 8000;
 
+/** Safely parse a JSON string as string[]; returns [] on any failure. */
+function safeParseJsonArray(raw: string): string[] {
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 let messages: CollabMessage[] = [];
 
 // Load persisted messages from DB on startup
@@ -30,7 +40,7 @@ export function initCollabFromDb() {
       content: r.content,
       timestamp: r.created_at,
       ...(r.reply_to ? { replyTo: r.reply_to } : {}),
-      ...(r.tags ? { tags: JSON.parse(r.tags) } : {}),
+      ...(r.tags ? { tags: safeParseJsonArray(r.tags) } : {}),
     }));
     logCollab.info({ count: messages.length }, "Loaded collab messages from DB");
   } catch (e: any) {
