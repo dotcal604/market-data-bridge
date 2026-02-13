@@ -1,7 +1,7 @@
 """
 Database loader for Market Data Bridge analytics.
 
-Connects to the SQLite database (data/bridge.db) and returns DataFrames
+Connects to the SQLite database (data/market-data-bridge.db) and returns DataFrames
 ready for analysis. All analytics scripts should import from here.
 
 Usage:
@@ -19,12 +19,12 @@ import pandas as pd
 ANALYTICS_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = ANALYTICS_DIR.parent
 DATA_DIR = PROJECT_ROOT / "data"
-DB_PATH = DATA_DIR / "bridge.db"
+DB_PATH = DATA_DIR / "market-data-bridge.db"
 WEIGHTS_PATH = DATA_DIR / "weights.json"
 
 
 def _connect() -> sqlite3.Connection:
-    """Open a read-only connection to bridge.db."""
+    """Open a read-only connection to market-data-bridge.db."""
     if not DB_PATH.exists():
         raise FileNotFoundError(
             f"Database not found at {DB_PATH}. "
