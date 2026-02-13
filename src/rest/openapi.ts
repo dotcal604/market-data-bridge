@@ -992,6 +992,23 @@ export const openApiSpec = {
                   secType: { type: "string", description: "Security type: STK (default), OPT, FUT" },
                   exchange: { type: "string", description: "Exchange: SMART (default)" },
                   currency: { type: "string", description: "Currency: USD (default)" },
+                  algoParams: {
+                    type: "array",
+                    description: "Algo-specific parameters",
+                    items: {
+                      type: "object",
+                      required: ["tag", "value"],
+                      properties: {
+                        tag: { type: "string" },
+                        value: { type: "string" },
+                      },
+                    },
+                  },
+                  account: { type: "string", description: "IBKR account code" },
+                  hedgeType: { type: "string", description: "Hedge type: D, B, F, or P" },
+                  hedgeParam: { type: "string", description: "Hedge parameter value" },
+                  strategy_version: { type: "string", description: "Strategy version metadata" },
+                  journal_id: { type: "integer", description: "Linked journal entry id" },
                 },
               },
             },
@@ -1010,7 +1027,10 @@ export const openApiSpec = {
                     action: { type: "string" },
                     orderType: { type: "string" },
                     totalQuantity: { type: "number" },
+                    lmtPrice: { type: "number", nullable: true },
+                    auxPrice: { type: "number", nullable: true },
                     status: { type: "string" },
+                    correlation_id: { type: "string" },
                   },
                 },
               },
@@ -1042,6 +1062,8 @@ export const openApiSpec = {
                   secType: { type: "string", description: "Security type: STK (default)" },
                   exchange: { type: "string", description: "Exchange: SMART (default)" },
                   currency: { type: "string", description: "Currency: USD (default)" },
+                  strategy_version: { type: "string" },
+                  journal_id: { type: "integer" },
                 },
               },
             },
@@ -1061,7 +1083,12 @@ export const openApiSpec = {
                     symbol: { type: "string" },
                     action: { type: "string" },
                     totalQuantity: { type: "number" },
+                    entryType: { type: "string" },
+                    entryPrice: { type: "number", nullable: true },
+                    takeProfitPrice: { type: "number" },
+                    stopLossPrice: { type: "number" },
                     status: { type: "string" },
+                    correlation_id: { type: "string" },
                   },
                 },
               },
@@ -1080,11 +1107,11 @@ export const openApiSpec = {
             "application/json": {
               schema: {
                 type: "object",
-                required: ["symbol", "action", "totalQuantity", "entry", "takeProfit", "stopLoss"],
+                required: ["symbol", "action", "quantity", "entry", "takeProfit", "stopLoss"],
                 properties: {
                   symbol: { type: "string", description: "Ticker symbol" },
                   action: { type: "string", enum: ["BUY", "SELL"], description: "Entry direction" },
-                  totalQuantity: { type: "number", description: "Number of shares" },
+                  quantity: { type: "number", description: "Number of shares" },
                   secType: { type: "string", default: "STK" },
                   exchange: { type: "string", default: "SMART" },
                   currency: { type: "string", default: "USD" },
@@ -1092,36 +1119,32 @@ export const openApiSpec = {
                   outsideRth: { type: "boolean", description: "Allow outside regular trading hours" },
                   entry: {
                     type: "object",
-                    required: ["orderType"],
+                    required: ["type"],
                     properties: {
-                      orderType: { type: "string", description: "Entry order type (MKT, LMT, etc.)" },
-                      lmtPrice: { type: "number", description: "Limit price for LMT entry" },
-                      auxPrice: { type: "number", description: "Stop price for STP entry" },
+                      type: { type: "string", description: "Entry order type (MKT, LMT, etc.)" },
+                      price: { type: "number", description: "Entry price when needed by the entry order type" },
                     },
                   },
                   takeProfit: {
                     type: "object",
-                    required: ["orderType", "price"],
+                    required: ["type", "price"],
                     properties: {
-                      orderType: { type: "string", default: "LMT", description: "Take-profit order type" },
+                      type: { type: "string", default: "LMT", description: "Take-profit order type" },
                       price: { type: "number", description: "Take-profit limit price" },
                     },
                   },
                   stopLoss: {
                     type: "object",
-                    required: ["orderType"],
+                    required: ["type"],
                     properties: {
-                      orderType: { type: "string", description: "Stop-loss type: STP, STP LMT, TRAIL, TRAIL LIMIT" },
+                      type: { type: "string", description: "Stop-loss type: STP, STP LMT, TRAIL, TRAIL LIMIT" },
                       price: { type: "number", description: "Stop price (or trail anchor for TRAIL)" },
                       lmtPrice: { type: "number", description: "Limit price for STP LMT / TRAIL LIMIT" },
                       trailingAmount: { type: "number", description: "Trailing dollar amount (TRAIL/TRAIL LIMIT)" },
                       trailingPercent: { type: "number", description: "Trailing percentage (TRAIL/TRAIL LIMIT)" },
                     },
                   },
-                  ocaGroup: { type: "string", description: "Custom OCA group name (auto-generated if omitted)" },
                   strategy_version: { type: "string" },
-                  order_source: { type: "string" },
-                  ai_confidence: { type: "number" },
                   journal_id: { type: "integer" },
                 },
               },
@@ -1142,8 +1165,32 @@ export const openApiSpec = {
                     ocaGroup: { type: "string" },
                     symbol: { type: "string" },
                     action: { type: "string" },
-                    totalQuantity: { type: "number" },
+                    quantity: { type: "number" },
+                    entry: {
+                      type: "object",
+                      properties: {
+                        type: { type: "string" },
+                        price: { type: "number", nullable: true },
+                      },
+                    },
+                    takeProfit: {
+                      type: "object",
+                      properties: {
+                        type: { type: "string" },
+                        price: { type: "number" },
+                      },
+                    },
+                    stopLoss: {
+                      type: "object",
+                      properties: {
+                        type: { type: "string" },
+                        price: { type: "number" },
+                        trailingAmount: { type: "number" },
+                        trailingPercent: { type: "number" },
+                      },
+                    },
                     status: { type: "string" },
+                    correlation_id: { type: "string" },
                   },
                 },
               },
@@ -1225,6 +1272,110 @@ export const openApiSpec = {
                 },
               },
             },
+          },
+        },
+      },
+    },
+    // =====================================================================
+    // SESSION GUARDRAILS
+    // =====================================================================
+    "/api/session": {
+      get: {
+        operationId: "getSessionState",
+        summary: "Get current session guardrail state (P&L, trade count, lock status, and limits).",
+        responses: {
+          "200": {
+            description: "Current session state",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/session/trade": {
+      post: {
+        operationId: "recordSessionTradeResult",
+        summary: "Record a completed trade P&L into session guardrails.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["realized_pnl"],
+                properties: {
+                  realized_pnl: { type: "number", description: "Realized P&L for the completed trade" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Updated session state",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/session/lock": {
+      post: {
+        operationId: "lockSession",
+        summary: "Manually lock the session.",
+        requestBody: {
+          required: false,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  reason: { type: "string" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Updated session state",
+            content: { "application/json": { schema: { type: "object", additionalProperties: true } } },
+          },
+        },
+      },
+    },
+    "/api/session/unlock": {
+      post: {
+        operationId: "unlockSession",
+        summary: "Unlock the session.",
+        responses: {
+          "200": {
+            description: "Updated session state",
+            content: { "application/json": { schema: { type: "object", additionalProperties: true } } },
+          },
+        },
+      },
+    },
+    "/api/session/reset": {
+      post: {
+        operationId: "resetSession",
+        summary: "Reset session state.",
+        responses: {
+          "200": {
+            description: "Updated session state",
+            content: { "application/json": { schema: { type: "object", additionalProperties: true } } },
           },
         },
       },
@@ -1416,6 +1567,12 @@ export const openApiSpec = {
       },
     },
     "/api/journal/{id}": {
+      get: {
+        operationId: "getJournalEntryById",
+        summary: "Get a specific trade journal entry by ID.",
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
+        responses: { "200": { description: "Journal entry", content: { "application/json": { schema: { type: "object" } } } } },
+      },
       patch: {
         operationId: "updateJournalEntry",
         summary: "Update a journal entry with post-trade notes and outcome tags.",
