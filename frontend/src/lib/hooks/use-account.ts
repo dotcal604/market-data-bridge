@@ -1,8 +1,10 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { accountClient } from "../api/account-client";
 import type { StatusResponse, AccountSummary, PnLData } from "../api/types";
+import { useWebSocket } from "./useWebSocket";
 
 const API_BASE = "/api";
 
@@ -37,10 +39,35 @@ export function useStatus(refetchInterval?: number) {
 }
 
 export function useAccountSummary(refetchInterval?: number) {
+  const queryClient = useQueryClient();
+  const [useWebSocketData, setUseWebSocketData] = useState(false);
+
+  // Try WebSocket first
+  const { data: wsData, connected } = useWebSocket<any>({
+    channel: "account",
+    enabled: true,
+    onData: (data) => {
+      // When we receive WebSocket data, update the query cache
+      if (data && data.tag && data.value) {
+        setUseWebSocketData(true);
+        // Invalidate to trigger a fresh fetch with WS data
+        queryClient.invalidateQueries({ queryKey: ["account-summary"] });
+      }
+    },
+  });
+
+  // Fallback to polling if WebSocket disconnects
+  useEffect(() => {
+    if (!connected && useWebSocketData) {
+      setUseWebSocketData(false);
+    }
+  }, [connected, useWebSocketData]);
+
   return useQuery({
     queryKey: ["account-summary"],
     queryFn: fetchAccountSummary,
-    refetchInterval,
+    // Use longer interval when WebSocket is connected, faster when polling
+    refetchInterval: connected && useWebSocketData ? 60_000 : (refetchInterval ?? 10_000),
   });
 }
 
@@ -53,9 +80,34 @@ export function usePnL(refetchInterval?: number) {
 }
 
 export function usePositions(refetchInterval = 10_000) {
+  const queryClient = useQueryClient();
+  const [useWebSocketData, setUseWebSocketData] = useState(false);
+
+  // Try WebSocket first
+  const { data: wsData, connected } = useWebSocket<any>({
+    channel: "positions",
+    enabled: true,
+    onData: (data) => {
+      // When we receive WebSocket data, update the query cache
+      if (data) {
+        setUseWebSocketData(true);
+        queryClient.invalidateQueries({ queryKey: ["account-positions"] });
+      }
+    },
+  });
+
+  // Fallback to polling if WebSocket disconnects
+  useEffect(() => {
+    if (!connected && useWebSocketData) {
+      setUseWebSocketData(false);
+    }
+  }, [connected, useWebSocketData]);
+
   return useQuery({
     queryKey: ["account-positions"],
     queryFn: () => accountClient.getPositions(),
-    refetchInterval,
+    // Use longer interval when WebSocket is connected, faster when polling
+    refetchInterval: connected && useWebSocketData ? 60_000 : refetchInterval,
   });
 }
+
