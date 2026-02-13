@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/table";
 import { ArrowUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils/formatters";
 import type { Position } from "@/lib/api/types";
 
 interface PositionsTableProps {
@@ -104,7 +105,7 @@ const columns = [
   col.accessor("marketValue", {
     header: "Market Value",
     cell: (info) => (
-      <span className="font-mono text-sm">${info.getValue().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+      <span className="font-mono text-sm">{formatCurrency(info.getValue())}</span>
     ),
   }),
 ];
@@ -147,9 +148,10 @@ export function PositionsTable({ refreshInterval = 10_000 }: PositionsTableProps
     
     return positionsQuery.data.positions.map((position) => {
       const currentPrice = quotesQuery.data[position.symbol] ?? null;
+      // Market value is always positive (absolute value of position × price)
       const marketValue = currentPrice !== null 
-        ? currentPrice * position.position
-        : position.avgCost * position.position;
+        ? Math.abs(currentPrice * position.position)
+        : Math.abs(position.avgCost * position.position);
       const unrealizedPnL = currentPrice !== null
         ? (currentPrice - position.avgCost) * position.position
         : 0;

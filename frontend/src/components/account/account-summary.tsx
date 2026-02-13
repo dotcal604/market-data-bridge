@@ -4,6 +4,7 @@ import { useAccountSummary } from "@/lib/hooks/use-account";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DollarSign, TrendingUp, Wallet, Shield } from "lucide-react";
+import { formatCurrency } from "@/lib/utils/formatters";
 
 export function AccountSummary() {
   const { data, isLoading, error } = useAccountSummary();
@@ -69,7 +70,7 @@ export function AccountSummary() {
     {
       title: "Cash",
       value: summary.totalCashValue,
-      subtitle: `Settled: ${summary.settledCash !== null ? `$${summary.settledCash.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}`,
+      subtitle: `Settled: ${summary.settledCash !== null ? formatCurrency(summary.settledCash) : "—"}`,
       icon: Wallet,
     },
     {
@@ -92,9 +93,7 @@ export function AccountSummary() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold font-mono">
-                {card.value !== null
-                  ? `$${card.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                  : "—"}
+                {card.value !== null ? formatCurrency(card.value) : "—"}
               </div>
               <p className="text-xs text-muted-foreground">{card.subtitle}</p>
             </CardContent>

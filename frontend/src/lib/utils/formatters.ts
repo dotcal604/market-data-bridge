@@ -15,6 +15,10 @@ export function formatPrice(price: number | null): string {
   return `$${price.toFixed(2)}`;
 }
 
+export function formatCurrency(value: number): string {
+  return `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 export function formatMs(ms: number): string {
   if (ms < 1000) return `${Math.round(ms)}ms`;
   return `${(ms / 1000).toFixed(1)}s`;
