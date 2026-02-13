@@ -52,3 +52,19 @@ export function useEvalOutcomes(limit = 500) {
     refetchInterval: 60_000,
   });
 }
+
+export function useCalibration() {
+  return useQuery({
+    queryKey: ["eval-calibration"],
+    queryFn: () => evalClient.getCalibration(),
+    refetchInterval: 60_000,
+  });
+}
+
+export function useModelAgreement() {
+  return useQuery({
+    queryKey: ["model-agreement"],
+    queryFn: () => evalClient.getModelAgreement(),
+    refetchInterval: 60_000,
+  });
+}

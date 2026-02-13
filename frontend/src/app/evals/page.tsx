@@ -16,6 +16,7 @@ import {
 import { EvalTriggerForm } from "@/components/eval-form/eval-trigger-form";
 import { ScoreDistributionHistogram } from "@/components/evals/ScoreDistributionHistogram";
 import { CalibrationCurve } from "@/components/evals/CalibrationCurve";
+import { ModelAgreementHeatmap } from "@/components/evals/ModelAgreementHeatmap";
 import type { EvalResponse, Evaluation } from "@/lib/api/types";
 import type { EvalFilterState } from "@/lib/stores/eval-filters";
 
@@ -140,9 +141,21 @@ function EvalsContent() {
 
       <EvalFilters onFilterChange={setFilters} />
 
-      <ScoreDistributionHistogram />
+      {/* Observability Section */}
+      <div className="space-y-4">
+        <div>
+          <h2 className="text-lg font-semibold">Observability</h2>
+          <p className="text-sm text-muted-foreground">
+            Model calibration and agreement metrics
+          </p>
+        </div>
+        <div className="grid gap-6 md:grid-cols-2">
+          <CalibrationCurve />
+          <ModelAgreementHeatmap />
+        </div>
+      </div>
 
-      <CalibrationCurve />
+      <ScoreDistributionHistogram />
 
       {isLoading ? (
         <div className="space-y-2">

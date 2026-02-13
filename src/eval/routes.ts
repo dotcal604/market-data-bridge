@@ -647,6 +647,103 @@ evalRouter.get("/drift", (_req, res) => {
   }
 });
 
+// GET /calibration — per-model calibration data for calibration curve
+evalRouter.get("/calibration", (_req, res) => {
+  try {
+    const report = computeDriftReport();
+    // Extract calibration data per model
+    const calibration = report.by_model.map((model) => ({
+      model_id: model.model_id,
+      sample_size: model.sample_size,
+      buckets: model.calibration_by_decile.map((bucket) => ({
+        bucket: `${bucket.decile * 10}-${bucket.decile * 10 + 10}`,
+        midpoint: bucket.decile * 10 + 5,
+        predicted_win_rate: bucket.predicted_win_rate,
+        actual_win_rate: bucket.actual_win_rate,
+        sample_size: bucket.count,
+      })),
+    }));
+    res.json({ calibration });
+  } catch (e: any) {
+    logger.error({ err: e }, "[Eval] calibration failed");
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /model-agreement — pairwise agreement between models
+evalRouter.get("/model-agreement", (_req, res) => {
+  try {
+    // Get all evaluations with model outputs
+    const evaluations = getRecentEvaluations(500);
+    
+    // Define models
+    const models = ["claude-sonnet", "gpt-4o", "gemini-flash"];
+    
+    // Initialize agreement matrix
+    const agreement: Record<string, Record<string, { agreements: number; total: number }>> = {};
+    for (const m1 of models) {
+      agreement[m1] = {};
+      for (const m2 of models) {
+        agreement[m1][m2] = { agreements: 0, total: 0 };
+      }
+    }
+    
+    // Calculate pairwise agreement
+    for (const evaluation of evaluations) {
+      const evalId = evaluation.id as string;
+      const outputs = getModelOutputsForEval(evalId);
+      
+      // Extract scores by model
+      const scoreMap: Record<string, number> = {};
+      for (const output of outputs) {
+        const modelId = output.model_id as string;
+        const score = output.trade_score as number | null;
+        if (score !== null) {
+          scoreMap[modelId] = score;
+        }
+      }
+      
+      // Compare all pairs
+      for (let i = 0; i < models.length; i++) {
+        for (let j = 0; j < models.length; j++) {
+          const m1 = models[i];
+          const m2 = models[j];
+          
+          if (scoreMap[m1] !== undefined && scoreMap[m2] !== undefined) {
+            agreement[m1][m2].total += 1;
+            
+            // Agreement = same direction (both >60 bull, both <40 bear, or both 40-60 neutral)
+            const s1 = scoreMap[m1];
+            const s2 = scoreMap[m2];
+            
+            const dir1 = s1 >= 60 ? "bull" : s1 <= 40 ? "bear" : "neutral";
+            const dir2 = s2 >= 60 ? "bull" : s2 <= 40 ? "bear" : "neutral";
+            
+            if (dir1 === dir2) {
+              agreement[m1][m2].agreements += 1;
+            }
+          }
+        }
+      }
+    }
+    
+    // Calculate rates
+    const agreementRates: Record<string, Record<string, number>> = {};
+    for (const m1 of models) {
+      agreementRates[m1] = {};
+      for (const m2 of models) {
+        const { agreements, total } = agreement[m1][m2];
+        agreementRates[m1][m2] = total > 0 ? agreements / total : 0;
+      }
+    }
+    
+    res.json({ agreement: agreementRates, models });
+  } catch (e: any) {
+    logger.error({ err: e }, "[Eval] model-agreement failed");
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── TraderSync ───────────────────────────────────────────────────────────
 
 // POST /tradersync/import — import TraderSync CSV

@@ -62,4 +62,27 @@ export const evalClient = {
       body: JSON.stringify({ evaluation_id: evaluationId, ...data }),
     });
   },
+
+  getCalibration() {
+    return fetchJson<{
+      calibration: Array<{
+        model_id: string;
+        sample_size: number;
+        buckets: Array<{
+          bucket: string;
+          midpoint: number;
+          predicted_win_rate: number;
+          actual_win_rate: number;
+          sample_size: number;
+        }>;
+      }>;
+    }>(`${BASE}/calibration`);
+  },
+
+  getModelAgreement() {
+    return fetchJson<{
+      agreement: Record<string, Record<string, number>>;
+      models: string[];
+    }>(`${BASE}/model-agreement`);
+  },
 };
