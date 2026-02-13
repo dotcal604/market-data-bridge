@@ -1,0 +1,627 @@
+{
+  "overview": {
+    "total_trades": 1466,
+    "wins": 988,
+    "losses": 471,
+    "win_rate": 0.6739,
+    "total_pnl": 819.56,
+    "total_net": -3327.46,
+    "total_commission": 4189.4,
+    "avg_pnl": 0.56,
+    "avg_return_pct": 0.4723,
+    "unique_symbols": 577,
+    "trading_days": 139,
+    "first_trade": "2024-09-04",
+    "last_trade": "2026-02-12"
+  },
+  "r_multiple": {
+    "has_r_data": true,
+    "trades_with_r": 126,
+    "avg_r": -0.0026,
+    "median_r": -0.0083,
+    "expectancy": -0.0026,
+    "avg_win_r": 0.1231,
+    "avg_loss_r": -0.1206,
+    "best_r": 0.4791,
+    "worst_r": -1.1604,
+    "std_r": 0.1877,
+    "distribution": {
+      "<-1R": 1,
+      "-1 to -0.5R": 0,
+      "-0.5 to -0.25R": 8,
+      "-0.25 to 0R": 56,
+      "0 to 0.1R": 35,
+      "0.1 to 0.25R": 18,
+      "0.25 to 0.5R": 8,
+      "0.5 to 1R": 0,
+      ">1R": 0
+    }
+  },
+  "by_side": {
+    "LONG": {
+      "total": 1091,
+      "wins": 769,
+      "win_rate": 0.7049,
+      "avg_pnl": -2.14,
+      "total_pnl": -2337.15,
+      "avg_r": -0.0103
+    },
+    "SHORT": {
+      "total": 375,
+      "wins": 219,
+      "win_rate": 0.584,
+      "avg_pnl": 8.42,
+      "total_pnl": 3156.71,
+      "avg_r": 0.0242
+    }
+  },
+  "by_signal": {
+    "manual": {
+      "total": 1297,
+      "wins": 876,
+      "win_rate": 0.6754,
+      "avg_pnl": 1.36,
+      "total_pnl": 1763.8,
+      "total_net": -1967.38,
+      "avg_r": -0.0027
+    },
+    "holly": {
+      "total": 167,
+      "wins": 111,
+      "win_rate": 0.6647,
+      "avg_pnl": -5.43,
+      "total_pnl": -907.03,
+      "total_net": -1318.81,
+      "avg_r": -0.002
+    },
+    "finviz": {
+      "total": 2,
+      "wins": 1,
+      "win_rate": 0.5,
+      "avg_pnl": -18.61,
+      "total_pnl": -37.21,
+      "total_net": -41.27,
+      "avg_r": null
+    }
+  },
+  "by_time": {
+    "09:00": {
+      "trades": 204,
+      "win_rate": 0.5784,
+      "avg_pnl": -3.76,
+      "avg_r": -0.0443
+    },
+    "10:00": {
+      "trades": 436,
+      "win_rate": 0.7018,
+      "avg_pnl": -5.63,
+      "avg_r": 0.0685
+    },
+    "11:00": {
+      "trades": 235,
+      "win_rate": 0.6894,
+      "avg_pnl": -8.14,
+      "avg_r": -0.0087
+    },
+    "12:00": {
+      "trades": 195,
+      "win_rate": 0.7077,
+      "avg_pnl": 27.17,
+      "avg_r": 0.0297
+    },
+    "13:00": {
+      "trades": 156,
+      "win_rate": 0.6218,
+      "avg_pnl": 6.38,
+      "avg_r": -0.041
+    },
+    "14:00": {
+      "trades": 113,
+      "win_rate": 0.7876,
+      "avg_pnl": 3.81,
+      "avg_r": 0.0146
+    },
+    "15:00": {
+      "trades": 105,
+      "win_rate": 0.6286,
+      "avg_pnl": -10.26,
+      "avg_r": 0.0263
+    },
+    "16:00": {
+      "trades": 14,
+      "win_rate": 0.6429,
+      "avg_pnl": 18.23,
+      "avg_r": null
+    }
+  },
+  "by_holdtime": {
+    "has_data": true,
+    "buckets": {
+      "<5m": {
+        "trades": 156,
+        "win_rate": 0.5897,
+        "avg_pnl": 12.31,
+        "avg_r": -0.0749
+      },
+      "5-15m": {
+        "trades": 231,
+        "win_rate": 0.7403,
+        "avg_pnl": 17.58,
+        "avg_r": -0.001
+      },
+      "15-30m": {
+        "trades": 191,
+        "win_rate": 0.6911,
+        "avg_pnl": 4.75,
+        "avg_r": -0.0379
+      },
+      "30m-1h": {
+        "trades": 228,
+        "win_rate": 0.7763,
+        "avg_pnl": 22.75,
+        "avg_r": 0.0316
+      },
+      "1-2h": {
+        "trades": 172,
+        "win_rate": 0.7093,
+        "avg_pnl": -2.3,
+        "avg_r": 0.0412
+      },
+      ">2h": {
+        "trades": 483,
+        "win_rate": 0.6066,
+        "avg_pnl": -19.92,
+        "avg_r": 0.0509
+      }
+    }
+  },
+  "mae_mfe": {
+    "has_data": true,
+    "trades_with_mae_mfe": 115,
+    "avg_mae_wins": -46.96,
+    "avg_mae_losses": -70.68,
+    "avg_mfe_wins": 81.07,
+    "avg_mfe_losses": 38.24,
+    "mae_recovery_pct": 6.3504
+  },
+  "streaks": {
+    "max_win_streak": 28,
+    "max_loss_streak": 6,
+    "current_streak": 3,
+    "current_type": "LOSS"
+  },
+  "top_symbols": [
+    {
+      "symbol": "TSLA",
+      "trades": 42,
+      "wins": 22,
+      "win_rate": 0.5238,
+      "pnl": -432.56,
+      "avg_r": 0.0297
+    },
+    {
+      "symbol": "NVDA",
+      "trades": 35,
+      "wins": 23,
+      "win_rate": 0.6571,
+      "pnl": 560.1,
+      "avg_r": 0.0628
+    },
+    {
+      "symbol": "AAPL",
+      "trades": 29,
+      "wins": 23,
+      "win_rate": 0.7931,
+      "pnl": 330.62,
+      "avg_r": null
+    },
+    {
+      "symbol": "PLTR",
+      "trades": 27,
+      "wins": 20,
+      "win_rate": 0.7407,
+      "pnl": -253.24,
+      "avg_r": null
+    },
+    {
+      "symbol": "RDDT",
+      "trades": 18,
+      "wins": 10,
+      "win_rate": 0.5556,
+      "pnl": -928.4,
+      "avg_r": null
+    },
+    {
+      "symbol": "ZETA",
+      "trades": 16,
+      "wins": 6,
+      "win_rate": 0.375,
+      "pnl": -376.78,
+      "avg_r": null
+    },
+    {
+      "symbol": "NFLX",
+      "trades": 14,
+      "wins": 7,
+      "win_rate": 0.5,
+      "pnl": 92.81,
+      "avg_r": null
+    },
+    {
+      "symbol": "IBM",
+      "trades": 14,
+      "wins": 9,
+      "win_rate": 0.6429,
+      "pnl": 69.71,
+      "avg_r": null
+    },
+    {
+      "symbol": "MRNA",
+      "trades": 13,
+      "wins": 10,
+      "win_rate": 0.7692,
+      "pnl": 209.47,
+      "avg_r": null
+    },
+    {
+      "symbol": "MSTR",
+      "trades": 13,
+      "wins": 10,
+      "win_rate": 0.7692,
+      "pnl": 403.99,
+      "avg_r": -0.0235
+    },
+    {
+      "symbol": "LULU",
+      "trades": 13,
+      "wins": 11,
+      "win_rate": 0.8462,
+      "pnl": 341.16,
+      "avg_r": null
+    },
+    {
+      "symbol": "AMZN",
+      "trades": 12,
+      "wins": 10,
+      "win_rate": 0.8333,
+      "pnl": -26.91,
+      "avg_r": null
+    },
+    {
+      "symbol": "META",
+      "trades": 12,
+      "wins": 8,
+      "win_rate": 0.6667,
+      "pnl": 20.81,
+      "avg_r": null
+    },
+    {
+      "symbol": "RGTI",
+      "trades": 10,
+      "wins": 7,
+      "win_rate": 0.7,
+      "pnl": 227.65,
+      "avg_r": null
+    },
+    {
+      "symbol": "MCD",
+      "trades": 10,
+      "wins": 3,
+      "win_rate": 0.3,
+      "pnl": -31.89,
+      "avg_r": null
+    },
+    {
+      "symbol": "HOOD",
+      "trades": 10,
+      "wins": 9,
+      "win_rate": 0.9,
+      "pnl": 283.87,
+      "avg_r": null
+    },
+    {
+      "symbol": "CVNA",
+      "trades": 10,
+      "wins": 9,
+      "win_rate": 0.9,
+      "pnl": 1022.71,
+      "avg_r": null
+    },
+    {
+      "symbol": "AAP",
+      "trades": 10,
+      "wins": 3,
+      "win_rate": 0.3,
+      "pnl": 14.4,
+      "avg_r": null
+    },
+    {
+      "symbol": "HIMS",
+      "trades": 9,
+      "wins": 9,
+      "win_rate": 1.0,
+      "pnl": 379.57,
+      "avg_r": null
+    },
+    {
+      "symbol": "CVS",
+      "trades": 9,
+      "wins": 7,
+      "win_rate": 0.7778,
+      "pnl": 154.68,
+      "avg_r": null
+    }
+  ],
+  "daily_performance": [
+    {
+      "date": "2026-02-12",
+      "trades": 6,
+      "wins": 2,
+      "win_rate": 0.3333,
+      "pnl": -72.3,
+      "net": -88.62,
+      "avg_r": -0.0301
+    },
+    {
+      "date": "2026-02-11",
+      "trades": 19,
+      "wins": 11,
+      "win_rate": 0.5789,
+      "pnl": 487.35,
+      "net": 420.92,
+      "avg_r": 0.0641
+    },
+    {
+      "date": "2026-02-10",
+      "trades": 12,
+      "wins": 4,
+      "win_rate": 0.3333,
+      "pnl": -130.73,
+      "net": -181.48,
+      "avg_r": -0.0272
+    },
+    {
+      "date": "2026-02-09",
+      "trades": 4,
+      "wins": 1,
+      "win_rate": 0.25,
+      "pnl": -502.26,
+      "net": -534.34,
+      "avg_r": -0.3139
+    },
+    {
+      "date": "2026-02-06",
+      "trades": 14,
+      "wins": 8,
+      "win_rate": 0.5714,
+      "pnl": 147.69,
+      "net": 95.81,
+      "avg_r": 0.0264
+    },
+    {
+      "date": "2026-01-06",
+      "trades": 1,
+      "wins": 0,
+      "win_rate": 0.0,
+      "pnl": 0.0,
+      "net": 0.0,
+      "avg_r": null
+    },
+    {
+      "date": "2025-12-29",
+      "trades": 6,
+      "wins": 3,
+      "win_rate": 0.5,
+      "pnl": 111.43,
+      "net": 100.33,
+      "avg_r": 0.0557
+    },
+    {
+      "date": "2025-12-26",
+      "trades": 3,
+      "wins": 3,
+      "win_rate": 1.0,
+      "pnl": 102.35,
+      "net": 88.17,
+      "avg_r": 0.0853
+    },
+    {
+      "date": "2025-12-24",
+      "trades": 1,
+      "wins": 0,
+      "win_rate": 0.0,
+      "pnl": -21.0,
+      "net": -23.0,
+      "avg_r": -0.0525
+    },
+    {
+      "date": "2025-12-23",
+      "trades": 7,
+      "wins": 3,
+      "win_rate": 0.4286,
+      "pnl": -205.28,
+      "net": -230.59,
+      "avg_r": -0.0856
+    },
+    {
+      "date": "2025-12-18",
+      "trades": 7,
+      "wins": 2,
+      "win_rate": 0.2857,
+      "pnl": -15.26,
+      "net": -29.39,
+      "avg_r": -0.0054
+    },
+    {
+      "date": "2025-12-16",
+      "trades": 7,
+      "wins": 4,
+      "win_rate": 0.5714,
+      "pnl": 9.0,
+      "net": -12.82,
+      "avg_r": 0.0032
+    },
+    {
+      "date": "2025-12-15",
+      "trades": 5,
+      "wins": 4,
+      "win_rate": 0.8,
+      "pnl": -30.44,
+      "net": -47.14,
+      "avg_r": -0.0152
+    },
+    {
+      "date": "2025-12-12",
+      "trades": 5,
+      "wins": 5,
+      "win_rate": 1.0,
+      "pnl": 367.81,
+      "net": 339.94,
+      "avg_r": 0.1839
+    },
+    {
+      "date": "2025-12-10",
+      "trades": 5,
+      "wins": 2,
+      "win_rate": 0.4,
+      "pnl": -23.68,
+      "net": -34.79,
+      "avg_r": -0.0118
+    },
+    {
+      "date": "2025-12-09",
+      "trades": 3,
+      "wins": 0,
+      "win_rate": 0.0,
+      "pnl": -95.54,
+      "net": -102.12,
+      "avg_r": -0.0796
+    },
+    {
+      "date": "2025-12-08",
+      "trades": 2,
+      "wins": 1,
+      "win_rate": 0.5,
+      "pnl": -37.75,
+      "net": -42.31,
+      "avg_r": -0.0472
+    },
+    {
+      "date": "2025-12-05",
+      "trades": 1,
+      "wins": 0,
+      "win_rate": 0.0,
+      "pnl": -31.25,
+      "net": -33.79,
+      "avg_r": -0.0781
+    },
+    {
+      "date": "2025-12-04",
+      "trades": 11,
+      "wins": 5,
+      "win_rate": 0.4545,
+      "pnl": -170.04,
+      "net": -219.7,
+      "avg_r": -0.0386
+    },
+    {
+      "date": "2025-11-28",
+      "trades": 2,
+      "wins": 1,
+      "win_rate": 0.5,
+      "pnl": 95.62,
+      "net": 85.96,
+      "avg_r": 0.1195
+    },
+    {
+      "date": "2025-10-23",
+      "trades": 3,
+      "wins": 1,
+      "win_rate": 0.3333,
+      "pnl": 4.22,
+      "net": -4.91,
+      "avg_r": 0.0035
+    },
+    {
+      "date": "2025-10-06",
+      "trades": 4,
+      "wins": 1,
+      "win_rate": 0.25,
+      "pnl": -113.3,
+      "net": -130.06,
+      "avg_r": -0.0708
+    },
+    {
+      "date": "2025-09-26",
+      "trades": 21,
+      "wins": 14,
+      "win_rate": 0.6667,
+      "pnl": -43.42,
+      "net": -139.07,
+      "avg_r": null
+    },
+    {
+      "date": "2025-09-22",
+      "trades": 12,
+      "wins": 7,
+      "win_rate": 0.5833,
+      "pnl": -515.5,
+      "net": -542.54,
+      "avg_r": null
+    },
+    {
+      "date": "2025-09-18",
+      "trades": 3,
+      "wins": 3,
+      "win_rate": 1.0,
+      "pnl": 66.37,
+      "net": 60.35,
+      "avg_r": null
+    },
+    {
+      "date": "2025-09-15",
+      "trades": 7,
+      "wins": 7,
+      "win_rate": 1.0,
+      "pnl": 356.8,
+      "net": 311.95,
+      "avg_r": null
+    },
+    {
+      "date": "2025-09-12",
+      "trades": 8,
+      "wins": 3,
+      "win_rate": 0.375,
+      "pnl": -2584.55,
+      "net": -2613.06,
+      "avg_r": null
+    },
+    {
+      "date": "2025-09-04",
+      "trades": 15,
+      "wins": 10,
+      "win_rate": 0.6667,
+      "pnl": 223.92,
+      "net": 168.59,
+      "avg_r": null
+    },
+    {
+      "date": "2025-08-29",
+      "trades": 4,
+      "wins": 3,
+      "win_rate": 0.75,
+      "pnl": 66.5,
+      "net": 58.46,
+      "avg_r": null
+    },
+    {
+      "date": "2025-08-27",
+      "trades": 16,
+      "wins": 10,
+      "win_rate": 0.625,
+      "pnl": -143.91,
+      "net": -208.55,
+      "avg_r": null
+    }
+  ]
+}
