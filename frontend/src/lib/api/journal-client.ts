@@ -11,16 +11,22 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+interface JournalResponse {
+  count: number;
+  entries: JournalEntry[];
+}
+
 export const journalClient = {
-  getEntries(params?: { symbol?: string; strategy?: string; limit?: number; offset?: number }) {
+  async getEntries(params?: { symbol?: string; strategy?: string; limit?: number; offset?: number }) {
     const searchParams = new URLSearchParams();
     if (params?.symbol) searchParams.set("symbol", params.symbol);
     if (params?.strategy) searchParams.set("strategy", params.strategy);
     if (params?.limit) searchParams.set("limit", String(params.limit));
-    if (params?.offset) searchParams.set("offset", String(params.offset));
+    // Note: offset is not supported by the backend API
     
     const query = searchParams.toString();
-    return fetchJson<JournalEntry[]>(`${BASE}${query ? `?${query}` : ""}`);
+    const response = await fetchJson<JournalResponse>(`${BASE}${query ? `?${query}` : ""}`);
+    return response.entries;
   },
 
   getById(id: number) {

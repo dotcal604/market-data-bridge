@@ -7,20 +7,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ChevronLeft, ChevronRight } from "lucide-react";
 
 const ITEMS_PER_PAGE = 25;
 
 export default function JournalPage() {
   const [symbolFilter, setSymbolFilter] = useState("");
   const [debouncedSymbol, setDebouncedSymbol] = useState("");
-  const [currentPage, setCurrentPage] = useState(0);
 
   // Debounce symbol filter
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSymbol(symbolFilter);
-      setCurrentPage(0); // Reset to first page on filter change
     }, 300);
     return () => clearTimeout(timer);
   }, [symbolFilter]);
@@ -28,20 +25,7 @@ export default function JournalPage() {
   const { data: entries, isLoading, error } = useJournalEntries({
     symbol: debouncedSymbol || undefined,
     limit: ITEMS_PER_PAGE,
-    offset: currentPage * ITEMS_PER_PAGE,
   });
-
-  const handlePrevPage = () => {
-    if (currentPage > 0) {
-      setCurrentPage((prev) => prev - 1);
-    }
-  };
-
-  const handleNextPage = () => {
-    if (entries && entries.length === ITEMS_PER_PAGE) {
-      setCurrentPage((prev) => prev + 1);
-    }
-  };
 
   return (
     <div className="space-y-6">
@@ -96,34 +80,14 @@ export default function JournalPage() {
       ) : entries ? (
         <>
           <JournalTable entries={entries} />
-
-          {/* Pagination */}
-          <div className="flex items-center justify-between">
-            <div className="text-sm text-muted-foreground">
-              Page {currentPage + 1}
-              {entries.length === ITEMS_PER_PAGE && " of many"}
+          
+          {entries.length === 0 && !symbolFilter && (
+            <div className="rounded-lg border border-border bg-card p-8 text-center">
+              <p className="text-sm text-muted-foreground">
+                No journal entries yet. Create your first entry to get started.
+              </p>
             </div>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handlePrevPage}
-                disabled={currentPage === 0}
-              >
-                <ChevronLeft className="h-4 w-4" />
-                Previous
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleNextPage}
-                disabled={!entries || entries.length < ITEMS_PER_PAGE}
-              >
-                Next
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
+          )}
         </>
       ) : null}
     </div>
