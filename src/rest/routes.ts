@@ -543,6 +543,25 @@ router.get("/journal", (req, res) => {
   }
 });
 
+// GET /api/journal/:id — Get a specific journal entry by ID
+router.get("/journal/:id", (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) {
+      res.status(400).json({ error: "id must be a number" });
+      return;
+    }
+    const entry = getJournalById(id);
+    if (!entry) {
+      res.status(404).json({ error: "Journal entry not found" });
+      return;
+    }
+    res.json(entry);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // POST /api/journal — Create a trade journal entry
 router.post("/journal", (req, res) => {
   try {
