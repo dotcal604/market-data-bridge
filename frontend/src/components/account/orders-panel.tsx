@@ -36,8 +36,9 @@ interface OrdersPanelProps {
 }
 
 export function OrdersPanel({ refreshInterval = 5000 }: OrdersPanelProps) {
+  const COMPLETED_ORDERS_REFRESH_MULTIPLIER = 6; // 30s if open is 5s
   const openRefresh = refreshInterval;
-  const completedRefresh = refreshInterval * 6; // 30s if default is 5s
+  const completedRefresh = refreshInterval * COMPLETED_ORDERS_REFRESH_MULTIPLIER;
 
   const { data: openData, isLoading: openLoading } = useOpenOrders(openRefresh);
   const { data: completedData, isLoading: completedLoading } = useCompletedOrders(completedRefresh);
@@ -84,10 +85,7 @@ export function OrdersPanel({ refreshInterval = 5000 }: OrdersPanelProps) {
   const formatPrice = (price: number | null) => {
     if (price === null) return "—";
     if (price === 0) return "$0.00"; // Valid price, show explicitly
-    // Handle negative prices (shouldn't occur for limit/stop prices, but handle defensively)
-    const absPrice = Math.abs(price);
-    const sign = price < 0 ? "-" : "";
-    return `${sign}$${absPrice.toFixed(2)}`;
+    return `$${price.toFixed(2)}`;
   };
 
   const formatTimestamp = (timestamp: string) => {
