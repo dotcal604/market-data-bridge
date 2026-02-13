@@ -14,11 +14,13 @@ import {
   Wallet,
   MessageSquare,
   GitCompare,
+  TrendingUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/market", label: "Market Data", icon: TrendingUp },
   { href: "/evals", label: "Evaluations", icon: History, children: [
     { href: "/evals/compare", label: "Compare", icon: GitCompare },
   ]},
