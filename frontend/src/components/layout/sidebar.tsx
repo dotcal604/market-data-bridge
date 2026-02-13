@@ -9,6 +9,8 @@ import {
   Activity,
   BarChart3,
   BookOpen,
+  ShoppingCart,
+  Receipt,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -16,8 +18,10 @@ const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/evals", label: "Evaluations", icon: History },
   { href: "/journal", label: "Journal", icon: BookOpen },
+  { href: "/executions", label: "Executions", icon: Receipt },
   { href: "/model-stats", label: "Model Stats", icon: BarChart3 },
   { href: "/weights", label: "Weights", icon: SlidersHorizontal },
+  { href: "/orders", label: "Orders", icon: ShoppingCart },
 ] as const;
 
 export function Sidebar() {

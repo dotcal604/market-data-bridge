@@ -173,6 +173,7 @@ export interface EvalResponse {
   latency_ms: Record<string, number>;
 }
 
+// Journal types
 export interface JournalEntry {
   id: number;
   symbol: string | null;
@@ -196,4 +197,71 @@ export interface JournalEntry {
 export interface JournalHistoryResponse {
   count: number;
   entries: JournalEntry[];
+}
+
+// Order types
+export interface OpenOrder {
+  orderId: number;
+  symbol: string;
+  action: "BUY" | "SELL";
+  orderType: "MKT" | "LMT" | "STP" | "STP LMT";
+  totalQuantity: number;
+  lmtPrice: number | null;
+  auxPrice: number | null;
+  status: string;
+  remaining: number;
+  tif: string;
+}
+
+export interface CompletedOrder {
+  orderId: number;
+  symbol: string;
+  action: "BUY" | "SELL";
+  orderType: "MKT" | "LMT" | "STP" | "STP LMT";
+  totalQuantity: number;
+  filledQuantity: number;
+  avgFillPrice: number | null;
+  status: string;
+  completedTime: string;
+}
+
+export interface OrdersResponse {
+  count: number;
+  orders: OpenOrder[];
+}
+
+export interface CompletedOrdersResponse {
+  count: number;
+  orders: CompletedOrder[];
+}
+
+export interface CancelOrderResponse {
+  orderId: number;
+  status: string;
+}
+
+export interface CancelAllOrdersResponse {
+  status: string;
+}
+
+// Executions API types
+export interface Execution {
+  execId: string;
+  orderId: number;
+  symbol: string;
+  secType: string;
+  side: string;
+  shares: number;
+  price: number;
+  cumQty: number;
+  avgPrice: number;
+  time: string;
+  commission: number;
+  realizedPnL: number;
+}
+
+export interface ExecutionHistoryResponse {
+  count: number;
+  executions: Execution[];
+  error?: string;
 }

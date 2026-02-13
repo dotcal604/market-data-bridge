@@ -28,6 +28,10 @@ db.exec(`
     tags TEXT,                -- JSON array
     outcome_tags TEXT,        -- JSON array (post-trade)
     notes TEXT,
+    -- Behavioral fields (surfaces behavioral edge after 50+ trades)
+    confidence_rating INTEGER,  -- 1=low, 2=medium, 3=high (trader's subjective confidence)
+    rule_followed INTEGER,      -- 1=yes, 0=no (did trader follow their own rules?)
+    setup_type TEXT,            -- e.g. "breakout", "pullback", "reversal", "gap_fill", "momentum"
     -- Market context at entry
     spy_price REAL,
     vix_level REAL,
@@ -208,6 +212,11 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     evaluation_id TEXT NOT NULL UNIQUE REFERENCES evaluations(id),
     trade_taken INTEGER NOT NULL,
+    decision_type TEXT,         -- "took_trade", "passed_setup", "ensemble_no", "risk_gate_blocked"
+    -- Behavioral fields (tag post-session alongside outcome recording)
+    confidence_rating INTEGER,  -- 1=low, 2=medium, 3=high (trader's subjective confidence)
+    rule_followed INTEGER,      -- 1=yes, 0=no (did trader follow their own rules?)
+    setup_type TEXT,            -- e.g. "breakout", "pullback", "reversal", "gap_fill", "momentum"
     actual_entry_price REAL,
     actual_exit_price REAL,
     r_multiple REAL,
@@ -233,6 +242,27 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_model_model_id ON model_outputs(model_id);
   CREATE INDEX IF NOT EXISTS idx_outcome_eval_id ON outcomes(evaluation_id);
 `);
+
+// ── Column Migrations (safe for existing DBs — silently ignored if column exists) ──
+
+function addColumnIfMissing(table: string, column: string, type: string): void {
+  try {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  } catch {
+    // Column already exists — expected for fresh DBs
+  }
+}
+
+// v2: Behavioral fields on trade_journal (legacy — kept for existing data)
+addColumnIfMissing("trade_journal", "confidence_rating", "INTEGER");
+addColumnIfMissing("trade_journal", "rule_followed", "INTEGER");
+addColumnIfMissing("trade_journal", "setup_type", "TEXT");
+
+// v2: Decision type + behavioral fields on outcomes (primary location)
+addColumnIfMissing("outcomes", "decision_type", "TEXT");
+addColumnIfMissing("outcomes", "confidence_rating", "INTEGER");
+addColumnIfMissing("outcomes", "rule_followed", "INTEGER");
+addColumnIfMissing("outcomes", "setup_type", "TEXT");
 
 // ── Prepared Statements ──────────────────────────────────────────────────
 
@@ -286,8 +316,8 @@ const stmts = {
 
   // Trade journal
   insertJournal: db.prepare(`
-    INSERT INTO trade_journal (symbol, strategy_version, reasoning, ai_recommendations, tags, spy_price, vix_level, gap_pct, relative_volume, time_of_day, session_type, spread_pct)
-    VALUES (@symbol, @strategy_version, @reasoning, @ai_recommendations, @tags, @spy_price, @vix_level, @gap_pct, @relative_volume, @time_of_day, @session_type, @spread_pct)
+    INSERT INTO trade_journal (symbol, strategy_version, reasoning, ai_recommendations, tags, confidence_rating, rule_followed, setup_type, spy_price, vix_level, gap_pct, relative_volume, time_of_day, session_type, spread_pct)
+    VALUES (@symbol, @strategy_version, @reasoning, @ai_recommendations, @tags, @confidence_rating, @rule_followed, @setup_type, @spy_price, @vix_level, @gap_pct, @relative_volume, @time_of_day, @session_type, @spread_pct)
   `),
   updateJournal: db.prepare(`
     UPDATE trade_journal SET outcome_tags = @outcome_tags, notes = @notes, updated_at = datetime('now')
@@ -480,6 +510,9 @@ export function insertJournalEntry(data: {
   reasoning: string;
   ai_recommendations?: string;
   tags?: string[];
+  confidence_rating?: number;
+  rule_followed?: boolean;
+  setup_type?: string;
   spy_price?: number;
   vix_level?: number;
   gap_pct?: number;
@@ -494,6 +527,9 @@ export function insertJournalEntry(data: {
     reasoning: data.reasoning,
     ai_recommendations: data.ai_recommendations ?? null,
     tags: data.tags ? JSON.stringify(data.tags) : null,
+    confidence_rating: data.confidence_rating ?? null,
+    rule_followed: data.rule_followed != null ? (data.rule_followed ? 1 : 0) : null,
+    setup_type: data.setup_type ?? null,
     spy_price: data.spy_price ?? null,
     vix_level: data.vix_level ?? null,
     gap_pct: data.gap_pct ?? null,
@@ -712,6 +748,10 @@ export interface EvalOutcomeRow {
   liquidity_bucket: string;
   rvol: number;
   trade_taken: number;
+  decision_type: string | null;
+  confidence_rating: number | null;
+  rule_followed: number | null;
+  setup_type: string | null;
   r_multiple: number | null;
   exit_reason: string | null;
   recorded_at: string;
@@ -760,6 +800,10 @@ export function getEvalOutcomes(opts: {
       e.liquidity_bucket,
       e.rvol,
       o.trade_taken,
+      o.decision_type,
+      o.confidence_rating,
+      o.rule_followed,
+      o.setup_type,
       o.r_multiple,
       o.exit_reason,
       o.recorded_at
