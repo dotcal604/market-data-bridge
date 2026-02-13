@@ -433,3 +433,42 @@ export interface FlattenResult {
   skipped: Array<{ symbol: string; reason: string }>;
   error?: string;
 }
+
+// Market Data types
+export interface NewsItem {
+  title: string;
+  publisher: string | null;
+  link: string;
+  publishedAt: string;
+  relatedTickers: string[];
+}
+
+export interface NewsResponse {
+  count: number;
+  articles: NewsItem[];
+}
+
+export interface EarningsQuarter {
+  quarter: string;
+  actual: number | null;
+  estimate: number | null;
+}
+
+export interface FinancialsPeriod {
+  date: string | number;
+  revenue: number;
+  earnings: number;
+}
+
+export interface EarningsData {
+  symbol: string;
+  earningsChart: EarningsQuarter[];
+  financialsChart: {
+    yearly: FinancialsPeriod[];
+    quarterly: FinancialsPeriod[];
+  } | null;
+}
+
+export interface TrendingSymbol {
+  symbol: string;
+}
