@@ -18,7 +18,7 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export const evalClient = {
-  evaluate(symbol: string, direction = "long", entryPrice?: number, stopPrice?: number) {
+  evaluate(symbol: string, direction = "long", entryPrice?: number, stopPrice?: number, notes?: string) {
     return fetchJson<EvalResponse>(`${BASE}/evaluate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -27,6 +27,7 @@ export const evalClient = {
         direction,
         entry_price: entryPrice ?? null,
         stop_price: stopPrice ?? null,
+        notes: notes ?? null,
       }),
     });
   },
