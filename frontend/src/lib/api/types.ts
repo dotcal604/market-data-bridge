@@ -146,6 +146,35 @@ export interface EvalStats {
   avg_r_multiple: number | null;
 }
 
+export interface EvalOutcome {
+  evaluation_id: string;
+  symbol: string;
+  direction: string;
+  timestamp: string;
+  ensemble_trade_score: number;
+  ensemble_should_trade: number;
+  ensemble_confidence: number;
+  ensemble_expected_rr: number;
+  time_of_day: string;
+  volatility_regime: string;
+  liquidity_bucket: string;
+  rvol: number;
+  trade_taken: number;
+  decision_type: string | null;
+  confidence_rating: number | null;
+  rule_followed: number | null;
+  setup_type: string | null;
+  r_multiple: number | null;
+  exit_reason: string | null;
+  recorded_at: string;
+  outcome?: "correct" | "incorrect" | null;
+}
+
+export interface EvalOutcomesResponse {
+  count: number;
+  outcomes: EvalOutcome[];
+}
+
 export interface EnsembleWeights {
   [modelId: string]: number;
 }

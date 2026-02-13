@@ -44,3 +44,11 @@ export function useMultipleEvals(ids: string[]) {
     enabled: ids.length > 0,
   });
 }
+
+export function useEvalOutcomes(limit = 500) {
+  return useQuery({
+    queryKey: ["eval-outcomes", limit],
+    queryFn: () => evalClient.getOutcomes(limit),
+    refetchInterval: 60_000,
+  });
+}
