@@ -19,12 +19,13 @@ import {
 import { isConnected } from "../ibkr/connection.js";
 import { getAccountSummary, getPositions, getPnL } from "../ibkr/account.js";
 import { getOpenOrders, getCompletedOrders, getExecutions, placeOrder, placeBracketOrder, placeAdvancedBracket, cancelOrder, cancelAllOrders, flattenAllPositions, validateOrder } from "../ibkr/orders.js";
+import { computePortfolioExposure } from "../ibkr/portfolio.js";
 import { setFlattenEnabled, getFlattenConfig } from "../scheduler.js";
 import { getContractDetails } from "../ibkr/contracts.js";
 import { getIBKRQuote } from "../ibkr/marketdata.js";
 import { readMessages, postMessage, clearMessages, getStats } from "../collab/store.js";
 import { checkRisk, getSessionState, recordTradeResult, lockSession, unlockSession, resetSession } from "../ibkr/risk-gate.js";
-import { runPortfolioStressTest } from "../ibkr/portfolio.js";
+import { runPortfolioStressTest, computePortfolioExposure } from "../ibkr/portfolio.js";
 import {
   queryOrders,
   queryExecutions,
@@ -455,6 +456,36 @@ export function createMcpServer(): McpServer {
       try {
         const result = await runPortfolioStressTest(shockPercent, betaAdjusted ?? true);
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: portfolio_exposure (IBKR — requires TWS/Gateway) ---
+  server.tool(
+    "portfolio_exposure",
+    "Compute portfolio exposure analytics: gross/net exposure, % deployed, largest position, sector breakdown, beta-weighted exposure, portfolio heat. Requires TWS/Gateway.",
+    {},
+    async () => {
+      if (!isConnected()) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                { error: "IBKR not connected. Start TWS/Gateway for portfolio data." },
+                null,
+                2
+              ),
+            },
+          ],
+          isError: true,
+        };
+      }
+      try {
+        const exposure = await computePortfolioExposure();
+        return { content: [{ type: "text", text: JSON.stringify(exposure, null, 2) }] };
       } catch (e: any) {
         return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
       }
