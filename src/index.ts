@@ -1,5 +1,3 @@
-// ⚠️ suppress-stdout MUST be the first import — it redirects console.log → stderr
-// before @stoqey/ib's logger initializes and pollutes MCP's stdio transport.
 import "./suppress-stdout.js";
 
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -13,6 +11,7 @@ import { runReconciliation } from "./db/reconcile.js";
 import { closeDb } from "./db/database.js";
 import { startScheduler, stopScheduler } from "./scheduler.js";
 import { initWeights } from "./eval/ensemble/weights.js";
+import { attachWebSocketBroadcasters } from "./ws/broadcaster.js";
 
 type Mode = "mcp" | "rest" | "both";
 
@@ -46,6 +45,9 @@ async function main() {
 
     // Attach persistent DB listeners for order/execution events
     attachPersistentOrderListeners();
+
+    // Attach WebSocket broadcasters for real-time updates
+    attachWebSocketBroadcasters();
 
     // Run boot reconciliation (compare DB state vs IBKR state)
     runReconciliation().catch((e) => {

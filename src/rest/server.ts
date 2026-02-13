@@ -1,6 +1,7 @@
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
+import { Server as HttpServer } from "http";
 import { router } from "./routes.js";
 import { evalRouter } from "../eval/routes.js";
 import { openApiSpec } from "./openapi.js";
@@ -8,6 +9,7 @@ import { config } from "../config.js";
 import { requestLogger, logRest } from "../logging.js";
 import { isConnected } from "../ibkr/connection.js";
 import { isDbWritable } from "../db/database.js";
+import { wsServer } from "../ws/server.js";
 
 function apiKeyAuth(req: Request, res: Response, next: NextFunction): void {
   const key = config.rest.apiKey;
@@ -82,7 +84,7 @@ process.on("unhandledRejection", (reason) => {
   logRest.error({ reason }, "Unhandled rejection — keeping server alive");
 });
 
-export function startRestServer(): Promise<void> {
+export function startRestServer(): Promise<HttpServer> {
   return new Promise((resolve) => {
     const app = express();
 
@@ -104,6 +106,7 @@ export function startRestServer(): Promise<void> {
         version: "3.0.0",
         docs: "/openapi.json",
         api: "/api/status",
+        ws: "ws://localhost:3000",
       });
     });
 
@@ -115,6 +118,7 @@ export function startRestServer(): Promise<void> {
         ibkr_connected: isConnected(),
         db_writable: isDbWritable(),
         rest_server: true,
+        ws_clients: wsServer.getClientCount(),
         timestamp: new Date().toISOString(),
       };
       if (!health.ibkr_connected || !health.db_writable) {
@@ -134,7 +138,7 @@ export function startRestServer(): Promise<void> {
     app.use("/api/orders", orderLimiter);
     app.use("/api/collab", collabLimiter);
 
-    app.listen(config.rest.port, () => {
+    const httpServer = app.listen(config.rest.port, () => {
       logRest.info({ port: config.rest.port }, "REST server listening");
       logRest.info({ url: `http://localhost:${config.rest.port}/openapi.json` }, "OpenAPI spec available");
       if (config.rest.apiKey) {
@@ -142,7 +146,12 @@ export function startRestServer(): Promise<void> {
       } else {
         logRest.warn("No REST_API_KEY set — endpoints are unauthenticated");
       }
-      resolve();
+      
+      // Start WebSocket server
+      wsServer.start(httpServer);
+      logRest.info({ ws: `ws://localhost:${config.rest.port}` }, "WebSocket server ready");
+      
+      resolve(httpServer);
     });
   });
 }
