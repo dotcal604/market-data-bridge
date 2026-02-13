@@ -1,6 +1,7 @@
 import type {
   EvalDetail,
   EvalHistoryResponse,
+  EvalOutcomesResponse,
   EvalStats,
   EnsembleWeights,
   EvalResponse,
@@ -61,5 +62,10 @@ export const evalClient = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ evaluation_id: evaluationId, ...data }),
     });
+  },
+
+  getOutcomes(limit = 500) {
+    const params = new URLSearchParams({ limit: String(limit) });
+    return fetchJson<EvalOutcomesResponse>(`${BASE}/outcomes?${params}`);
   },
 };

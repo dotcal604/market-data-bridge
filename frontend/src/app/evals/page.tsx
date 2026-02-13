@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { EvalTriggerForm } from "@/components/eval-form/eval-trigger-form";
 import { ScoreDistributionHistogram } from "@/components/evals/ScoreDistributionHistogram";
+import { CalibrationCurve } from "@/components/evals/CalibrationCurve";
 import type { EvalResponse, Evaluation } from "@/lib/api/types";
 import type { EvalFilterState } from "@/lib/stores/eval-filters";
 
@@ -140,6 +141,8 @@ function EvalsContent() {
       <EvalFilters onFilterChange={setFilters} />
 
       <ScoreDistributionHistogram />
+
+      <CalibrationCurve />
 
       {isLoading ? (
         <div className="space-y-2">
