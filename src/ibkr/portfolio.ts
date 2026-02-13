@@ -1,6 +1,9 @@
 import { getPositions, getAccountSummary, type PositionData } from "./account.js";
 import { getContractDetails, type ContractDetailsData } from "./contracts.js";
 import { getHistoricalBars, type BarData, getQuote } from "../providers/yahoo.js";
+import { logger } from "../logging.js";
+
+const logPortfolio = logger.child({ subsystem: "portfolio" });
 
 // ─── Contract Details Cache (24h TTL) ─────────────────────────
 
@@ -193,8 +196,17 @@ export async function computePortfolioExposure(): Promise<PortfolioExposureRespo
   const enrichedPositions: PositionWithValue[] = await Promise.all(
     positions.map(async (pos) => {
       // Get current price from quote
-      const quote = await getQuote(pos.symbol).catch(() => ({ last: null }));
-      const currentPrice = quote.last ?? pos.avgCost; // Fallback to avgCost if quote fails
+      let quote;
+      let currentPrice = pos.avgCost; // Default to avgCost
+      try {
+        quote = await getQuote(pos.symbol);
+        currentPrice = quote.last ?? pos.avgCost;
+      } catch (err: any) {
+        logPortfolio.warn(
+          { symbol: pos.symbol, error: err.message },
+          `Failed to fetch quote for ${pos.symbol}, using avgCost as fallback`
+        );
+      }
       const marketValue = pos.position * currentPrice;
       
       // Get contract details for sector
@@ -204,7 +216,13 @@ export async function computePortfolioExposure(): Promise<PortfolioExposureRespo
       // Calculate beta and ATR in parallel
       const [beta, bars] = await Promise.all([
         calculateBeta(pos.symbol),
-        getHistoricalBars(pos.symbol, "1mo", "1d").catch(() => []),
+        getHistoricalBars(pos.symbol, "1mo", "1d").catch((err: any) => {
+          logPortfolio.warn(
+            { symbol: pos.symbol, error: err.message },
+            `Failed to fetch historical bars for ${pos.symbol}, ATR will be 0`
+          );
+          return [];
+        }),
       ]);
       
       const atr = calculateATR(bars, 14);
