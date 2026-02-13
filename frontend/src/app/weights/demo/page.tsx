@@ -11,7 +11,7 @@ export default function WeightsDemoPage() {
   });
 
   return (
-    <div className="space-y-6">
+    <main className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Weight Sliders Demo</h1>
         <p className="text-sm text-muted-foreground">
@@ -32,6 +32,6 @@ export default function WeightsDemoPage() {
           {JSON.stringify(weights, null, 2)}
         </pre>
       </div>
-    </div>
+    </main>
   );
 }

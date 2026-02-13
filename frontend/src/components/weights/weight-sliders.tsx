@@ -106,6 +106,11 @@ export function WeightSliders({ weights, onChange }: WeightSlidersProps) {
                     onChange={(e) => handleSliderChange(modelId, parseFloat(e.target.value))}
                     onMouseUp={handleSliderEnd}
                     onTouchEnd={handleSliderEnd}
+                    aria-label={`${label} weight`}
+                    aria-valuetext={`${percentage} percent`}
+                    aria-valuenow={weight}
+                    aria-valuemin={0}
+                    aria-valuemax={1}
                     className="h-2 w-full cursor-pointer appearance-none rounded-full bg-muted"
                     style={{
                       background: `linear-gradient(to right, ${color} 0%, ${color} ${percentage}%, hsl(var(--muted)) ${percentage}%, hsl(var(--muted)) 100%)`,
