@@ -6,12 +6,45 @@ import { ModelOutputSchema } from "../schema.js";
 import { withTimeout } from "../../retry.js";
 
 let genAI: GoogleGenAI | null = null;
+const SYSTEM_PROMPT_CACHE_TTL_MS = 5 * 60 * 1000;
+
+interface CachedSystemPromptRef {
+  readonly name: string;
+  readonly expiresAtMs: number;
+}
+
+let cachedSystemPromptRef: CachedSystemPromptRef | null = null;
 
 function getGenAI(): GoogleGenAI {
   if (!genAI) {
     genAI = new GoogleGenAI({ apiKey: evalConfig.googleAiApiKey });
   }
   return genAI;
+}
+
+async function getCachedSystemPromptName(): Promise<string | null> {
+  const now = Date.now();
+  if (cachedSystemPromptRef && cachedSystemPromptRef.expiresAtMs > now) {
+    return cachedSystemPromptRef.name;
+  }
+
+  const cachedContent = await getGenAI().caches.create({
+    model: evalConfig.geminiModel,
+    config: {
+      systemInstruction: SYSTEM_PROMPT,
+      ttl: "300s",
+    },
+  });
+
+  if (!cachedContent.name) {
+    return null;
+  }
+
+  cachedSystemPromptRef = {
+    name: cachedContent.name,
+    expiresAtMs: now + SYSTEM_PROMPT_CACHE_TTL_MS,
+  };
+  return cachedSystemPromptRef.name;
 }
 
 function extractText(response: unknown): string {
@@ -51,12 +84,16 @@ export async function evaluateWithGemini(
   }
 
   try {
+    const cachedSystemPromptName = await getCachedSystemPromptName();
+
     const response = await withTimeout(
       getGenAI().models.generateContent({
         model: evalConfig.geminiModel,
         contents: userPrompt,
         config: {
-          systemInstruction: SYSTEM_PROMPT,
+          ...(cachedSystemPromptName
+            ? { cachedContent: cachedSystemPromptName }
+            : { systemInstruction: SYSTEM_PROMPT }),
           temperature: evalConfig.modelTemperature,
           maxOutputTokens: 1024,
           responseMimeType: "application/json",
