@@ -197,7 +197,7 @@ Automated weekly audit via `.github/workflows/api-audit.yml` + `scripts/api-audi
 
 | Deadline | Item | Severity | Action |
 |----------|------|----------|--------|
-| 2026-03-31 | gemini-2.0-flash shutdown | **Critical (46d)** | Migrate to `gemini-2.5-flash` |
+| 2026-03-31 | gemini-2.0-flash shutdown | ~~Done~~ | Migrated to `gemini-2.5-flash` |
 | 2026-06-24 | @google/generative-ai SDK deprecated | Warning | Migrate to `@google/genai` unified SDK |
 | 2026-06-30 | yahoo-finance2 v3 breaking changes | Warning | Pin v2.x; v3 is ESM-only + new API |
 | TBD | @stoqey/ib 10.42 features | Info | Watch releases for one-message brackets |

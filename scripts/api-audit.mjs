@@ -48,8 +48,8 @@ const DEPRECATION_CALENDAR = [
     id: "gemini-2.0-flash-shutdown",
     description: "gemini-2.0-flash model shutdown by Google",
     deadline: "2026-03-31",
-    severity: "critical",
-    action: "Migrate GEMINI_MODEL to 'gemini-2.5-flash' or 'gemini-2.5-pro'",
+    severity: "resolved",
+    action: "DONE — migrated to gemini-2.5-flash (Feb 2026)",
   },
   {
     id: "google-genai-sdk-legacy",
@@ -180,25 +180,12 @@ function checkModelConfig() {
     }
   }
 
-  // Check gemini-2.0-flash specifically (approaching deadline)
+  // Warn if someone overrides back to the deprecated 2.0 model
   if (geminiMatch && geminiMatch[1] === "gemini-2.0-flash") {
-    const days = daysUntil("2026-03-31");
-    if (days <= 0) {
-      findings.push({
-        severity: "critical",
-        message: `gemini-2.0-flash is PAST its shutdown date (March 31, 2026)! Migrate immediately.`,
-      });
-    } else if (days <= 30) {
-      findings.push({
-        severity: "critical",
-        message: `gemini-2.0-flash shuts down in ${days} days (March 31, 2026). Migrate NOW.`,
-      });
-    } else if (days <= 90) {
-      findings.push({
-        severity: "warning",
-        message: `gemini-2.0-flash shuts down in ${days} days (March 31, 2026). Plan migration.`,
-      });
-    }
+    findings.push({
+      severity: "critical",
+      message: `gemini-2.0-flash is deprecated and shuts down March 31, 2026. Default is now gemini-2.5-flash.`,
+    });
   }
 
   if (findings.length === 0) {

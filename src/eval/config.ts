@@ -5,7 +5,7 @@ export const evalConfig = {
 
   claudeModel: process.env.CLAUDE_MODEL ?? "claude-sonnet-4-20250514",
   openaiModel: process.env.OPENAI_MODEL ?? "gpt-4o",
-  geminiModel: process.env.GEMINI_MODEL ?? "gemini-2.0-flash",
+  geminiModel: process.env.GEMINI_MODEL ?? "gemini-2.5-flash",
 
   modelTemperature: parseFloat(process.env.MODEL_TEMPERATURE ?? "0"),
   modelTimeoutMs: parseInt(process.env.MODEL_TIMEOUT_MS ?? "30000", 10),
