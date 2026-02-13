@@ -6,7 +6,7 @@ vi.mock("../../../providers/yahoo.js", () => ({
   getQuote: vi.fn(),
 }));
 
-import { getQuote } from "../../../providers/yahoo.js";
+import { getQuote, type QuoteData } from "../../../providers/yahoo.js";
 
 describe("computeMarketAlignment", () => {
   beforeEach(() => {
@@ -153,7 +153,7 @@ describe("computeMarketAlignment", () => {
   });
 
   it("should handle null quote responses", async () => {
-    vi.mocked(getQuote).mockResolvedValue(null);
+    vi.mocked(getQuote).mockResolvedValue(null as unknown as QuoteData);
 
     const result = await computeMarketAlignment("long");
     expect(result.spy_change_pct).toBe(0);
