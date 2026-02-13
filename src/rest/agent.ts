@@ -49,8 +49,11 @@ import {
   getEvaluationById,
   insertOutcome,
   getEvalsForSimulation,
+  getTraderSyncStats,
+  getTraderSyncTrades,
 } from "../db/database.js";
 import { RISK_CONFIG_DEFAULTS, type RiskConfigParam } from "../db/schema.js";
+import { importTraderSyncCSV } from "../tradersync/importer.js";
 import { logger } from "../logging.js";
 
 const log = logger.child({ module: "agent" });
@@ -296,6 +299,22 @@ const actions: Record<string, ActionHandler> = {
   journal_create: async (p) => insertJournalEntry(p as never),
   journal_get: async (p) => getJournalById(num(p, "id")),
   journal_update: async (p) => updateJournalEntry(num(p, "id"), p as never),
+  tradersync_import: async (p) => {
+    const csv = str(p, "csv");
+    if (!csv) throw new Error("csv is required");
+    return importTraderSyncCSV(csv);
+  },
+  tradersync_stats: async () => getTraderSyncStats(),
+  tradersync_trades: async (p) => {
+    const trades = getTraderSyncTrades({
+      symbol: str(p, "symbol") || undefined,
+      side: str(p, "side") || undefined,
+      status: str(p, "status") || undefined,
+      days: num(p, "days") || undefined,
+      limit: num(p, "limit") || undefined,
+    });
+    return { count: trades.length, trades };
+  },
 
   // ── History ──
   orders_history: async (p) => queryOrders({ symbol: str(p, "symbol") || undefined, strategy: str(p, "strategy") || undefined, limit: num(p, "limit", 100) }),
