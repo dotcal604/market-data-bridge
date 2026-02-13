@@ -1,6 +1,6 @@
 import { getPositions, getAccountSummary, type PositionData } from "./account.js";
 import { getContractDetails, type ContractDetailsData } from "./contracts.js";
-import { getHistoricalBars, type BarData } from "../providers/yahoo.js";
+import { getHistoricalBars, type BarData, getQuote } from "../providers/yahoo.js";
 
 // ─── Contract Details Cache (24h TTL) ─────────────────────────
 
@@ -192,7 +192,10 @@ export async function computePortfolioExposure(): Promise<PortfolioExposureRespo
   // Enrich positions with market value, sector, beta, and ATR
   const enrichedPositions: PositionWithValue[] = await Promise.all(
     positions.map(async (pos) => {
-      const marketValue = pos.position * pos.avgCost;
+      // Get current price from quote
+      const quote = await getQuote(pos.symbol).catch(() => ({ last: null }));
+      const currentPrice = quote.last ?? pos.avgCost; // Fallback to avgCost if quote fails
+      const marketValue = pos.position * currentPrice;
       
       // Get contract details for sector
       const contractDetails = await getCachedContractDetails(pos.symbol);
