@@ -645,8 +645,44 @@ export function getOutcomeForEval(evaluationId: string): Record<string, unknown>
 export function getEvalStats(): Record<string, unknown> {
   const totalEvals = (stmts.countEvaluations.get() as any)?.n ?? 0;
   const totalOutcomes = (stmts.countOutcomes.get() as any)?.n ?? 0;
-  const modelStats = stmts.modelStats.all();
-  return { totalEvals, totalOutcomes, modelStats };
+  const modelStats = stmts.modelStats.all() as any[];
+
+  // Calculate aggregate stats
+  const evalAggregates = db.prepare(`
+    SELECT 
+      AVG(ensemble_trade_score) as avg_score,
+      AVG(total_latency_ms) as avg_latency_ms,
+      SUM(CASE WHEN ensemble_should_trade = 1 THEN 1 ELSE 0 END) * 1.0 / COUNT(*) as trade_rate,
+      SUM(CASE WHEN guardrail_allowed = 0 THEN 1 ELSE 0 END) * 1.0 / COUNT(*) as guardrail_block_rate
+    FROM evaluations
+    WHERE prefilter_passed = 1
+  `).get() as any;
+
+  const outcomeAggregates = db.prepare(`
+    SELECT AVG(r_multiple) as avg_r_multiple, COUNT(*) as outcomes_recorded
+    FROM outcomes
+    WHERE trade_taken = 1 AND r_multiple IS NOT NULL
+  `).get() as any;
+
+  // Build model_compliance map
+  const modelCompliance: Record<string, number> = {};
+  for (const m of modelStats) {
+    if (m.total > 0) {
+      modelCompliance[m.model_id] = m.compliant / m.total;
+    }
+  }
+
+  return {
+    total_evaluations: totalEvals,
+    avg_score: evalAggregates?.avg_score ?? 0,
+    avg_latency_ms: evalAggregates?.avg_latency_ms ?? 0,
+    trade_rate: evalAggregates?.trade_rate ?? 0,
+    guardrail_block_rate: evalAggregates?.guardrail_block_rate ?? 0,
+    model_compliance: modelCompliance,
+    outcomes_recorded: outcomeAggregates?.outcomes_recorded ?? 0,
+    avg_r_multiple: outcomeAggregates?.avg_r_multiple ?? null,
+    model_stats: modelStats, // Include raw model stats for detailed breakdown
+  };
 }
 
 export function isDbWritable(): boolean {
