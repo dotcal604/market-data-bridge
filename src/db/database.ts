@@ -241,6 +241,21 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_model_eval_id ON model_outputs(evaluation_id);
   CREATE INDEX IF NOT EXISTS idx_model_model_id ON model_outputs(model_id);
   CREATE INDEX IF NOT EXISTS idx_outcome_eval_id ON outcomes(evaluation_id);
+
+  -- Structured reasoning extracted from model responses
+  CREATE TABLE IF NOT EXISTS eval_reasoning (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    evaluation_id TEXT NOT NULL REFERENCES evaluations(id),
+    model_id TEXT NOT NULL,
+    key_drivers TEXT NOT NULL,     -- JSON array of {feature, direction, weight}
+    risk_factors TEXT NOT NULL,    -- JSON array of strings
+    uncertainties TEXT NOT NULL,   -- JSON array of strings
+    conviction TEXT,               -- "high" | "medium" | "low"
+    timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(evaluation_id, model_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_reasoning_eval_id ON eval_reasoning(evaluation_id);
+  CREATE INDEX IF NOT EXISTS idx_reasoning_model_id ON eval_reasoning(model_id);
 `);
 
 // ── Column Migrations (safe for existing DBs — silently ignored if column exists) ──
@@ -353,6 +368,9 @@ const stmts = {
     ORDER BY e.timestamp DESC
     LIMIT ?
   `),
+
+  // Eval reasoning
+  queryReasoningByEval: db.prepare(`SELECT * FROM eval_reasoning WHERE evaluation_id = ?`),
 
   // Eval stats
   countEvaluations: db.prepare(`SELECT COUNT(*) as n FROM evaluations`),
@@ -655,6 +673,14 @@ export function insertModelOutput(row: Record<string, unknown>): void {
 
 export function insertOutcome(row: Record<string, unknown>): void {
   runEvalInsert("outcomes", row);
+}
+
+export function insertEvalReasoning(row: Record<string, unknown>): void {
+  runEvalInsert("eval_reasoning", row);
+}
+
+export function getReasoningForEval(evaluationId: string): Record<string, unknown>[] {
+  return stmts.queryReasoningByEval.all(evaluationId) as Record<string, unknown>[];
 }
 
 export function getEvaluationById(id: string): Record<string, unknown> | undefined {
