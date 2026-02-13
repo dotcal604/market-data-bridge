@@ -61,7 +61,9 @@ export function getIB(): IBApi {
 
 function destroyIB(): void {
   if (ib) {
-    try { ib.disconnect(); } catch {}
+    try { ib.disconnect(); } catch (e: any) {
+      console.error(`[IBKR] Error during disconnect cleanup: ${e.message ?? e}`);
+    }
     ib = null;
     connected = false;
   }

@@ -3,6 +3,8 @@ import { getOpenOrders, getExecutions } from "../ibkr/orders.js";
 import { getPositions } from "../ibkr/account.js";
 import {
   getLiveOrders,
+  getLiveBracketCorrelations,
+  getOrdersByCorrelation,
   insertPositionSnapshot,
   getLatestPositionSnapshot,
   updateOrderStatus,
@@ -111,8 +113,133 @@ export async function runReconciliation(): Promise<void> {
     "reconcile",
   );
 
+  // Phase 3: Bracket order integrity audit
+  auditBracketOrders(ibkrOrderIds);
+
   logReconcile.info(
     { openOrders: ibkrOrders.length, positions: ibkrPositions.length },
     "Reconciliation complete",
   );
+}
+
+/**
+ * Bracket order integrity audit.
+ *
+ * A bracket has 3 orders sharing a correlation_id:
+ *   - parent (entry) — parent_order_id = 0 or null
+ *   - take profit     — parent_order_id = parent.order_id
+ *   - stop loss        — parent_order_id = parent.order_id
+ *
+ * Drift scenarios detected:
+ *   1. Parent filled but children missing from IBKR → orphaned position with no protection
+ *   2. Parent cancelled but children still alive → zombie TP/SL with no entry
+ *   3. Only 1 or 2 of 3 orders exist → partial bracket (mid-submission disconnect)
+ *   4. Child filled (TP or SL) but sibling still active → expected, TWS auto-cancels sibling
+ */
+function auditBracketOrders(ibkrOrderIds: Set<number>): void {
+  const liveBrackets = getLiveBracketCorrelations();
+  if (liveBrackets.length === 0) return;
+
+  logReconcile.info({ count: liveBrackets.length }, "Auditing live bracket orders...");
+
+  for (const { correlation_id } of liveBrackets) {
+    const orders = getOrdersByCorrelation(correlation_id) as Array<{
+      order_id: number;
+      symbol: string;
+      action: string;
+      order_type: string;
+      status: string;
+      parent_order_id: number | null;
+    }>;
+
+    if (orders.length < 3) {
+      // Partial bracket — likely mid-submission disconnect
+      logReconcile.error(
+        { correlationId: correlation_id, orderCount: orders.length, orders: orders.map((o) => ({ id: o.order_id, type: o.order_type, status: o.status })) },
+        "BRACKET INCOMPLETE — fewer than 3 orders found. Possible mid-submission disconnect.",
+      );
+      continue;
+    }
+
+    const parent = orders.find((o) => !o.parent_order_id || o.parent_order_id === 0);
+    const children = orders.filter((o) => o.parent_order_id && o.parent_order_id > 0);
+
+    if (!parent) {
+      logReconcile.error(
+        { correlationId: correlation_id },
+        "BRACKET ORPHANED — child orders exist but no parent found in DB.",
+      );
+      continue;
+    }
+
+    const parentInIbkr = ibkrOrderIds.has(parent.order_id);
+    const childrenInIbkr = children.map((c) => ({
+      ...c,
+      inIbkr: ibkrOrderIds.has(c.order_id),
+    }));
+
+    // Case 1: Parent filled, children missing from IBKR
+    if (
+      (parent.status === "Filled" || !parentInIbkr) &&
+      childrenInIbkr.every((c) => !c.inIbkr)
+    ) {
+      const allChildrenFilled = children.every((c) => c.status === "Filled" || c.status === "Cancelled" || c.status === "Inactive");
+      if (!allChildrenFilled) {
+        logReconcile.error(
+          {
+            correlationId: correlation_id,
+            symbol: parent.symbol,
+            parentId: parent.order_id,
+            parentStatus: parent.status,
+            children: childrenInIbkr.map((c) => ({ id: c.order_id, type: c.order_type, status: c.status, inIbkr: c.inIbkr })),
+          },
+          "BRACKET RISK — parent filled/gone but protection orders (TP/SL) not confirmed on IBKR. Position may be unprotected.",
+        );
+      }
+    }
+
+    // Case 2: Parent cancelled but children still alive on IBKR
+    if (
+      (parent.status === "Cancelled" || parent.status === "ApiCancelled" || parent.status === "Inactive") &&
+      childrenInIbkr.some((c) => c.inIbkr)
+    ) {
+      logReconcile.error(
+        {
+          correlationId: correlation_id,
+          symbol: parent.symbol,
+          parentId: parent.order_id,
+          parentStatus: parent.status,
+          zombieChildren: childrenInIbkr.filter((c) => c.inIbkr).map((c) => ({ id: c.order_id, type: c.order_type })),
+        },
+        "BRACKET ZOMBIE — parent cancelled but child orders still alive on IBKR. Cancel children manually.",
+      );
+    }
+
+    // Case 3: Partial presence on IBKR (some orders there, some not)
+    const allInIbkr = parentInIbkr && childrenInIbkr.every((c) => c.inIbkr);
+    const noneInIbkr = !parentInIbkr && childrenInIbkr.every((c) => !c.inIbkr);
+    if (!allInIbkr && !noneInIbkr) {
+      // Mixed state — only log as warning if parent is still active
+      if (parent.status === "Submitted" || parent.status === "PreSubmitted") {
+        logReconcile.warn(
+          {
+            correlationId: correlation_id,
+            symbol: parent.symbol,
+            parentId: parent.order_id,
+            parentInIbkr,
+            children: childrenInIbkr.map((c) => ({ id: c.order_id, type: c.order_type, inIbkr: c.inIbkr })),
+          },
+          "BRACKET PARTIAL — not all bracket orders visible on IBKR. May resolve via TWS auto-sync.",
+        );
+      }
+    }
+
+    // Case 4: All healthy — parent + children all on IBKR
+    if (allInIbkr) {
+      logReconcile.info(
+        { correlationId: correlation_id, symbol: parent.symbol, parentId: parent.order_id },
+        "Bracket healthy — all 3 orders confirmed on IBKR",
+      );
+    }
+  }
 }

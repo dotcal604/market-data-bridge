@@ -561,6 +561,26 @@ export function getOrderByOrderId(orderId: number) {
   return stmts.getOrderByOrderId.get(orderId);
 }
 
+export function getOrdersByCorrelation(correlationId: string) {
+  return stmts.getOrdersByCorrelation.all(correlationId);
+}
+
+export function getLiveBracketCorrelations(): Array<{ correlation_id: string }> {
+  // Find correlation_ids where child orders exist (parent_order_id set)
+  // and at least one order in the group is still live.
+  return db.prepare(`
+    SELECT DISTINCT o1.correlation_id
+    FROM orders o1
+    WHERE o1.parent_order_id IS NOT NULL
+      AND o1.parent_order_id > 0
+      AND EXISTS (
+        SELECT 1 FROM orders o2
+        WHERE o2.correlation_id = o1.correlation_id
+          AND o2.status IN ('PendingSubmit', 'PreSubmitted', 'Submitted', 'RECONCILING')
+      )
+  `).all() as Array<{ correlation_id: string }>;
+}
+
 export function getLiveOrders() {
   return stmts.getLiveOrders.all();
 }
