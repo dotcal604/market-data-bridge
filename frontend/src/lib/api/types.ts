@@ -433,3 +433,36 @@ export interface FlattenResult {
   skipped: Array<{ symbol: string; reason: string }>;
   error?: string;
 }
+
+// Screener types
+export interface ScreenerFilters {
+  [key: string]: string;
+}
+
+export interface ScreenerResult {
+  rank: number;
+  symbol: string;
+  longName: string | null;
+  last: number | null;
+  change: number | null;
+  changePercent: number | null;
+  volume: number | null;
+  marketCap: number | null;
+  exchange: string | null;
+  bid?: number | null;
+  ask?: number | null;
+  open?: number | null;
+  high?: number | null;
+  low?: number | null;
+  close?: number | null;
+  sector?: string | null;
+  industry?: string | null;
+  trailingPE?: number | null;
+  averageVolume?: number | null;
+}
+
+export interface ScreenerResponse {
+  count: number;
+  results: ScreenerResult[];
+  error?: string;
+}

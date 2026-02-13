@@ -14,6 +14,7 @@ import {
   Wallet,
   MessageSquare,
   GitCompare,
+  Filter,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -22,6 +23,7 @@ const NAV_ITEMS = [
   { href: "/evals", label: "Evaluations", icon: History, children: [
     { href: "/evals/compare", label: "Compare", icon: GitCompare },
   ]},
+  { href: "/screener", label: "Screener", icon: Filter },
   { href: "/journal", label: "Journal", icon: BookOpen },
   { href: "/executions", label: "Executions", icon: Receipt },
   { href: "/model-stats", label: "Model Stats", icon: BarChart3 },
