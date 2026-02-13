@@ -22,6 +22,21 @@ import { getOpenOrders, getCompletedOrders, getExecutions, placeOrder, placeBrac
 import { setFlattenEnabled, getFlattenConfig } from "../scheduler.js";
 import { getContractDetails } from "../ibkr/contracts.js";
 import { getIBKRQuote } from "../ibkr/marketdata.js";
+import {
+  calculateImpliedVolatility,
+  calculateOptionPrice,
+  reqAutoOpenOrders,
+  reqCurrentTime,
+  reqFundamentalDataBySymbol,
+  reqHeadTimestampBySymbol,
+  reqHistogramDataBySymbol,
+  reqMarketDataType,
+  reqMarketRule,
+  reqMatchingSymbols,
+  reqMktDepthExchanges,
+  reqPnLSingleBySymbol,
+  reqSmartComponents,
+} from "../ibkr/data.js";
 import { readMessages, postMessage, clearMessages, getStats } from "../collab/store.js";
 import { checkRisk, getSessionState, recordTradeResult, lockSession, unlockSession, resetSession } from "../ibkr/risk-gate.js";
 import { runPortfolioStressTest, computePortfolioExposure } from "../ibkr/portfolio.js";
@@ -424,6 +439,251 @@ export function createMcpServer(): McpServer {
       try {
         const pnl = await getPnL();
         return { content: [{ type: "text", text: JSON.stringify(pnl, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "get_pnl_single",
+    "Get position-level daily PnL for one symbol using reqPnLSingle.",
+    { symbol: z.string().describe("Ticker symbol") },
+    async ({ symbol }) => {
+      if (!isConnected()) {
+        return { content: [{ type: "text", text: JSON.stringify({ error: "IBKR not connected. Start TWS/Gateway for PnL data." }, null, 2) }], isError: true };
+      }
+      try {
+        const data = await reqPnLSingleBySymbol(symbol);
+        return { content: [{ type: "text", text: JSON.stringify({ data }, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "search_ibkr_symbols",
+    "Search symbols from IBKR contract database using reqMatchingSymbols.",
+    { query: z.string().min(1).describe("Search pattern") },
+    async ({ query }) => {
+      if (!isConnected()) {
+        return { content: [{ type: "text", text: JSON.stringify({ error: "IBKR not connected. Start TWS/Gateway for symbol search." }, null, 2) }], isError: true };
+      }
+      try {
+        const results = await reqMatchingSymbols(query);
+        return { content: [{ type: "text", text: JSON.stringify({ data: { count: results.length, results } }, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "set_market_data_type",
+    "Set market data mode: 1=live, 2=frozen, 3=delayed, 4=delayed-frozen.",
+    { marketDataType: z.number().int().min(1).max(4) },
+    async ({ marketDataType }) => {
+      if (!isConnected()) {
+        return { content: [{ type: "text", text: JSON.stringify({ error: "IBKR not connected. Start TWS/Gateway to set market data type." }, null, 2) }], isError: true };
+      }
+      try {
+        const data = await reqMarketDataType(marketDataType);
+        return { content: [{ type: "text", text: JSON.stringify({ data }, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "set_auto_open_orders",
+    "Enable or disable automatic open order binding for clientId 0.",
+    { autoBind: z.boolean() },
+    async ({ autoBind }) => {
+      if (!isConnected()) {
+        return { content: [{ type: "text", text: JSON.stringify({ error: "IBKR not connected. Start TWS/Gateway to set auto-open orders." }, null, 2) }], isError: true };
+      }
+      try {
+        const data = await reqAutoOpenOrders(autoBind);
+        return { content: [{ type: "text", text: JSON.stringify({ data }, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "get_head_timestamp",
+    "Get earliest available timestamp for historical data for a symbol.",
+    {
+      symbol: z.string(),
+      whatToShow: z.enum(["TRADES", "MIDPOINT", "BID", "ASK"]).optional(),
+      useRTH: z.boolean().optional(),
+      formatDate: z.union([z.literal(1), z.literal(2)]).optional(),
+    },
+    async ({ symbol, whatToShow, useRTH, formatDate }) => {
+      if (!isConnected()) {
+        return { content: [{ type: "text", text: JSON.stringify({ error: "IBKR not connected. Start TWS/Gateway for head timestamp data." }, null, 2) }], isError: true };
+      }
+      try {
+        const data = await reqHeadTimestampBySymbol({ symbol, whatToShow: whatToShow ?? "TRADES", useRTH: useRTH ?? true, formatDate: formatDate ?? 1 });
+        return { content: [{ type: "text", text: JSON.stringify({ data }, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "get_histogram_data",
+    "Get histogram data distribution for a symbol.",
+    {
+      symbol: z.string(),
+      useRTH: z.boolean().optional(),
+      period: z.number().int().positive().optional(),
+      periodUnit: z.enum(["S", "D", "W", "M", "Y"]).optional(),
+    },
+    async ({ symbol, useRTH, period, periodUnit }) => {
+      if (!isConnected()) {
+        return { content: [{ type: "text", text: JSON.stringify({ error: "IBKR not connected. Start TWS/Gateway for histogram data." }, null, 2) }], isError: true };
+      }
+      try {
+        const data = await reqHistogramDataBySymbol({ symbol, useRTH: useRTH ?? true, period: period ?? 3, periodUnit: periodUnit ?? "D" });
+        return { content: [{ type: "text", text: JSON.stringify({ data }, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "calculate_implied_volatility",
+    "Calculate implied volatility for an option contract.",
+    {
+      symbol: z.string(),
+      expiry: z.string().regex(/^\d{8}$/),
+      strike: z.number().positive(),
+      right: z.enum(["C", "P"]),
+      optionPrice: z.number().positive(),
+      underlyingPrice: z.number().positive(),
+    },
+    async (input) => {
+      if (!isConnected()) {
+        return { content: [{ type: "text", text: JSON.stringify({ error: "IBKR not connected. Start TWS/Gateway for option calculations." }, null, 2) }], isError: true };
+      }
+      try {
+        const data = await calculateImpliedVolatility(input);
+        return { content: [{ type: "text", text: JSON.stringify({ data }, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "calculate_option_price",
+    "Calculate option theoretical price from volatility and underlying price.",
+    {
+      symbol: z.string(),
+      expiry: z.string().regex(/^\d{8}$/),
+      strike: z.number().positive(),
+      right: z.enum(["C", "P"]),
+      volatility: z.number().positive(),
+      underlyingPrice: z.number().positive(),
+    },
+    async (input) => {
+      if (!isConnected()) {
+        return { content: [{ type: "text", text: JSON.stringify({ error: "IBKR not connected. Start TWS/Gateway for option calculations." }, null, 2) }], isError: true };
+      }
+      try {
+        const data = await calculateOptionPrice(input);
+        return { content: [{ type: "text", text: JSON.stringify({ data }, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "get_tws_current_time",
+    "Get current TWS server time.",
+    {},
+    async () => {
+      if (!isConnected()) {
+        return { content: [{ type: "text", text: JSON.stringify({ error: "IBKR not connected. Start TWS/Gateway for TWS time." }, null, 2) }], isError: true };
+      }
+      try {
+        const data = await reqCurrentTime();
+        return { content: [{ type: "text", text: JSON.stringify({ data }, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "get_market_rule",
+    "Get market rule increments by rule id.",
+    { ruleId: z.number().int().positive() },
+    async ({ ruleId }) => {
+      if (!isConnected()) {
+        return { content: [{ type: "text", text: JSON.stringify({ error: "IBKR not connected. Start TWS/Gateway for market rule data." }, null, 2) }], isError: true };
+      }
+      try {
+        const data = await reqMarketRule(ruleId);
+        return { content: [{ type: "text", text: JSON.stringify({ data }, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "get_smart_components",
+    "Get SMART routing component map for an exchange.",
+    { exchange: z.string().min(1) },
+    async ({ exchange }) => {
+      if (!isConnected()) {
+        return { content: [{ type: "text", text: JSON.stringify({ error: "IBKR not connected. Start TWS/Gateway for smart components." }, null, 2) }], isError: true };
+      }
+      try {
+        const data = await reqSmartComponents(exchange.toUpperCase());
+        return { content: [{ type: "text", text: JSON.stringify({ data }, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "get_depth_exchanges",
+    "Get list of available market depth exchanges.",
+    {},
+    async () => {
+      if (!isConnected()) {
+        return { content: [{ type: "text", text: JSON.stringify({ error: "IBKR not connected. Start TWS/Gateway for depth exchange data." }, null, 2) }], isError: true };
+      }
+      try {
+        const data = await reqMktDepthExchanges();
+        return { content: [{ type: "text", text: JSON.stringify({ data }, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "get_fundamental_data",
+    "Get IBKR fundamental data XML report for a symbol.",
+    { symbol: z.string(), reportType: z.string().optional() },
+    async ({ symbol, reportType }) => {
+      if (!isConnected()) {
+        return { content: [{ type: "text", text: JSON.stringify({ error: "IBKR not connected. Start TWS/Gateway for fundamental data." }, null, 2) }], isError: true };
+      }
+      try {
+        const data = await reqFundamentalDataBySymbol({ symbol, reportType: reportType ?? "ReportSnapshot" });
+        return { content: [{ type: "text", text: JSON.stringify({ data }, null, 2) }] };
       } catch (e: any) {
         return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
       }

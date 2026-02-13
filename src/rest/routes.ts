@@ -23,6 +23,21 @@ import { computePortfolioExposure } from "../ibkr/portfolio.js";
 import { setFlattenEnabled, getFlattenConfig } from "../scheduler.js";
 import { getContractDetails } from "../ibkr/contracts.js";
 import { getIBKRQuote } from "../ibkr/marketdata.js";
+import {
+  calculateImpliedVolatility,
+  calculateOptionPrice,
+  reqAutoOpenOrders,
+  reqCurrentTime,
+  reqFundamentalDataBySymbol,
+  reqHeadTimestampBySymbol,
+  reqHistogramDataBySymbol,
+  reqMarketDataType,
+  reqMarketRule,
+  reqMatchingSymbols,
+  reqMktDepthExchanges,
+  reqPnLSingleBySymbol,
+  reqSmartComponents,
+} from "../ibkr/data.js";
 import { readMessages, postMessage, clearMessages, getStats } from "../collab/store.js";
 import { getGptInstructions } from "./gpt-instructions.js";
 import { checkRisk, getSessionState, recordTradeResult, lockSession, unlockSession, resetSession } from "../ibkr/risk-gate.js";
@@ -71,6 +86,32 @@ const log = logger.child({ subsystem: "rest-portfolio" });
 const portfolioStressTestRequestSchema = z.object({
   shockPercent: z.number().finite(),
   betaAdjusted: z.boolean().default(true),
+});
+
+const marketDataTypeSchema = z.object({
+  marketDataType: z.number().int().min(1).max(4),
+});
+
+const autoOpenOrdersSchema = z.object({
+  autoBind: z.boolean(),
+});
+
+const impliedVolatilitySchema = z.object({
+  symbol: z.string().trim().min(1).max(20),
+  expiry: z.string().regex(/^\d{8}$/),
+  strike: z.number().positive(),
+  right: z.enum(["C", "P"]),
+  optionPrice: z.number().positive(),
+  underlyingPrice: z.number().positive(),
+});
+
+const optionPriceSchema = z.object({
+  symbol: z.string().trim().min(1).max(20),
+  expiry: z.string().regex(/^\d{8}$/),
+  strike: z.number().positive(),
+  right: z.enum(["C", "P"]),
+  volatility: z.number().positive(),
+  underlyingPrice: z.number().positive(),
 });
 
 // GET /api/status
@@ -309,6 +350,280 @@ router.get("/account/pnl", async (_req, res) => {
     res.json(pnl);
   } catch (e: any) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/account/pnl/:symbol
+router.get("/account/pnl/:symbol", async (req, res) => {
+  if (!isConnected()) {
+    res.status(503).json({ error: "IBKR not connected. Start TWS/Gateway for PnL data." });
+    return;
+  }
+
+  const symbol = req.params.symbol;
+  const symErr = validateSymbol(symbol);
+  if (symErr) {
+    res.status(400).json({ error: symErr });
+    return;
+  }
+
+  try {
+    const pnl = await reqPnLSingleBySymbol(symbol);
+    res.json({ data: pnl });
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+// GET /api/search/ibkr?q=...
+router.get("/search/ibkr", async (req, res) => {
+  if (!isConnected()) {
+    res.status(503).json({ error: "IBKR not connected. Start TWS/Gateway for IBKR symbol search." });
+    return;
+  }
+
+  const query = qs(req.query.q, "").trim();
+  if (!query) {
+    res.status(400).json({ error: "Required query param: q" });
+    return;
+  }
+
+  try {
+    const results = await reqMatchingSymbols(query);
+    res.json({ data: { count: results.length, results } });
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+// POST /api/config/market-data-type
+router.post("/config/market-data-type", async (req, res) => {
+  if (!isConnected()) {
+    res.status(503).json({ error: "IBKR not connected. Start TWS/Gateway to set market data type." });
+    return;
+  }
+
+  const parsed = marketDataTypeSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid request body" });
+    return;
+  }
+
+  try {
+    const result = await reqMarketDataType(parsed.data.marketDataType);
+    res.json({ data: result });
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+// POST /api/orders/auto-open
+router.post("/orders/auto-open", async (req, res) => {
+  if (!isConnected()) {
+    res.status(503).json({ error: "IBKR not connected. Start TWS/Gateway to set auto-open orders." });
+    return;
+  }
+
+  const parsed = autoOpenOrdersSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid request body" });
+    return;
+  }
+
+  try {
+    const result = await reqAutoOpenOrders(parsed.data.autoBind);
+    res.json({ data: result });
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+// GET /api/data/head-timestamp/:symbol
+router.get("/data/head-timestamp/:symbol", async (req, res) => {
+  if (!isConnected()) {
+    res.status(503).json({ error: "IBKR not connected. Start TWS/Gateway for head timestamp data." });
+    return;
+  }
+  const symbol = req.params.symbol;
+  const symErr = validateSymbol(symbol);
+  if (symErr) {
+    res.status(400).json({ error: symErr });
+    return;
+  }
+  const whatToShow = qs(req.query.whatToShow, "TRADES").toUpperCase();
+  const useRTH = qs(req.query.useRTH, "true") !== "false";
+  const formatDate = qs(req.query.formatDate, "1") === "2" ? 2 : 1;
+  if (!["TRADES", "MIDPOINT", "BID", "ASK"].includes(whatToShow)) {
+    res.status(400).json({ error: "whatToShow must be one of TRADES, MIDPOINT, BID, ASK" });
+    return;
+  }
+  try {
+    const data = await reqHeadTimestampBySymbol({ symbol, whatToShow: whatToShow as "TRADES" | "MIDPOINT" | "BID" | "ASK", useRTH, formatDate });
+    res.json({ data });
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+// GET /api/data/histogram/:symbol
+router.get("/data/histogram/:symbol", async (req, res) => {
+  if (!isConnected()) {
+    res.status(503).json({ error: "IBKR not connected. Start TWS/Gateway for histogram data." });
+    return;
+  }
+  const symbol = req.params.symbol;
+  const symErr = validateSymbol(symbol);
+  if (symErr) {
+    res.status(400).json({ error: symErr });
+    return;
+  }
+  const useRTH = qs(req.query.useRTH, "true") !== "false";
+  const period = Number.parseInt(qs(req.query.period, "3"), 10);
+  const periodUnit = qs(req.query.periodUnit, "D").toUpperCase();
+  if (!Number.isFinite(period) || period <= 0) {
+    res.status(400).json({ error: "period must be a positive integer" });
+    return;
+  }
+  if (!["S", "D", "W", "M", "Y"].includes(periodUnit)) {
+    res.status(400).json({ error: "periodUnit must be one of S, D, W, M, Y" });
+    return;
+  }
+  try {
+    const data = await reqHistogramDataBySymbol({ symbol, useRTH, period, periodUnit: periodUnit as "S" | "D" | "W" | "M" | "Y" });
+    res.json({ data });
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+router.post("/options/implied-vol", async (req, res) => {
+  if (!isConnected()) {
+    res.status(503).json({ error: "IBKR not connected. Start TWS/Gateway for option calculations." });
+    return;
+  }
+  const parsed = impliedVolatilitySchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid request body" });
+    return;
+  }
+  try {
+    const data = await calculateImpliedVolatility(parsed.data);
+    res.json({ data });
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+router.post("/options/price", async (req, res) => {
+  if (!isConnected()) {
+    res.status(503).json({ error: "IBKR not connected. Start TWS/Gateway for option calculations." });
+    return;
+  }
+  const parsed = optionPriceSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid request body" });
+    return;
+  }
+  try {
+    const data = await calculateOptionPrice(parsed.data);
+    res.json({ data });
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+router.get("/status/tws-time", async (_req, res) => {
+  if (!isConnected()) {
+    res.status(503).json({ error: "IBKR not connected. Start TWS/Gateway for TWS time." });
+    return;
+  }
+  try {
+    const data = await reqCurrentTime();
+    res.json({ data });
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+router.get("/data/market-rule/:ruleId", async (req, res) => {
+  if (!isConnected()) {
+    res.status(503).json({ error: "IBKR not connected. Start TWS/Gateway for market rule data." });
+    return;
+  }
+  const ruleId = Number.parseInt(req.params.ruleId, 10);
+  if (!Number.isFinite(ruleId) || ruleId <= 0) {
+    res.status(400).json({ error: "ruleId must be a positive integer" });
+    return;
+  }
+  try {
+    const data = await reqMarketRule(ruleId);
+    res.json({ data });
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+router.get("/data/smart-components/:exchange", async (req, res) => {
+  if (!isConnected()) {
+    res.status(503).json({ error: "IBKR not connected. Start TWS/Gateway for smart components." });
+    return;
+  }
+  const exchange = req.params.exchange.trim().toUpperCase();
+  if (!exchange) {
+    res.status(400).json({ error: "exchange is required" });
+    return;
+  }
+  try {
+    const data = await reqSmartComponents(exchange);
+    res.json({ data });
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+router.get("/data/depth-exchanges", async (_req, res) => {
+  if (!isConnected()) {
+    res.status(503).json({ error: "IBKR not connected. Start TWS/Gateway for depth exchange data." });
+    return;
+  }
+  try {
+    const data = await reqMktDepthExchanges();
+    res.json({ data });
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+router.get("/data/fundamentals/:symbol", async (req, res) => {
+  if (!isConnected()) {
+    res.status(503).json({ error: "IBKR not connected. Start TWS/Gateway for fundamental data." });
+    return;
+  }
+  const symbol = req.params.symbol;
+  const symErr = validateSymbol(symbol);
+  if (symErr) {
+    res.status(400).json({ error: symErr });
+    return;
+  }
+  const reportType = qs(req.query.reportType, "ReportSnapshot");
+  try {
+    const data = await reqFundamentalDataBySymbol({ symbol, reportType });
+    res.json({ data });
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "Unknown error";
+    res.status(500).json({ error: message });
   }
 });
 
