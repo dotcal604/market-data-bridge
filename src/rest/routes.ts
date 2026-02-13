@@ -649,7 +649,7 @@ router.post("/risk/size-position", async (req, res) => {
       return;
     }
     if (riskPercent !== undefined && (typeof riskPercent !== "number" || !Number.isFinite(riskPercent) || riskPercent <= 0 || riskPercent > 100)) {
-      res.status(400).json({ error: "riskPercent must be between 0 and 100" });
+      res.status(400).json({ error: "riskPercent must be a positive number between 0 (exclusive) and 100" });
       return;
     }
     if (riskAmount !== undefined && (typeof riskAmount !== "number" || !Number.isFinite(riskAmount) || riskAmount <= 0)) {

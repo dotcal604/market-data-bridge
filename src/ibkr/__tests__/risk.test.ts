@@ -118,7 +118,7 @@ describe("calculatePositionSize", () => {
       expect(result.recommendedShares).toBe(0);
       expect(result.riskPerShare).toBe(0);
       expect(result.totalRisk).toBe(0);
-      expect(result.warnings).toContain("Position too risky for current account size");
+      expect(result.warnings).toContain("Stop price equals entry price - no risk buffer defined");
     });
 
     it("should handle stopPrice > entryPrice (short position)", async () => {
@@ -163,7 +163,7 @@ describe("calculatePositionSize", () => {
           stopPrice: 195,
           riskPercent: 0,
         })
-      ).rejects.toThrow("Risk percent must be between 0 and 100");
+      ).rejects.toThrow("Risk percent must be a positive number between 0 (exclusive) and 100");
 
       await expect(
         calculatePositionSize({
@@ -172,7 +172,7 @@ describe("calculatePositionSize", () => {
           stopPrice: 195,
           riskPercent: 101,
         })
-      ).rejects.toThrow("Risk percent must be between 0 and 100");
+      ).rejects.toThrow("Risk percent must be a positive number between 0 (exclusive) and 100");
     });
 
     it("should throw error for invalid max capital percent", async () => {
@@ -228,7 +228,7 @@ describe("calculatePositionSize", () => {
       });
 
       expect(result.recommendedShares).toBe(0);
-      expect(result.warnings).toContain("Position too risky for current account size");
+      expect(result.warnings).toContain("Stop price equals entry price - no risk buffer defined");
     });
 
     it("should warn when available funds < entry price", async () => {

@@ -53,7 +53,7 @@ export async function calculatePositionSize(
     throw new Error("Stop price must be non-negative");
   }
   if (riskPercent !== undefined && (riskPercent <= 0 || riskPercent > 100)) {
-    throw new Error("Risk percent must be between 0 and 100");
+    throw new Error("Risk percent must be a positive number between 0 (exclusive) and 100");
   }
   if (maxCapitalPercent <= 0 || maxCapitalPercent > 100) {
     throw new Error("Max capital percent must be between 0 and 100");
@@ -92,7 +92,7 @@ export async function calculatePositionSize(
         byMargin: 0,
         binding: "byRisk",
       },
-      warnings: ["Position too risky for current account size"],
+      warnings: ["Stop price equals entry price - no risk buffer defined"],
       netLiquidation: netLiq,
     };
   }
@@ -111,8 +111,9 @@ export async function calculatePositionSize(
   if (gapPercent > LARGE_GAP_THRESHOLD) {
     const originalShares = sharesByRisk;
     sharesByRisk = Math.floor(sharesByRisk * LARGE_GAP_REDUCTION);
+    const actualReduction = ((originalShares - sharesByRisk) / originalShares * 100).toFixed(0);
     warnings.push(
-      `Large gap detected (${(gapPercent * 100).toFixed(1)}%) — size reduced by ${(LARGE_GAP_REDUCTION * 100).toFixed(0)}% from ${originalShares} to ${sharesByRisk} shares`
+      `Large gap detected (${(gapPercent * 100).toFixed(1)}%) — size reduced by ${actualReduction}% from ${originalShares} to ${sharesByRisk} shares`
     );
     appliedReduction = true;
     logRisk.warn(
