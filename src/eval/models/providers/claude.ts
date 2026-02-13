@@ -43,7 +43,13 @@ export async function evaluateWithClaude(
         model: evalConfig.claudeModel,
         max_tokens: 1024,
         temperature: evalConfig.modelTemperature,
-        system: SYSTEM_PROMPT,
+        system: [
+          {
+            type: "text",
+            text: SYSTEM_PROMPT,
+            cache_control: { type: "ephemeral" },
+          },
+        ],
         messages: [{ role: "user", content: userPrompt }],
       }),
       evalConfig.modelTimeoutMs,
