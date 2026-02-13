@@ -21,15 +21,17 @@ import { Trash2 } from "lucide-react";
 
 export default function CollabPage() {
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
+  const [error, setError] = useState("");
   const { mutate: clearMessages, isPending } = useClearMessages();
 
   const handleClear = () => {
+    setError("");
     clearMessages(undefined, {
       onSuccess: () => {
         setClearDialogOpen(false);
       },
       onError: (error) => {
-        alert(`Failed to clear messages: ${error.message}`);
+        setError(error.message);
       },
     });
   };
@@ -59,6 +61,11 @@ export default function CollabPage() {
                 messages from the collaboration channel.
               </AlertDialogDescription>
             </AlertDialogHeader>
+            {error && (
+              <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded px-3 py-2">
+                {error}
+              </div>
+            )}
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
               <AlertDialogAction

@@ -7,18 +7,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export function MessageFeed() {
   const { data: messages, isLoading } = useCollabMessages(50);
-  const previousCountRef = useRef<number>(0);
-
-  useEffect(() => {
-    if (messages && messages.length > previousCountRef.current && previousCountRef.current > 0) {
-      // Show toast notification for new messages
-      // Note: This would require a toast system, which we'll implement simply with a console log for now
-      console.log("New messages available");
-    }
-    if (messages) {
-      previousCountRef.current = messages.length;
-    }
-  }, [messages]);
 
   if (isLoading) {
     return (
