@@ -84,7 +84,10 @@ export function OrdersPanel({ refreshInterval = 5000 }: OrdersPanelProps) {
   const formatPrice = (price: number | null) => {
     if (price === null) return "—";
     if (price === 0) return "$0.00"; // Valid price, show explicitly
-    return `$${price.toFixed(2)}`;
+    // Handle negative prices (shouldn't occur for limit/stop prices, but handle defensively)
+    const absPrice = Math.abs(price);
+    const sign = price < 0 ? "-" : "";
+    return `${sign}$${absPrice.toFixed(2)}`;
   };
 
   const formatTimestamp = (timestamp: string) => {
@@ -102,7 +105,7 @@ export function OrdersPanel({ refreshInterval = 5000 }: OrdersPanelProps) {
     }
   };
 
-  const getSideBadge = (action: string) => {
+  const getSideBadge = (action: "BUY" | "SELL") => {
     const isBuy = action === "BUY";
     return (
       <Badge

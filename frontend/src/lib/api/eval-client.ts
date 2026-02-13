@@ -5,17 +5,9 @@ import type {
   EnsembleWeights,
   EvalResponse,
 } from "./types";
+import { fetchJson } from "./fetch-json";
 
 const BASE = "/api/eval";
-
-async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init);
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(body.error ?? `HTTP ${res.status}`);
-  }
-  return res.json() as Promise<T>;
-}
 
 export const evalClient = {
   evaluate(symbol: string, direction = "long", entryPrice?: number, stopPrice?: number, notes?: string) {
