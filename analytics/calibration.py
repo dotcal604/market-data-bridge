@@ -4,16 +4,19 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
 
+# Ensure analytics/ is on sys.path for bare imports when run from project root
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
 import matplotlib
-import matplotlib.pyplot as plt
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np
 import pandas as pd
 
 from db_loader import load_eval_outcomes, load_model_outcomes
-
-matplotlib.use("Agg")
 
 OUTPUT_DIR = Path(__file__).resolve().parent / "output"
 MODEL_IDS: tuple[str, ...] = ("claude", "gpt4o", "gemini")
