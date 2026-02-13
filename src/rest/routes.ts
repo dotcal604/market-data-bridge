@@ -17,7 +17,7 @@ import {
 } from "../providers/yahoo.js";
 import { isConnected } from "../ibkr/connection.js";
 import { getAccountSummary, getPositions, getPnL } from "../ibkr/account.js";
-import { getOpenOrders, getCompletedOrders, getExecutions, placeOrder, placeBracketOrder, cancelOrder, cancelAllOrders, flattenAllPositions } from "../ibkr/orders.js";
+import { getOpenOrders, getCompletedOrders, getExecutions, placeOrder, placeBracketOrder, placeAdvancedBracket, cancelOrder, cancelAllOrders, flattenAllPositions, validateOrder } from "../ibkr/orders.js";
 import { setFlattenEnabled, getFlattenConfig } from "../scheduler.js";
 import { getContractDetails } from "../ibkr/contracts.js";
 import { getIBKRQuote } from "../ibkr/marketdata.js";
@@ -368,42 +368,52 @@ router.get("/ibkr/quote/:symbol", async (req, res) => {
 // ORDER EXECUTION ENDPOINTS (IBKR — requires TWS/Gateway)
 // =====================================================================
 
-// POST /api/order — Place a single order
+// POST /api/order — Place a single order (any IBKR order type)
 router.post("/order", async (req, res) => {
   if (!isConnected()) {
     res.json({ error: "IBKR not connected. Start TWS/Gateway to place orders." });
     return;
   }
   try {
-    const { symbol, action, orderType, totalQuantity, lmtPrice, auxPrice, tif, secType, exchange, currency, strategy_version, journal_id } = req.body ?? {};
-    if (!symbol || !action || !orderType || !totalQuantity) {
-      res.status(400).json({ error: "Required: symbol, action, orderType, totalQuantity" });
-      return;
-    }
+    const body = req.body ?? {};
+    const {
+      symbol, action, orderType, totalQuantity,
+      lmtPrice, auxPrice, tif, secType, exchange, currency,
+      trailingPercent, trailStopPrice,
+      ocaGroup, ocaType, parentId, transmit,
+      goodAfterTime, goodTillDate, outsideRth, hidden, discretionaryAmt,
+      algoStrategy, algoParams, account, hedgeType, hedgeParam,
+      strategy_version, journal_id,
+    } = body;
+
+    // Structural validation
     const symErr = validateSymbol(symbol);
     if (symErr) { res.status(400).json({ error: symErr }); return; }
-    if (!["BUY", "SELL"].includes(action)) {
-      res.status(400).json({ error: "action must be BUY or SELL" }); return;
+
+    const orderParams = {
+      symbol, action, orderType, totalQuantity,
+      lmtPrice, auxPrice, tif, secType, exchange, currency,
+      trailingPercent, trailStopPrice,
+      ocaGroup, ocaType, parentId, transmit,
+      goodAfterTime, goodTillDate, outsideRth, hidden, discretionaryAmt,
+      algoStrategy, algoParams, account, hedgeType, hedgeParam,
+      strategy_version, order_source: "rest" as const, journal_id,
+    };
+
+    const validation = validateOrder(orderParams);
+    if (!validation.valid) {
+      res.status(400).json({ error: validation.errors.join("; ") });
+      return;
     }
-    if (!["MKT", "LMT", "STP", "STP LMT"].includes(orderType)) {
-      res.status(400).json({ error: "orderType must be MKT, LMT, STP, or STP LMT" }); return;
-    }
-    if (typeof totalQuantity !== "number" || !Number.isFinite(totalQuantity) || totalQuantity <= 0) {
-      res.status(400).json({ error: "totalQuantity must be a positive number" }); return;
-    }
-    if (lmtPrice !== undefined && !isFinitePositive(lmtPrice)) {
-      res.status(400).json({ error: "lmtPrice must be a positive number" }); return;
-    }
-    if (auxPrice !== undefined && !isFinitePositive(auxPrice)) {
-      res.status(400).json({ error: "auxPrice must be a positive number" }); return;
-    }
+
     // Pre-trade risk check
     const riskResult = checkRisk({ symbol, action, orderType, totalQuantity, lmtPrice, auxPrice, secType });
     if (!riskResult.allowed) {
       res.status(403).json({ error: `Risk gate rejected: ${riskResult.reason}` });
       return;
     }
-    const result = await placeOrder({ symbol, action, orderType, totalQuantity, lmtPrice, auxPrice, tif, secType, exchange, currency, strategy_version, order_source: "rest", journal_id });
+
+    const result = await placeOrder(orderParams);
     res.json(result);
   } catch (e: any) {
     res.status(500).json({ error: e.message });
@@ -449,6 +459,55 @@ router.post("/order/bracket", async (req, res) => {
       return;
     }
     const result = await placeBracketOrder({ symbol, action, totalQuantity, entryType, entryPrice, takeProfitPrice, stopLossPrice, tif, secType, exchange, currency, strategy_version, order_source: "rest", journal_id });
+    res.json(result);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/order/bracket-advanced — Bracket with trailing stop, OCA, any order types
+router.post("/order/bracket-advanced", async (req, res) => {
+  if (!isConnected()) {
+    res.json({ error: "IBKR not connected. Start TWS/Gateway to place orders." });
+    return;
+  }
+  try {
+    const { symbol, action, quantity, entry, takeProfit, stopLoss, tif, outsideRth, secType, exchange, currency, strategy_version, journal_id } = req.body ?? {};
+    if (!symbol || !action || !quantity || !entry || !takeProfit || !stopLoss) {
+      res.status(400).json({ error: "Required: symbol, action, quantity, entry, takeProfit, stopLoss" });
+      return;
+    }
+    const symErr = validateSymbol(symbol);
+    if (symErr) { res.status(400).json({ error: symErr }); return; }
+    if (!["BUY", "SELL"].includes(action)) {
+      res.status(400).json({ error: "action must be BUY or SELL" }); return;
+    }
+    if (typeof quantity !== "number" || !Number.isFinite(quantity) || quantity <= 0) {
+      res.status(400).json({ error: "quantity must be a positive number" }); return;
+    }
+    if (!entry.type) { res.status(400).json({ error: "entry.type is required" }); return; }
+    if (!takeProfit.type || !takeProfit.price) { res.status(400).json({ error: "takeProfit.type and takeProfit.price are required" }); return; }
+    if (!stopLoss.type) { res.status(400).json({ error: "stopLoss.type is required" }); return; }
+
+    // Trailing stop validation
+    if ((stopLoss.type === "TRAIL" || stopLoss.type === "TRAIL LIMIT")) {
+      if (!stopLoss.trailingAmount && !stopLoss.trailingPercent) {
+        res.status(400).json({ error: "TRAIL stop requires trailingAmount or trailingPercent" }); return;
+      }
+    }
+
+    // Risk check on entry
+    const riskResult = checkRisk({ symbol, action, orderType: entry.type, totalQuantity: quantity, lmtPrice: entry.price, secType });
+    if (!riskResult.allowed) {
+      res.status(403).json({ error: `Risk gate rejected: ${riskResult.reason}` });
+      return;
+    }
+
+    const result = await placeAdvancedBracket({
+      symbol, action, quantity, entry, takeProfit, stopLoss,
+      tif, outsideRth, secType, exchange, currency,
+      strategy_version, order_source: "rest", journal_id,
+    });
     res.json(result);
   } catch (e: any) {
     res.status(500).json({ error: e.message });

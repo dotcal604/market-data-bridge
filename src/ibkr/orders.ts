@@ -368,19 +368,102 @@ export interface PlaceOrderParams {
   exchange?: string;
   currency?: string;
   action: string; // "BUY" | "SELL"
-  orderType: string; // "MKT" | "LMT" | "STP" | "STP LMT"
+  orderType: string; // Any IBKR order type: MKT, LMT, STP, STP LMT, TRAIL, TRAIL LIMIT, REL, MIT, MOC, LOC, etc.
   totalQuantity: number;
   lmtPrice?: number;
-  auxPrice?: number; // stop price
-  tif?: string; // "DAY" | "GTC" | "IOC"
+  auxPrice?: number; // stop price, or trailing amount for TRAIL
+  tif?: string; // "DAY" | "GTC" | "IOC" | "GTD" | "OPG" | "FOK" | "DTC"
   transmit?: boolean;
   parentId?: number; // for bracket child orders
   ocaGroup?: string;
+  ocaType?: number; // 1=Cancel with block, 2=Reduce with block, 3=Reduce non-block
+  // Trailing order fields
+  trailingPercent?: number; // trailing stop as percentage (alternative to auxPrice)
+  trailStopPrice?: number; // initial stop price anchor for trailing orders
+  // Advanced order fields
+  goodAfterTime?: string; // "YYYYMMDD HH:MM:SS timezone"
+  goodTillDate?: string; // "YYYYMMDD HH:MM:SS timezone"
+  outsideRth?: boolean; // allow execution outside regular trading hours
+  hidden?: boolean; // hidden order (iceberg)
+  discretionaryAmt?: number; // discretionary amount for REL orders
+  // Algo fields
+  algoStrategy?: string; // "Adaptive", "ArrivalPx", "DarkIce", "PctVol", "Twap", "Vwap", etc.
+  algoParams?: Array<{ tag: string; value: string }>; // algo-specific params
+  // Account / hedge fields
+  account?: string;
+  hedgeType?: string; // "D" (delta), "B" (beta), "F" (FX), "P" (pair)
+  hedgeParam?: string;
   // DB tracking fields
   strategy_version?: string;
   order_source?: string;
   ai_confidence?: number;
   journal_id?: number;
+}
+
+// ── Order Validation ─────────────────────────────────────────────────────
+
+export interface OrderValidationResult {
+  valid: boolean;
+  errors: string[];
+}
+
+const KNOWN_ORDER_TYPES = new Set([
+  "MKT", "LMT", "STP", "STP LMT",
+  "TRAIL", "TRAIL LIMIT",
+  "REL", "MIT", "MOC", "LOC",
+  "MKT PRT", "LIT", "PEG MID", "PEG MKT",
+  "SNAP MID", "SNAP MKT", "SNAP PRIM",
+  "MKT IF TOUCHED", "MKT ON CLOSE", "LMT ON CLOSE",
+  "PASSV REL", "PEG BENCH",
+]);
+
+export function validateOrder(params: PlaceOrderParams): OrderValidationResult {
+  const errors: string[] = [];
+
+  // Basic required fields
+  if (!params.symbol) errors.push("symbol is required");
+  if (!["BUY", "SELL"].includes(params.action)) errors.push("action must be BUY or SELL");
+  if (!params.orderType) errors.push("orderType is required");
+  if (!params.totalQuantity || params.totalQuantity <= 0) errors.push("totalQuantity must be positive");
+
+  const ot = params.orderType;
+
+  // Warn on unknown types (don't reject — IBKR may support more than we track)
+  if (!KNOWN_ORDER_TYPES.has(ot)) {
+    logOrder.warn({ orderType: ot }, "Unknown order type — passing through to IBKR");
+  }
+
+  // LMT requires lmtPrice
+  if ((ot === "LMT" || ot === "STP LMT" || ot === "TRAIL LIMIT") && !params.lmtPrice) {
+    errors.push(`${ot} requires lmtPrice`);
+  }
+
+  // STP / STP LMT requires auxPrice
+  if ((ot === "STP" || ot === "STP LMT") && !params.auxPrice) {
+    errors.push(`${ot} requires auxPrice (stop trigger price)`);
+  }
+
+  // TRAIL requires either auxPrice (trailing amount) or trailingPercent
+  if (ot === "TRAIL" || ot === "TRAIL LIMIT") {
+    if (!params.auxPrice && !params.trailingPercent) {
+      errors.push(`${ot} requires auxPrice (trailing amount) or trailingPercent`);
+    }
+    if (params.auxPrice && params.trailingPercent) {
+      errors.push(`${ot}: specify auxPrice OR trailingPercent, not both`);
+    }
+  }
+
+  // OCA validation
+  if (params.ocaType !== undefined && ![1, 2, 3].includes(params.ocaType)) {
+    errors.push("ocaType must be 1 (cancel w/ block), 2 (reduce w/ block), or 3 (reduce non-block)");
+  }
+
+  // REL discretionary
+  if (params.discretionaryAmt !== undefined && ot !== "REL") {
+    errors.push("discretionaryAmt is only valid for REL orders");
+  }
+
+  return { valid: errors.length === 0, errors };
 }
 
 export interface PlaceOrderResult {
@@ -419,6 +502,23 @@ export async function placeOrder(params: PlaceOrderParams): Promise<PlaceOrderRe
     parentId: params.parentId ?? 0,
     ocaGroup: params.ocaGroup ?? "",
   };
+
+  // Advanced fields — only set if provided (avoids IBKR rejecting zero/empty defaults)
+  if (params.ocaType !== undefined) (order as any).ocaType = params.ocaType;
+  if (params.trailingPercent !== undefined) (order as any).trailingPercent = params.trailingPercent;
+  if (params.trailStopPrice !== undefined) (order as any).trailStopPrice = params.trailStopPrice;
+  if (params.goodAfterTime) (order as any).goodAfterTime = params.goodAfterTime;
+  if (params.goodTillDate) (order as any).goodTillDate = params.goodTillDate;
+  if (params.outsideRth !== undefined) (order as any).outsideRth = params.outsideRth;
+  if (params.hidden !== undefined) (order as any).hidden = params.hidden;
+  if (params.discretionaryAmt !== undefined) (order as any).discretionaryAmt = params.discretionaryAmt;
+  if (params.algoStrategy) (order as any).algoStrategy = params.algoStrategy;
+  if (params.algoParams) (order as any).algoParams = params.algoParams;
+  if (params.account) (order as any).account = params.account;
+  if (params.hedgeType) (order as any).hedgeType = params.hedgeType;
+  if (params.hedgeParam) (order as any).hedgeParam = params.hedgeParam;
+
+  logOrder.info({ orderId, symbol: params.symbol, orderType: params.orderType, order }, "Submitting order to IBKR");
 
   // Write to DB before sending to IBKR
   try {
@@ -690,6 +790,211 @@ export async function placeBracketOrder(params: BracketOrderParams): Promise<Bra
     ib.placeOrder(parentId, contract, parentOrder);
     ib.placeOrder(tpId, contract, takeProfitOrder);
     ib.placeOrder(slId, contract, stopLossOrder);
+  });
+}
+
+// ── Advanced Bracket Order (supports trailing stop, OCA) ─────────────────
+
+export interface AdvancedBracketParams {
+  symbol: string;
+  secType?: string;
+  exchange?: string;
+  currency?: string;
+  action: string; // "BUY" | "SELL"
+  quantity: number;
+  entry: { type: string; price?: number };
+  takeProfit: { type: string; price: number };
+  stopLoss: {
+    type: string; // "STP", "TRAIL", "TRAIL LIMIT", "STP LMT"
+    price?: number;
+    trailingAmount?: number;
+    trailingPercent?: number;
+    lmtPrice?: number; // for TRAIL LIMIT or STP LMT
+  };
+  tif?: string;
+  outsideRth?: boolean;
+  // DB tracking
+  strategy_version?: string;
+  order_source?: string;
+  ai_confidence?: number;
+  journal_id?: number;
+}
+
+export interface AdvancedBracketResult {
+  parentOrderId: number;
+  takeProfitOrderId: number;
+  stopLossOrderId: number;
+  ocaGroup: string;
+  symbol: string;
+  action: string;
+  quantity: number;
+  entry: { type: string; price: number | null };
+  takeProfit: { type: string; price: number };
+  stopLoss: { type: string; price?: number; trailingAmount?: number; trailingPercent?: number };
+  status: string;
+  correlation_id: string;
+}
+
+export async function placeAdvancedBracket(params: AdvancedBracketParams): Promise<AdvancedBracketResult> {
+  const ib = getIB();
+  const parentId = await getNextValidOrderId();
+  const tpId = parentId + 1;
+  const slId = parentId + 2;
+  const correlationId = generateCorrelationId();
+  const ocaGroup = `bracket_${parentId}_${Date.now()}`;
+
+  const reverseAction = params.action === "BUY" ? "SELL" : "BUY";
+
+  const contract: Contract = {
+    symbol: params.symbol,
+    secType: (params.secType ?? "STK") as any,
+    exchange: params.exchange ?? "SMART",
+    currency: params.currency ?? "USD",
+  };
+
+  // Parent order (entry)
+  const parentOrder: Order = {
+    orderId: parentId,
+    action: params.action as any,
+    orderType: params.entry.type as any,
+    totalQuantity: params.quantity,
+    lmtPrice: params.entry.price ?? 0,
+    tif: (params.tif ?? "DAY") as any,
+    transmit: false,
+  };
+  if (params.outsideRth) (parentOrder as any).outsideRth = true;
+
+  // Take profit (child)
+  const tpOrder: Order = {
+    orderId: tpId,
+    action: reverseAction as any,
+    orderType: params.takeProfit.type as any,
+    totalQuantity: params.quantity,
+    lmtPrice: params.takeProfit.price,
+    parentId,
+    ocaGroup,
+    tif: "GTC" as any,
+    transmit: false,
+  };
+  if (params.outsideRth) (tpOrder as any).outsideRth = true;
+
+  // Stop loss (child — supports TRAIL, TRAIL LIMIT, STP, STP LMT)
+  const slType = params.stopLoss.type;
+  const slOrder: Order = {
+    orderId: slId,
+    action: reverseAction as any,
+    orderType: slType as any,
+    totalQuantity: params.quantity,
+    parentId,
+    ocaGroup,
+    tif: "GTC" as any,
+    transmit: true, // last child — transmits the whole bracket
+  };
+  if (params.outsideRth) (slOrder as any).outsideRth = true;
+
+  // Set stop/trail fields based on type
+  if (slType === "STP" || slType === "STP LMT") {
+    slOrder.auxPrice = params.stopLoss.price ?? 0;
+    if (slType === "STP LMT") slOrder.lmtPrice = params.stopLoss.lmtPrice ?? params.stopLoss.price ?? 0;
+  } else if (slType === "TRAIL" || slType === "TRAIL LIMIT") {
+    if (params.stopLoss.trailingPercent) {
+      (slOrder as any).trailingPercent = params.stopLoss.trailingPercent;
+    } else if (params.stopLoss.trailingAmount) {
+      slOrder.auxPrice = params.stopLoss.trailingAmount;
+    }
+    if (params.stopLoss.price) (slOrder as any).trailStopPrice = params.stopLoss.price;
+    if (slType === "TRAIL LIMIT") slOrder.lmtPrice = params.stopLoss.lmtPrice ?? 0;
+  }
+
+  // OCA type: cancel with block (when one child fills, cancel the other)
+  (tpOrder as any).ocaType = 1;
+  (slOrder as any).ocaType = 1;
+
+  // Write all 3 to DB
+  const dbFields = {
+    strategy_version: params.strategy_version ?? "manual",
+    order_source: params.order_source ?? "manual",
+    ai_confidence: params.ai_confidence,
+    correlation_id: correlationId,
+    journal_id: params.journal_id,
+  };
+  try {
+    insertOrder({ order_id: parentId, symbol: params.symbol, action: params.action, order_type: params.entry.type, total_quantity: params.quantity, lmt_price: params.entry.price, sec_type: params.secType, exchange: params.exchange, currency: params.currency, ...dbFields });
+    insertOrder({ order_id: tpId, symbol: params.symbol, action: reverseAction, order_type: params.takeProfit.type, total_quantity: params.quantity, lmt_price: params.takeProfit.price, sec_type: params.secType, exchange: params.exchange, currency: params.currency, parent_order_id: parentId, ...dbFields });
+    insertOrder({ order_id: slId, symbol: params.symbol, action: reverseAction, order_type: slType, total_quantity: params.quantity, aux_price: params.stopLoss.price ?? params.stopLoss.trailingAmount, sec_type: params.secType, exchange: params.exchange, currency: params.currency, parent_order_id: parentId, ...dbFields });
+    logOrder.info({ parentId, tpId, slId, ocaGroup, symbol: params.symbol, correlationId }, "Advanced bracket recorded in DB");
+  } catch (e: any) {
+    logOrder.error({ err: e, parentId }, "Failed to write advanced bracket to DB — continuing");
+  }
+
+  logOrder.info({ parentOrder, tpOrder, slOrder }, "Submitting advanced bracket to IBKR");
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let parentStatus = "";
+
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(buildResult(parentStatus || "Submitted (awaiting confirmation)"));
+    }, 10000);
+
+    const onOrderStatus = (id: number, status: string) => {
+      if (id === parentId) {
+        parentStatus = status;
+        if (["Filled", "PreSubmitted", "Submitted"].includes(status)) {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          resolve(buildResult(status));
+        }
+      }
+    };
+
+    const onError = (err: Error, code: ErrorCode, id: number) => {
+      if (id !== parentId && id !== tpId && id !== slId && id !== -1) return;
+      if (isNonFatalError(code, err)) return;
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error(`Advanced bracket error (${code}) on orderId ${id}: ${err.message}`));
+    };
+
+    const cleanup = () => {
+      clearTimeout(timeout);
+      ib.off(EventName.orderStatus, onOrderStatus);
+      ib.off(EventName.error, onError);
+    };
+
+    function buildResult(status: string): AdvancedBracketResult {
+      return {
+        parentOrderId: parentId,
+        takeProfitOrderId: tpId,
+        stopLossOrderId: slId,
+        ocaGroup,
+        symbol: params.symbol,
+        action: params.action,
+        quantity: params.quantity,
+        entry: { type: params.entry.type, price: params.entry.price ?? null },
+        takeProfit: { type: params.takeProfit.type, price: params.takeProfit.price },
+        stopLoss: {
+          type: slType,
+          price: params.stopLoss.price,
+          trailingAmount: params.stopLoss.trailingAmount,
+          trailingPercent: params.stopLoss.trailingPercent,
+        },
+        status,
+        correlation_id: correlationId,
+      };
+    }
+
+    ib.on(EventName.orderStatus, onOrderStatus);
+    ib.on(EventName.error, onError);
+
+    ib.placeOrder(parentId, contract, parentOrder);
+    ib.placeOrder(tpId, contract, tpOrder);
+    ib.placeOrder(slId, contract, slOrder);
   });
 }
 

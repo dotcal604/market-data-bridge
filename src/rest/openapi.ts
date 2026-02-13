@@ -961,7 +961,7 @@ export const openApiSpec = {
     "/api/order": {
       post: {
         operationId: "placeOrder",
-        summary: "Place a single order (MKT, LMT, STP, STP LMT) on IBKR. Requires TWS/Gateway.",
+        summary: "Place a single order on IBKR. Supports all order types: MKT, LMT, STP, STP LMT, TRAIL, TRAIL LIMIT, REL, MIT, MOC, LOC, PEG MID, etc. Requires TWS/Gateway.",
         requestBody: {
           required: true,
           content: {
@@ -972,11 +972,23 @@ export const openApiSpec = {
                 properties: {
                   symbol: { type: "string", description: "Ticker symbol, e.g. AAPL" },
                   action: { type: "string", enum: ["BUY", "SELL"], description: "BUY or SELL" },
-                  orderType: { type: "string", enum: ["MKT", "LMT", "STP", "STP LMT"], description: "Order type" },
+                  orderType: { type: "string", description: "Any IBKR order type: MKT, LMT, STP, STP LMT, TRAIL, TRAIL LIMIT, REL, MIT, MOC, LOC, PEG MID, etc." },
                   totalQuantity: { type: "number", description: "Number of shares" },
-                  lmtPrice: { type: "number", description: "Limit price (required for LMT and STP LMT)" },
-                  auxPrice: { type: "number", description: "Stop price (required for STP and STP LMT)" },
-                  tif: { type: "string", description: "Time in force: DAY (default), GTC, IOC" },
+                  lmtPrice: { type: "number", description: "Limit price (required for LMT, STP LMT, TRAIL LIMIT)" },
+                  auxPrice: { type: "number", description: "Stop price (STP/STP LMT) or trailing amount (TRAIL)" },
+                  trailingPercent: { type: "number", description: "Trailing stop as percentage (alternative to auxPrice for TRAIL)" },
+                  trailStopPrice: { type: "number", description: "Initial stop price anchor for trailing orders" },
+                  tif: { type: "string", description: "Time in force: DAY (default), GTC, IOC, GTD, OPG, FOK, DTC" },
+                  ocaGroup: { type: "string", description: "OCA group name" },
+                  ocaType: { type: "integer", description: "OCA type: 1=cancel w/ block, 2=reduce w/ block, 3=reduce non-block" },
+                  parentId: { type: "integer", description: "Parent order ID for child orders" },
+                  transmit: { type: "boolean", description: "Whether to transmit immediately (default true)" },
+                  outsideRth: { type: "boolean", description: "Allow execution outside regular trading hours" },
+                  goodAfterTime: { type: "string", description: "Start time: YYYYMMDD HH:MM:SS timezone" },
+                  goodTillDate: { type: "string", description: "Expiry time: YYYYMMDD HH:MM:SS timezone" },
+                  algoStrategy: { type: "string", description: "Algo: Adaptive, ArrivalPx, DarkIce, PctVol, Twap, Vwap" },
+                  discretionaryAmt: { type: "number", description: "Discretionary amount for REL orders" },
+                  hidden: { type: "boolean", description: "Hidden order (iceberg)" },
                   secType: { type: "string", description: "Security type: STK (default), OPT, FUT" },
                   exchange: { type: "string", description: "Exchange: SMART (default)" },
                   currency: { type: "string", description: "Currency: USD (default)" },
@@ -1054,6 +1066,92 @@ export const openApiSpec = {
                 },
               },
             },
+          },
+        },
+      },
+    },
+    "/api/order/bracket-advanced": {
+      post: {
+        operationId: "placeAdvancedBracket",
+        summary: "Place an advanced bracket order with OCA group, trailing stop support, and full field passthrough. Entry + take-profit + stop-loss linked via OCA.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["symbol", "action", "totalQuantity", "entry", "takeProfit", "stopLoss"],
+                properties: {
+                  symbol: { type: "string", description: "Ticker symbol" },
+                  action: { type: "string", enum: ["BUY", "SELL"], description: "Entry direction" },
+                  totalQuantity: { type: "number", description: "Number of shares" },
+                  secType: { type: "string", default: "STK" },
+                  exchange: { type: "string", default: "SMART" },
+                  currency: { type: "string", default: "USD" },
+                  tif: { type: "string", default: "DAY", description: "Time-in-force for entry" },
+                  outsideRth: { type: "boolean", description: "Allow outside regular trading hours" },
+                  entry: {
+                    type: "object",
+                    required: ["orderType"],
+                    properties: {
+                      orderType: { type: "string", description: "Entry order type (MKT, LMT, etc.)" },
+                      lmtPrice: { type: "number", description: "Limit price for LMT entry" },
+                      auxPrice: { type: "number", description: "Stop price for STP entry" },
+                    },
+                  },
+                  takeProfit: {
+                    type: "object",
+                    required: ["orderType", "price"],
+                    properties: {
+                      orderType: { type: "string", default: "LMT", description: "Take-profit order type" },
+                      price: { type: "number", description: "Take-profit limit price" },
+                    },
+                  },
+                  stopLoss: {
+                    type: "object",
+                    required: ["orderType"],
+                    properties: {
+                      orderType: { type: "string", description: "Stop-loss type: STP, STP LMT, TRAIL, TRAIL LIMIT" },
+                      price: { type: "number", description: "Stop price (or trail anchor for TRAIL)" },
+                      lmtPrice: { type: "number", description: "Limit price for STP LMT / TRAIL LIMIT" },
+                      trailingAmount: { type: "number", description: "Trailing dollar amount (TRAIL/TRAIL LIMIT)" },
+                      trailingPercent: { type: "number", description: "Trailing percentage (TRAIL/TRAIL LIMIT)" },
+                    },
+                  },
+                  ocaGroup: { type: "string", description: "Custom OCA group name (auto-generated if omitted)" },
+                  strategy_version: { type: "string" },
+                  order_source: { type: "string" },
+                  ai_confidence: { type: "number" },
+                  journal_id: { type: "integer" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Advanced bracket order placement result",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    parentOrderId: { type: "integer" },
+                    takeProfitOrderId: { type: "integer" },
+                    stopLossOrderId: { type: "integer" },
+                    ocaGroup: { type: "string" },
+                    symbol: { type: "string" },
+                    action: { type: "string" },
+                    totalQuantity: { type: "number" },
+                    status: { type: "string" },
+                  },
+                },
+              },
+            },
+          },
+          "400": {
+            description: "Validation error",
+            content: { "application/json": { schema: { type: "object", properties: { error: { type: "string" }, details: { type: "array", items: { type: "string" } } } } } },
           },
         },
       },

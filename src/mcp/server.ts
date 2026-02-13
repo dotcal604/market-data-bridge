@@ -18,7 +18,7 @@ import {
 } from "../providers/yahoo.js";
 import { isConnected } from "../ibkr/connection.js";
 import { getAccountSummary, getPositions, getPnL } from "../ibkr/account.js";
-import { getOpenOrders, getCompletedOrders, getExecutions, placeOrder, placeBracketOrder, cancelOrder, cancelAllOrders, flattenAllPositions } from "../ibkr/orders.js";
+import { getOpenOrders, getCompletedOrders, getExecutions, placeOrder, placeBracketOrder, placeAdvancedBracket, cancelOrder, cancelAllOrders, flattenAllPositions, validateOrder } from "../ibkr/orders.js";
 import { setFlattenEnabled, getFlattenConfig } from "../scheduler.js";
 import { getContractDetails } from "../ibkr/contracts.js";
 import { getIBKRQuote } from "../ibkr/marketdata.js";
@@ -555,15 +555,26 @@ export function createMcpServer(): McpServer {
   // --- Tool: place_order (IBKR — requires TWS/Gateway) ---
   server.tool(
     "place_order",
-    "Place a single order (MKT, LMT, STP, STP LMT) on IBKR. Requires TWS/Gateway.",
+    "Place a single order on IBKR. Supports all order types: MKT, LMT, STP, STP LMT, TRAIL, TRAIL LIMIT, REL, MIT, MOC, LOC, PEG MID, and more. Requires TWS/Gateway.",
     {
       symbol: z.string().describe("Ticker symbol, e.g. AAPL"),
       action: z.enum(["BUY", "SELL"]).describe("BUY or SELL"),
-      orderType: z.enum(["MKT", "LMT", "STP", "STP LMT"]).describe("Order type"),
+      orderType: z.string().describe("Order type: MKT, LMT, STP, STP LMT, TRAIL, TRAIL LIMIT, REL, MIT, MOC, LOC, PEG MID, etc."),
       totalQuantity: z.number().describe("Number of shares"),
-      lmtPrice: z.number().optional().describe("Limit price (required for LMT and STP LMT)"),
-      auxPrice: z.number().optional().describe("Stop price (required for STP and STP LMT)"),
-      tif: z.string().optional().describe("Time in force: DAY (default), GTC, IOC"),
+      lmtPrice: z.number().optional().describe("Limit price (required for LMT, STP LMT, TRAIL LIMIT)"),
+      auxPrice: z.number().optional().describe("Stop price (STP/STP LMT) or trailing amount (TRAIL)"),
+      trailingPercent: z.number().optional().describe("Trailing stop as percentage (alternative to auxPrice for TRAIL)"),
+      trailStopPrice: z.number().optional().describe("Initial stop price anchor for trailing orders"),
+      tif: z.string().optional().describe("Time in force: DAY (default), GTC, IOC, GTD, OPG, FOK, DTC"),
+      ocaGroup: z.string().optional().describe("OCA group name (links orders that cancel each other)"),
+      ocaType: z.number().optional().describe("OCA type: 1=cancel w/ block, 2=reduce w/ block, 3=reduce non-block"),
+      parentId: z.number().optional().describe("Parent order ID for child orders"),
+      transmit: z.boolean().optional().describe("Whether to transmit immediately (default true)"),
+      outsideRth: z.boolean().optional().describe("Allow execution outside regular trading hours"),
+      goodAfterTime: z.string().optional().describe("Start time: YYYYMMDD HH:MM:SS timezone"),
+      goodTillDate: z.string().optional().describe("Expiry time: YYYYMMDD HH:MM:SS timezone"),
+      algoStrategy: z.string().optional().describe("Algo strategy: Adaptive, ArrivalPx, DarkIce, PctVol, Twap, Vwap"),
+      discretionaryAmt: z.number().optional().describe("Discretionary amount for REL orders"),
       secType: z.string().optional().describe("Security type: STK (default), OPT, FUT"),
       exchange: z.string().optional().describe("Exchange: SMART (default)"),
       currency: z.string().optional().describe("Currency: USD (default)"),
@@ -575,6 +586,10 @@ export function createMcpServer(): McpServer {
         };
       }
       try {
+        const validation = validateOrder(params as any);
+        if (!validation.valid) {
+          return { content: [{ type: "text", text: JSON.stringify({ error: validation.errors.join("; ") }, null, 2) }] };
+        }
         const riskResult = checkRisk(params);
         if (!riskResult.allowed) {
           return { content: [{ type: "text", text: JSON.stringify({ error: `Risk gate rejected: ${riskResult.reason}` }, null, 2) }] };
@@ -616,6 +631,54 @@ export function createMcpServer(): McpServer {
           return { content: [{ type: "text", text: JSON.stringify({ error: `Risk gate rejected: ${riskResult.reason}` }, null, 2) }] };
         }
         const result = await placeBracketOrder({ ...params, order_source: "mcp" });
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: place_advanced_bracket (IBKR — requires TWS/Gateway) ---
+  server.tool(
+    "place_advanced_bracket",
+    "Place an advanced bracket order with OCA group, trailing stop support, and any order types. Entry + Take Profit + Stop Loss (STP, TRAIL, TRAIL LIMIT, STP LMT). Requires TWS/Gateway.",
+    {
+      symbol: z.string().describe("Ticker symbol, e.g. AAPL"),
+      action: z.enum(["BUY", "SELL"]).describe("BUY or SELL for the entry"),
+      quantity: z.number().describe("Number of shares"),
+      entry: z.object({
+        type: z.string().describe("Entry order type: MKT, LMT, etc."),
+        price: z.number().optional().describe("Limit price (required for LMT)"),
+      }).describe("Entry order config"),
+      takeProfit: z.object({
+        type: z.string().describe("TP order type: LMT (typical)"),
+        price: z.number().describe("Take profit price"),
+      }).describe("Take profit config"),
+      stopLoss: z.object({
+        type: z.string().describe("SL order type: STP, TRAIL, TRAIL LIMIT, STP LMT"),
+        price: z.number().optional().describe("Stop price (or initial anchor for TRAIL)"),
+        trailingAmount: z.number().optional().describe("Trailing amount in dollars (for TRAIL)"),
+        trailingPercent: z.number().optional().describe("Trailing percent (for TRAIL, alternative to trailingAmount)"),
+        lmtPrice: z.number().optional().describe("Limit price for TRAIL LIMIT or STP LMT"),
+      }).describe("Stop loss config"),
+      tif: z.string().optional().describe("Time in force for entry: DAY (default). TP/SL default to GTC."),
+      outsideRth: z.boolean().optional().describe("Allow execution outside regular trading hours"),
+      secType: z.string().optional().describe("Security type: STK (default)"),
+      exchange: z.string().optional().describe("Exchange: SMART (default)"),
+      currency: z.string().optional().describe("Currency: USD (default)"),
+    },
+    async (params) => {
+      if (!isConnected()) {
+        return {
+          content: [{ type: "text", text: JSON.stringify({ error: "IBKR not connected." }, null, 2) }],
+        };
+      }
+      try {
+        const riskResult = checkRisk({ symbol: params.symbol, action: params.action, orderType: params.entry.type, totalQuantity: params.quantity, lmtPrice: params.entry.price, secType: params.secType });
+        if (!riskResult.allowed) {
+          return { content: [{ type: "text", text: JSON.stringify({ error: `Risk gate rejected: ${riskResult.reason}` }, null, 2) }] };
+        }
+        const result = await placeAdvancedBracket({ ...params, order_source: "mcp" });
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       } catch (e: any) {
         return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
