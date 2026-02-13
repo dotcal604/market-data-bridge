@@ -172,3 +172,48 @@ export interface EvalResponse {
   guardrail: { allowed: boolean; flags: string[] };
   latency_ms: Record<string, number>;
 }
+
+// Order types
+export interface OpenOrder {
+  orderId: number;
+  symbol: string;
+  action: string; // "BUY" | "SELL"
+  orderType: string; // "MKT" | "LMT" | "STP" | "STP LMT"
+  totalQuantity: number;
+  lmtPrice: number | null;
+  auxPrice: number | null;
+  status: string;
+  remaining: number;
+  tif: string;
+}
+
+export interface CompletedOrder {
+  orderId: number;
+  symbol: string;
+  action: string;
+  orderType: string;
+  totalQuantity: number;
+  filledQuantity: number;
+  avgFillPrice: number;
+  status: string;
+  completedTime: string;
+}
+
+export interface OrdersResponse {
+  count: number;
+  orders: OpenOrder[];
+}
+
+export interface CompletedOrdersResponse {
+  count: number;
+  orders: CompletedOrder[];
+}
+
+export interface CancelOrderResponse {
+  orderId: number;
+  status: string;
+}
+
+export interface CancelAllOrdersResponse {
+  status: string;
+}
