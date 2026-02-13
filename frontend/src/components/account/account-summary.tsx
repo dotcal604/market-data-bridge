@@ -39,7 +39,7 @@ export function AccountSummary({ refreshInterval = 10000 }: AccountSummaryProps)
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Account Summary</h1>
           <p className="text-sm text-muted-foreground">
-            IBKR account overview and P&amp;L
+            IBKR account overview and P&L
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -113,7 +113,7 @@ export function AccountSummary({ refreshInterval = 10000 }: AccountSummaryProps)
         <Card className="bg-card">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Daily P&amp;L
+              Daily P&L
             </CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
@@ -137,7 +137,7 @@ export function AccountSummary({ refreshInterval = 10000 }: AccountSummaryProps)
         <Card className="bg-card">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Unrealized P&amp;L
+              Unrealized P&L
             </CardTitle>
             <Activity className="h-4 w-4 text-muted-foreground" />
           </CardHeader>

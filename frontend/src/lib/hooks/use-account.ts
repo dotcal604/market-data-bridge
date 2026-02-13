@@ -7,13 +7,13 @@ const API_BASE = "/api";
 
 async function fetchStatus(): Promise<StatusResponse> {
   const res = await fetch(`${API_BASE}/status`);
-  if (!res.ok) throw new Error("Failed to fetch status");
+  if (!res.ok) throw new Error(`Failed to fetch status (${res.status}: ${res.statusText})`);
   return res.json();
 }
 
 async function fetchAccountSummary(): Promise<AccountSummary> {
   const res = await fetch(`${API_BASE}/account/summary`);
-  if (!res.ok) throw new Error("Failed to fetch account summary");
+  if (!res.ok) throw new Error(`Failed to fetch account summary (${res.status}: ${res.statusText})`);
   const data = await res.json();
   if (data.error) throw new Error(data.error);
   return data;
@@ -21,7 +21,7 @@ async function fetchAccountSummary(): Promise<AccountSummary> {
 
 async function fetchPnL(): Promise<PnLData> {
   const res = await fetch(`${API_BASE}/account/pnl`);
-  if (!res.ok) throw new Error("Failed to fetch P&L");
+  if (!res.ok) throw new Error(`Failed to fetch P&L (${res.status}: ${res.statusText})`);
   const data = await res.json();
   if (data.error) throw new Error(data.error);
   return data;
