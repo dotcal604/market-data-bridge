@@ -12,10 +12,16 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-import matplotlib.pyplot as plt
+# Ensure analytics/ is on sys.path for bare imports when run from project root
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np
 import pandas as pd
 from matplotlib.colors import LinearSegmentedColormap
