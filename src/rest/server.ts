@@ -1,6 +1,9 @@
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
+import path from "path";
+import { fileURLToPath } from "url";
+import { existsSync } from "fs";
 import { router } from "./routes.js";
 import { evalRouter } from "../eval/routes.js";
 import { openApiSpec } from "./openapi.js";
@@ -8,6 +11,9 @@ import { config } from "../config.js";
 import { requestLogger, logRest } from "../logging.js";
 import { isConnected } from "../ibkr/connection.js";
 import { isDbWritable } from "../db/database.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 function apiKeyAuth(req: Request, res: Response, next: NextFunction): void {
   const key = config.rest.apiKey;
@@ -97,16 +103,6 @@ export function startRestServer(): Promise<void> {
       res.json(openApiSpec);
     });
 
-    // Health check (unauthenticated)
-    app.get("/", (_req, res) => {
-      res.json({
-        name: "market-data-bridge",
-        version: "3.0.0",
-        docs: "/openapi.json",
-        api: "/api/status",
-      });
-    });
-
     // GET /health — detailed health check (unauthenticated)
     app.get("/health", (_req, res) => {
       const health = {
@@ -123,6 +119,27 @@ export function startRestServer(): Promise<void> {
       res.json(health);
     });
 
+    // Serve static frontend files from frontend/out (production build)
+    const frontendPath = path.join(__dirname, "../../frontend/out");
+    if (existsSync(frontendPath)) {
+      logRest.info({ path: frontendPath }, "Serving static frontend from /");
+      
+      // Serve static files
+      app.use(express.static(frontendPath));
+    } else {
+      logRest.info("Frontend build not found — serving API info at /");
+      
+      // Fallback: serve API info when frontend not built
+      app.get("/", (_req, res) => {
+        res.json({
+          name: "market-data-bridge",
+          version: "3.0.0",
+          docs: "/openapi.json",
+          api: "/api/status",
+        });
+      });
+    }
+
     // Mount API routes with rate limiting (authenticated)
     app.use("/api", apiKeyAuth, globalLimiter, router);
 
@@ -133,6 +150,13 @@ export function startRestServer(): Promise<void> {
     app.use("/api/order", orderLimiter);
     app.use("/api/orders", orderLimiter);
     app.use("/api/collab", collabLimiter);
+
+    // SPA fallback: serve index.html for all client-side routes
+    if (existsSync(frontendPath)) {
+      app.get("*", (_req, res) => {
+        res.sendFile(path.join(frontendPath, "index.html"));
+      });
+    }
 
     app.listen(config.rest.port, () => {
       logRest.info({ port: config.rest.port }, "REST server listening");

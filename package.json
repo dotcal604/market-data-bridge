@@ -7,6 +7,7 @@
   "scripts": {
     "build": "tsc",
     "build:frontend": "cd frontend && npm run build",
+    "build:all": "npm run build && npm run build:frontend",
     "start": "node build/index.js",
     "start:mcp": "node build/index.js --mode mcp",
     "start:rest": "node build/index.js --mode rest",
