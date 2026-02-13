@@ -197,6 +197,7 @@ evalRouter.post("/outcome", (req, res) => {
     const {
       evaluation_id,
       trade_taken = false,
+      decision_type = null,
       actual_entry_price = null,
       actual_exit_price = null,
       r_multiple = null,
@@ -209,6 +210,11 @@ evalRouter.post("/outcome", (req, res) => {
       return;
     }
 
+    if (decision_type && !["took_trade", "passed_setup", "ensemble_no", "risk_gate_blocked"].includes(decision_type)) {
+      res.status(400).json({ error: "decision_type must be one of: took_trade, passed_setup, ensemble_no, risk_gate_blocked" });
+      return;
+    }
+
     const existing = getEvaluationById(evaluation_id);
     if (!existing) {
       res.status(404).json({ error: `Evaluation ${evaluation_id} not found` });
@@ -218,6 +224,7 @@ evalRouter.post("/outcome", (req, res) => {
     insertOutcome({
       evaluation_id,
       trade_taken: trade_taken ? 1 : 0,
+      decision_type,
       actual_entry_price,
       actual_exit_price,
       r_multiple,

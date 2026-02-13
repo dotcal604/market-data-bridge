@@ -34,7 +34,7 @@ Every backlog item is scored on 5 dimensions (1-5 scale):
 
 ## Current State
 
-- **Backend**: 38 REST endpoints, 38 MCP tools, 10 SQLite tables, 3-model eval engine
+- **Backend**: 38 REST endpoints, 39 MCP tools, 10 SQLite tables, 3-model eval engine
 - **Frontend**: 7 pages — ~25% of backend exposed
 - **Tests**: 201 passing (16 test files) — Vitest + in-memory SQLite
 - **SDK versions**: @anthropic-ai/sdk 0.74, openai 6.21, @google/genai 1.0, @stoqey/ib 1.5.3

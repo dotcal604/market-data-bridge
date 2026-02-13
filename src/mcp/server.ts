@@ -35,6 +35,8 @@ import {
   getEvalStats,
   getEvalsForSimulation,
   getEvalOutcomes,
+  insertOutcome,
+  getEvaluationById,
 } from "../db/database.js";
 import { computeEnsembleWithWeights } from "../eval/ensemble/scorer.js";
 import { getWeights } from "../eval/ensemble/weights.js";
@@ -755,6 +757,9 @@ export function createMcpServer(): McpServer {
       tags: z.array(z.string()).optional().describe("Categorization tags"),
       outcome_tags: z.array(z.string()).optional().describe("Post-trade outcome tags (for updates)"),
       notes: z.string().optional().describe("Post-trade notes (for updates)"),
+      confidence_rating: z.number().min(1).max(3).optional().describe("Trader confidence: 1=low, 2=medium, 3=high"),
+      rule_followed: z.boolean().optional().describe("Did trader follow their own rules?"),
+      setup_type: z.string().optional().describe("Setup type: breakout, pullback, reversal, gap_fill, momentum"),
       spy_price: z.number().optional().describe("SPY price at entry"),
       vix_level: z.number().optional().describe("VIX level at entry"),
     },
@@ -1010,6 +1015,47 @@ export function createMcpServer(): McpServer {
           tradesTakenOnly: !params.all,
         });
         return { content: [{ type: "text", text: JSON.stringify({ count: outcomes.length, outcomes }, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: record_outcome ---
+  server.tool(
+    "record_outcome",
+    "Record a trade outcome for an evaluation. Supports both executed trades (with R-multiple) and passed setups (decision_type='passed_setup' for negative examples).",
+    {
+      evaluation_id: z.string().describe("Evaluation ID to record outcome for"),
+      trade_taken: z.boolean().optional().describe("Whether the trade was executed (default: false)"),
+      decision_type: z.enum(["took_trade", "passed_setup", "ensemble_no", "risk_gate_blocked"]).optional()
+        .describe("Why this outcome exists: took_trade (executed), passed_setup (saw it, chose not to), ensemble_no (model said no), risk_gate_blocked"),
+      actual_entry_price: z.number().optional().describe("Actual entry price"),
+      actual_exit_price: z.number().optional().describe("Actual exit price"),
+      r_multiple: z.number().optional().describe("Risk-reward outcome (positive = win)"),
+      exit_reason: z.string().optional().describe("Why the trade was exited"),
+      notes: z.string().optional().describe("Post-trade notes"),
+    },
+    async (params) => {
+      try {
+        const existing = getEvaluationById(params.evaluation_id);
+        if (!existing) {
+          return { content: [{ type: "text", text: JSON.stringify({ error: `Evaluation ${params.evaluation_id} not found` }) }], isError: true };
+        }
+
+        insertOutcome({
+          evaluation_id: params.evaluation_id,
+          trade_taken: params.trade_taken ? 1 : 0,
+          decision_type: params.decision_type ?? null,
+          actual_entry_price: params.actual_entry_price ?? null,
+          actual_exit_price: params.actual_exit_price ?? null,
+          r_multiple: params.r_multiple ?? null,
+          exit_reason: params.exit_reason ?? null,
+          notes: params.notes ?? null,
+          recorded_at: new Date().toISOString(),
+        });
+
+        return { content: [{ type: "text", text: JSON.stringify({ success: true, evaluation_id: params.evaluation_id, decision_type: params.decision_type ?? "took_trade" }, null, 2) }] };
       } catch (e: any) {
         return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
       }
