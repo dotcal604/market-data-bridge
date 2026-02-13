@@ -111,12 +111,14 @@ Returns zeroed metrics with current net liquidation:
 
 ## Performance Considerations
 
-- Initial request may take 5-10 seconds for portfolios with multiple positions
+- **First request (cold cache)**: 5-10 seconds for portfolios with multiple positions
+- **Subsequent requests (warm cache)**: 2-5 seconds (contract details cached for 24h)
 - Each position requires:
   - 1 contract details lookup (cached after first call)
-  - 2 historical bar fetches (stock + SPY for beta)
+  - 1 current quote fetch (live Yahoo Finance)
+  - 2 historical bar fetches (stock + SPY for beta, live data)
 - Requests are processed in parallel for all positions
-- Subsequent requests benefit from contract details cache
+- Contract details cache significantly improves subsequent request times
 
 ## Use Cases
 

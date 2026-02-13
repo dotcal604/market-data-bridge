@@ -282,7 +282,7 @@ router.get("/account/pnl", async (_req, res) => {
 // GET /api/portfolio/exposure
 router.get("/portfolio/exposure", async (_req, res) => {
   if (!isConnected()) {
-    res.json({ error: "IBKR not connected. Start TWS/Gateway for portfolio data." });
+    res.status(503).json({ error: "IBKR not connected. Start TWS/Gateway for portfolio data." });
     return;
   }
   try {

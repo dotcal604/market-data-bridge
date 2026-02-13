@@ -200,7 +200,14 @@ export async function computePortfolioExposure(): Promise<PortfolioExposureRespo
       let currentPrice = pos.avgCost; // Default to avgCost
       try {
         quote = await getQuote(pos.symbol);
-        currentPrice = quote.last ?? pos.avgCost;
+        if (quote.last !== null) {
+          currentPrice = quote.last;
+        } else {
+          logPortfolio.warn(
+            { symbol: pos.symbol },
+            `Quote fetch succeeded but quote.last is null for ${pos.symbol}, using avgCost`
+          );
+        }
       } catch (err: any) {
         logPortfolio.warn(
           { symbol: pos.symbol, error: err.message },
@@ -269,6 +276,8 @@ export async function computePortfolioExposure(): Promise<PortfolioExposureRespo
   }
   
   // Beta-weighted exposure
+  // Note: Uses signed marketValue to preserve long/short directionality.
+  // Short positions (negative marketValue) with beta > 1 contribute more negative exposure.
   const betaWeightedExposure = enrichedPositions.reduce(
     (sum, p) => sum + p.marketValue * p.beta,
     0
