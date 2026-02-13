@@ -12,6 +12,7 @@ import { attachPersistentOrderListeners } from "./ibkr/orders.js";
 import { runReconciliation } from "./db/reconcile.js";
 import { closeDb } from "./db/database.js";
 import { startScheduler, stopScheduler } from "./scheduler.js";
+import { initWeights } from "./eval/ensemble/weights.js";
 
 type Mode = "mcp" | "rest" | "both";
 
@@ -30,6 +31,9 @@ async function main() {
 
   // Initialize DB-backed collab store (loads persisted messages)
   initCollabFromDb();
+
+  // Initialize eval ensemble weights (loads from data/weights.json + hot-reload)
+  initWeights();
 
   // Prune old log files (keep 30 days)
   pruneOldLogs();

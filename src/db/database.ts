@@ -122,6 +122,116 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_journal_created ON trade_journal(created_at);
   CREATE INDEX IF NOT EXISTS idx_collab_author ON collab_messages(author);
   CREATE INDEX IF NOT EXISTS idx_collab_created ON collab_messages(created_at);
+
+  -- ── Eval Engine Tables ──────────────────────────────────────────────────
+
+  CREATE TABLE IF NOT EXISTS evaluations (
+    id TEXT PRIMARY KEY,
+    symbol TEXT NOT NULL,
+    direction TEXT,
+    entry_price REAL,
+    stop_price REAL,
+    user_notes TEXT,
+    timestamp TEXT NOT NULL,
+
+    -- Feature vector (JSON blob for reproducibility + individual cols for queries)
+    features_json TEXT NOT NULL,
+    last_price REAL,
+    rvol REAL,
+    vwap_deviation_pct REAL,
+    spread_pct REAL,
+    float_rotation_est REAL,
+    volume_acceleration REAL,
+    atr_pct REAL,
+    price_extension_pct REAL,
+    gap_pct REAL,
+    range_position_pct REAL,
+    volatility_regime TEXT,
+    liquidity_bucket TEXT,
+    spy_change_pct REAL,
+    qqq_change_pct REAL,
+    market_alignment TEXT,
+    time_of_day TEXT,
+    minutes_since_open INTEGER,
+
+    -- Ensemble result
+    ensemble_trade_score REAL,
+    ensemble_trade_score_median REAL,
+    ensemble_expected_rr REAL,
+    ensemble_confidence REAL,
+    ensemble_should_trade INTEGER,
+    ensemble_unanimous INTEGER,
+    ensemble_majority_trade INTEGER,
+    ensemble_score_spread REAL,
+    ensemble_disagreement_penalty REAL,
+    weights_json TEXT,
+
+    -- Guardrail
+    guardrail_allowed INTEGER,
+    guardrail_flags_json TEXT,
+    prefilter_passed INTEGER,
+
+    -- Latency
+    feature_latency_ms INTEGER,
+    total_latency_ms INTEGER
+  );
+
+  CREATE TABLE IF NOT EXISTS model_outputs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    evaluation_id TEXT NOT NULL REFERENCES evaluations(id),
+    model_id TEXT NOT NULL,
+
+    -- Parsed output fields (null if non-compliant)
+    trade_score REAL,
+    extension_risk REAL,
+    exhaustion_risk REAL,
+    float_rotation_risk REAL,
+    market_alignment_score REAL,
+    expected_rr REAL,
+    confidence REAL,
+    should_trade INTEGER,
+    reasoning TEXT,
+
+    -- Meta / audit
+    raw_response TEXT,
+    compliant INTEGER NOT NULL,
+    error TEXT,
+    latency_ms INTEGER,
+    model_version TEXT,
+    prompt_hash TEXT,
+    token_count INTEGER,
+    api_response_id TEXT,
+    timestamp TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS outcomes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    evaluation_id TEXT NOT NULL UNIQUE REFERENCES evaluations(id),
+    trade_taken INTEGER NOT NULL,
+    actual_entry_price REAL,
+    actual_exit_price REAL,
+    r_multiple REAL,
+    exit_reason TEXT,
+    notes TEXT,
+    recorded_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS weight_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    weights_json TEXT NOT NULL,
+    sample_size INTEGER,
+    reason TEXT,
+    created_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_eval_symbol ON evaluations(symbol);
+  CREATE INDEX IF NOT EXISTS idx_eval_timestamp ON evaluations(timestamp);
+  CREATE INDEX IF NOT EXISTS idx_eval_symbol_time ON evaluations(symbol, timestamp);
+  CREATE INDEX IF NOT EXISTS idx_eval_time_of_day ON evaluations(time_of_day);
+  CREATE INDEX IF NOT EXISTS idx_eval_rvol_time ON evaluations(rvol, time_of_day);
+  CREATE INDEX IF NOT EXISTS idx_model_eval_id ON model_outputs(evaluation_id);
+  CREATE INDEX IF NOT EXISTS idx_model_model_id ON model_outputs(model_id);
+  CREATE INDEX IF NOT EXISTS idx_outcome_eval_id ON outcomes(evaluation_id);
 `);
 
 // ── Prepared Statements ──────────────────────────────────────────────────
@@ -194,6 +304,39 @@ const stmts = {
     VALUES (@net_liquidation, @total_cash_value, @buying_power, @daily_pnl, @unrealized_pnl, @realized_pnl)
   `),
   queryAccountSnapshots: db.prepare(`SELECT * FROM account_snapshots ORDER BY created_at DESC LIMIT ?`),
+
+  // Evaluations
+  getEvaluationById: db.prepare(`SELECT * FROM evaluations WHERE id = ?`),
+  queryEvaluations: db.prepare(`SELECT * FROM evaluations ORDER BY timestamp DESC LIMIT ?`),
+  queryEvaluationsBySymbol: db.prepare(`SELECT * FROM evaluations WHERE symbol = ? ORDER BY timestamp DESC LIMIT ?`),
+
+  // Model outputs
+  queryModelOutputsByEval: db.prepare(`SELECT * FROM model_outputs WHERE evaluation_id = ?`),
+
+  // Outcomes
+  getOutcomeByEval: db.prepare(`SELECT * FROM outcomes WHERE evaluation_id = ?`),
+  queryRecentOutcomes: db.prepare(`
+    SELECT e.*, o.trade_taken, o.r_multiple, o.exit_reason
+    FROM evaluations e
+    JOIN outcomes o ON e.id = o.evaluation_id
+    WHERE o.trade_taken = 1
+    ORDER BY e.timestamp DESC
+    LIMIT ?
+  `),
+
+  // Eval stats
+  countEvaluations: db.prepare(`SELECT COUNT(*) as n FROM evaluations`),
+  countOutcomes: db.prepare(`SELECT COUNT(*) as n FROM outcomes WHERE trade_taken = 1`),
+  modelStats: db.prepare(`
+    SELECT model_id,
+      COUNT(*) as total,
+      SUM(CASE WHEN compliant = 1 THEN 1 ELSE 0 END) as compliant,
+      AVG(CASE WHEN compliant = 1 THEN trade_score END) as avg_score,
+      AVG(CASE WHEN compliant = 1 THEN confidence END) as avg_confidence,
+      AVG(latency_ms) as avg_latency_ms
+    FROM model_outputs
+    GROUP BY model_id
+  `),
 };
 
 // ── Helper Functions ─────────────────────────────────────────────────────
@@ -424,6 +567,58 @@ export function getLiveOrders() {
 
 export function getJournalById(id: number) {
   return stmts.getJournalById.get(id);
+}
+
+// ── Eval Engine Helpers ──────────────────────────────────────────────────
+
+/**
+ * Generic row insert for eval tables (evaluations, model_outputs, outcomes).
+ * Handles dynamic columns — keys become column names, values become bound params.
+ */
+function runEvalInsert(table: string, row: Record<string, unknown>): void {
+  const cols = Object.keys(row);
+  const placeholders = cols.map((c) => `@${c}`).join(", ");
+  const sql = `INSERT INTO ${table} (${cols.join(", ")}) VALUES (${placeholders})`;
+  const bound: Record<string, unknown> = {};
+  for (const c of cols) {
+    const v = row[c];
+    if (v === undefined || v === null) bound[c] = null;
+    else if (typeof v === "boolean") bound[c] = v ? 1 : 0;
+    else bound[c] = v;
+  }
+  db.prepare(sql).run(bound);
+}
+
+export function insertEvaluation(row: Record<string, unknown>): void {
+  runEvalInsert("evaluations", row);
+}
+
+export function insertModelOutput(row: Record<string, unknown>): void {
+  runEvalInsert("model_outputs", row);
+}
+
+export function insertOutcome(row: Record<string, unknown>): void {
+  runEvalInsert("outcomes", row);
+}
+
+export function getEvaluationById(id: string): Record<string, unknown> | undefined {
+  return stmts.getEvaluationById.get(id) as Record<string, unknown> | undefined;
+}
+
+export function getRecentEvaluations(limit: number = 50, symbol?: string): Record<string, unknown>[] {
+  if (symbol) return stmts.queryEvaluationsBySymbol.all(symbol, limit) as Record<string, unknown>[];
+  return stmts.queryEvaluations.all(limit) as Record<string, unknown>[];
+}
+
+export function getRecentOutcomes(limit: number = 20): Array<Record<string, unknown>> {
+  return stmts.queryRecentOutcomes.all(limit) as Array<Record<string, unknown>>;
+}
+
+export function getEvalStats(): Record<string, unknown> {
+  const totalEvals = (stmts.countEvaluations.get() as any)?.n ?? 0;
+  const totalOutcomes = (stmts.countOutcomes.get() as any)?.n ?? 0;
+  const modelStats = stmts.modelStats.all();
+  return { totalEvals, totalOutcomes, modelStats };
 }
 
 export function isDbWritable(): boolean {

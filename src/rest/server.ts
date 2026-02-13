@@ -2,6 +2,7 @@ import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
 import { router } from "./routes.js";
+import { evalRouter } from "../eval/routes.js";
 import { openApiSpec } from "./openapi.js";
 import { config } from "../config.js";
 import { requestLogger, logRest } from "../logging.js";
@@ -55,6 +56,15 @@ const collabLimiter = rateLimit({
   message: { error: "Collab rate limit exceeded — 30 requests/minute" },
 });
 
+const evalLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator,
+  message: { error: "Eval rate limit exceeded — 10 evaluations/minute" },
+});
+
 const startTime = Date.now();
 
 export function startRestServer(): Promise<void> {
@@ -100,6 +110,9 @@ export function startRestServer(): Promise<void> {
 
     // Mount API routes with rate limiting (authenticated)
     app.use("/api", apiKeyAuth, globalLimiter, router);
+
+    // Mount eval router (under /api/eval, inside auth)
+    app.use("/api/eval", apiKeyAuth, evalLimiter, evalRouter);
 
     // Apply stricter rate limits to order and collab routes
     app.use("/api/order", orderLimiter);
