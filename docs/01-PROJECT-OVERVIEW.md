@@ -2,131 +2,113 @@
 
 | Field | Value |
 |---|---|
-| **Project Name** | IBKR Market Bridge (`ibkr-market-bridge`) |
-| **Version** | 1.0.0 |
-| **Type** | Integration Middleware / API Bridge |
-| **Language** | TypeScript 5.7 (ES2022 target, Node16 module resolution) |
+| **Project Name** | Market Data Bridge (`market-data-bridge`) |
+| **Type** | Single-process trading assistant backend + dashboard |
+| **Language** | TypeScript (Node.js backend), React/Next.js frontend |
 | **Runtime** | Node.js 18+ |
-| **License** | Private |
+| **Primary Interfaces** | MCP tools, REST API, Next.js dashboard |
 
 ---
 
 ## 1. Executive Summary
 
-IBKR Market Bridge is a read-only integration server that connects Interactive Brokers' Trader Workstation (TWS) API to AI assistants — specifically Claude (via Model Context Protocol) and ChatGPT (via REST/OpenAPI custom actions). It translates the event-driven, callback-oriented TWS socket protocol into clean request/response interfaces consumable by language models.
+Market Data Bridge connects market data, IBKR trading workflows, and a multi-model evaluation engine into one local system.
 
-The system operates in three modes: MCP-only (Claude), REST-only (ChatGPT), or dual-mode (both simultaneously). It is strictly read-only — it retrieves market data and account information but cannot place orders or modify account state.
+It supports:
+- Real-time and historical market data (Yahoo + IBKR)
+- Manual trader execution workflows through IBKR order endpoints/tools
+- A 3-model evaluation engine (Claude + GPT + Gemini) with ensemble scoring
+- AI-to-AI collaboration channel
+- Trade journaling, outcome tracking, and analytics-friendly exports
+- A Next.js dashboard for reviewing evaluations, outcomes, and weight history
 
----
-
-## 2. Business Objective
-
-Enable a retail trader to query real-time and historical market data, inspect portfolio positions, and review account metrics through natural-language conversations with AI assistants, without switching to the TWS desktop application.
-
-### In-Scope
-
-- Real-time snapshot quotes for equities, ETFs, indices, and options
-- Historical OHLCV bar data at configurable intervals
-- Options chain discovery (expirations, strikes, exchanges)
-- Account summary (net liquidation value, buying power, margin, cash)
-- Portfolio position listing
-- Daily profit-and-loss reporting
-- Contract search and detail lookup
-
-### Out-of-Scope
-
-- Order placement, modification, or cancellation
-- Account settings or configuration changes
-- Real-time streaming (WebSocket push)
-- Multi-account management (uses first detected account)
-- Forex or futures contract quoting (contract builders exist but no dedicated endpoints)
+This is **assist-discretion mode**: the system scores and flags opportunities, while the human trader decides whether to place trades.
 
 ---
 
-## 3. Stakeholders
+## 2. Core Capabilities
+
+### Market data + execution
+- Smart quote routing (IBKR first, Yahoo fallback)
+- Historical bars, options chain, option quotes, screener data
+- Account summary, positions, PnL, order management, flatten controls
+
+### Eval engine (3-model ensemble)
+- Shared feature pipeline for all models
+- Independent model calls with schema-validated outputs
+- Weighted ensemble with disagreement penalty
+- Guardrails for timing, behavior, and session risk controls
+
+### Collaboration channel
+- Shared channel between `claude`, `chatgpt`, and `user`
+- Threaded messages, tags, filtering, and stats
+- Operational handoff for analysis and review workflows
+
+### Trade journal + outcomes
+- Journal entries for pre/post-trade reasoning
+- Historical order/execution views from SQLite
+- Eval outcomes and reasoning retrieval for review and model tuning
+
+---
+
+## 3. Risk and Safety Components
+
+### Risk gate
+- Pre-trade structural checks before order placement
+- Session-level controls: lock/unlock, cooldown/loss tracking, manual reset
+
+### Flatten scheduler
+- Configurable end-of-day flatten behavior
+- Manual flatten endpoint/tool for immediate position close-out
+
+### Position sizing
+- Read-only sizing calculator based on account/risk constraints
+- Inputs include entry, stop, and optional risk/capital caps
+
+### Portfolio analytics
+- Exposure analytics (gross/net/beta/sector/heat)
+- Stress testing with optional beta-adjusted shocks
+
+---
+
+## 4. Major Subsystems
+
+| Subsystem | Purpose | Key Paths |
+|---|---|---|
+| MCP server | 56-tool interface for Claude and other MCP clients | `src/mcp/server.ts` |
+| REST API | HTTP interface for apps, actions, and automation | `src/rest/routes.ts`, `src/rest/server.ts` |
+| Eval engine | Multi-model scoring + ensemble + drift support | `src/eval/` |
+| IBKR layer | Account, orders, market data, contracts, risk checks | `src/ibkr/` |
+| Collaboration store | AI-to-AI messaging | `src/collab/store.ts` |
+| Database layer | SQLite schema and prepared query helpers | `src/db/database.ts` |
+| Frontend dashboard | Eval/history/weights UI in Next.js | `frontend/src/` |
+
+---
+
+## 5. High-Level Structure
+
+```
+market-data-bridge/
+├── src/                     # Backend TypeScript
+│   ├── index.ts             # Startup orchestration
+│   ├── mcp/server.ts        # 56 MCP tools
+│   ├── rest/routes.ts       # REST endpoints
+│   ├── eval/                # Features, model providers, ensemble, guardrails
+│   ├── ibkr/                # Execution + account + risk modules
+│   ├── db/                  # SQLite schema/queries
+│   └── collab/              # Collaboration channel store
+├── frontend/                # Next.js dashboard (App Router)
+├── data/                    # Weights, runtime data files
+└── docs/                    # Documentation set
+```
+
+---
+
+## 6. Stakeholders
 
 | Role | Responsibility |
 |---|---|
-| **End User / Trader** | Queries market data and portfolio status via AI assistants |
-| **System Operator** | Starts TWS, launches the bridge, manages ngrok tunnel |
-| **AI Assistant (Claude)** | Consumes MCP tools via stdio transport |
-| **AI Assistant (ChatGPT)** | Consumes REST endpoints via OpenAPI actions |
-| **IBKR TWS/Gateway** | Upstream data source; provides market data and account info over TCP socket |
-
----
-
-## 4. Key Constraints
-
-| Constraint | Detail |
-|---|---|
-| **TWS must be running** | The bridge has no built-in data cache. All data comes from TWS in real-time. If TWS disconnects, requests fail until reconnection. |
-| **Market data subscriptions** | IBKR requires active market data subscriptions for real-time quotes. Paper accounts receive delayed data (15–20 min). |
-| **Single client ID** | The bridge uses one `clientId` (default `0`). TWS allows at most 32 concurrent API connections, but each must use a unique ID. |
-| **ngrok free-tier URL rotation** | The public URL changes on every ngrok restart. ChatGPT's action schema must be updated accordingly. |
-| **No authentication on REST** | The REST API has no auth middleware. It is designed for local use or behind a secured tunnel. |
-
----
-
-## 5. Technology Stack
-
-| Layer | Technology | Version | Purpose |
-|---|---|---|---|
-| Runtime | Node.js | 18+ | JavaScript/TypeScript execution |
-| Language | TypeScript | 5.7.3 | Static typing, strict mode |
-| IBKR Client | `@stoqey/ib` | 1.5.3 | TWS API TCP socket client |
-| MCP SDK | `@modelcontextprotocol/sdk` | 1.12.1 | Claude tool registration |
-| HTTP Framework | Express | 4.21.2 | REST API server |
-| Schema Validation | Zod | 3.25.0 | MCP tool parameter schemas |
-| CORS | `cors` | 2.8.5 | Cross-origin support for ChatGPT |
-| Environment | `dotenv` | 16.4.7 | `.env` file loading |
-| Tunnel (optional) | ngrok | latest | Public URL for ChatGPT |
-
----
-
-## 6. Project Structure
-
-```
-ibkr-market-bridge/
-├── src/
-│   ├── index.ts              # Entry point — mode selection, startup orchestration
-│   ├── config.ts             # Environment variable loading
-│   ├── ibkr/
-│   │   ├── connection.ts     # TWS connection lifecycle (connect, reconnect, singleton)
-│   │   ├── market-data.ts    # Quotes, historical bars, options chain, option quotes
-│   │   ├── account.ts        # Account summary, positions, PnL
-│   │   └── contracts.ts      # Contract builders (stock, forex, option, future), search, details
-│   ├── mcp/
-│   │   └── server.ts         # MCP tool definitions (10 tools)
-│   └── rest/
-│       ├── server.ts         # Express app setup
-│       ├── routes.ts         # REST route handlers (10 endpoints)
-│       └── openapi.ts        # OpenAPI 3.1 specification object
-├── build/                    # Compiled JavaScript output (tsc)
-├── docs/                     # This documentation suite
-├── .env                      # Runtime configuration (not committed)
-├── .env.example              # Template for .env
-├── .gitignore
-├── package.json
-├── tsconfig.json
-└── README.md
-```
-
----
-
-## 7. Document Index
-
-| # | Document | Filename | Purpose |
-|---|---|---|---|
-| 1 | Project Overview | `01-PROJECT-OVERVIEW.md` | This document. Scope, stakeholders, constraints. |
-| 2 | Architecture & Design | `02-ARCHITECTURE.md` | Component model, data flow, concurrency, design decisions. |
-| 3 | API Reference | `03-API-REFERENCE.md` | Complete endpoint/tool specifications with schemas. |
-| 4 | Deployment & Operations | `04-DEPLOYMENT-GUIDE.md` | Build, install, configure, run, monitor. |
-| 5 | Troubleshooting & Runbook | `05-RUNBOOK.md` | Diagnostic procedures, error codes, recovery steps. |
-
----
-
-## 8. Revision History
-
-| Version | Date | Author | Change |
-|---|---|---|---|
-| 1.0.0 | 2025-02-09 | System | Initial documentation suite |
+| Trader | Decision-maker; uses outputs to guide discretionary trades |
+| System operator | Runs services, monitors IBKR connectivity, manages environment |
+| AI assistants | Consume MCP/REST, collaborate, and summarize context |
+| IBKR TWS/Gateway | Brokerage connectivity for account/order/market workflows |
