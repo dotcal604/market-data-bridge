@@ -347,3 +347,16 @@ export interface ExecutionHistoryResponse {
   executions: Execution[];
   error?: string;
 }
+
+// Flatten types
+export interface FlattenConfig {
+  enabled: boolean;
+  time: string;
+  firedToday: string;
+}
+
+export interface FlattenResult {
+  flattened: Array<{ symbol: string; position: number; orderId: number }>;
+  skipped: Array<{ symbol: string; reason: string }>;
+  error?: string;
+}
