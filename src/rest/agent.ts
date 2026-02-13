@@ -32,9 +32,11 @@ import {
 } from "../ibkr/data.js";
 import { readMessages, postMessage, clearMessages, getStats } from "../collab/store.js";
 import { getGptInstructions } from "./gpt-instructions.js";
-import { checkRisk, getSessionState, recordTradeResult, lockSession, unlockSession, resetSession } from "../ibkr/risk-gate.js";
+import { checkRisk, getSessionState, recordTradeResult, lockSession, unlockSession, resetSession, getRiskGateConfig } from "../ibkr/risk-gate.js";
 import { calculatePositionSize } from "../ibkr/risk.js";
-import { queryOrders, queryExecutions, queryJournal, insertJournalEntry, updateJournalEntry, getJournalById } from "../db/database.js";
+import { tuneRiskParams } from "../eval/risk-tuning.js";
+import { queryOrders, queryExecutions, queryJournal, insertJournalEntry, updateJournalEntry, getJournalById, upsertRiskConfig } from "../db/database.js";
+import { RISK_CONFIG_DEFAULTS, type RiskConfigParam } from "../db/schema.js";
 import { logger } from "../logging.js";
 
 const log = logger.child({ module: "agent" });
@@ -59,6 +61,8 @@ function bool(p: Record<string, unknown>, key: string, fallback = false): boolea
 function requireIBKR(): void {
   if (!isConnected()) throw new Error("IBKR is not connected. Start TWS/Gateway first.");
 }
+
+const KNOWN_RISK_KEYS = new Set<RiskConfigParam>(Object.keys(RISK_CONFIG_DEFAULTS) as RiskConfigParam[]);
 
 const actions: Record<string, ActionHandler> = {
   // ── System ──
@@ -129,6 +133,27 @@ const actions: Record<string, ActionHandler> = {
   size_position: async (p) => { requireIBKR(); return calculatePositionSize({ symbol: str(p, "symbol"), entryPrice: num(p, "entryPrice"), stopPrice: num(p, "stopPrice"), riskPercent: num(p, "riskPercent", 1), maxCapitalPercent: num(p, "maxCapitalPercent", 25) }); },
 
   // ── Risk / Session ──
+  get_risk_config: async () => getRiskGateConfig(),
+  tune_risk_params: async () => {
+    const tuning = tuneRiskParams();
+    return { tuning, config: getRiskGateConfig() };
+  },
+  update_risk_config: async (p) => {
+    const source = str(p, "source", "manual");
+    const entries: Array<{ param: RiskConfigParam; value: number; source: string }> = Object.entries(p)
+      .filter((entry): entry is [RiskConfigParam, number] => {
+        const [key, value] = entry;
+        return KNOWN_RISK_KEYS.has(key as RiskConfigParam) && typeof value === "number" && Number.isFinite(value);
+      })
+      .map(([param, value]) => ({ param, value, source }));
+
+    if (entries.length === 0) {
+      return { updated: 0, config: getRiskGateConfig() };
+    }
+
+    upsertRiskConfig(entries);
+    return { updated: entries.length, config: getRiskGateConfig() };
+  },
   get_session_state: async () => getSessionState(),
   session_record_trade: async (p) => recordTradeResult(num(p, "realizedPnl")),
   session_lock: async (p) => { lockSession(str(p, "reason", "manual")); return { locked: true }; },

@@ -93,6 +93,9 @@ Yahoo (always available): get_quote, get_historical_bars, get_financials, get_ea
 - size_position — { symbol, entryPrice, stopPrice, riskPercent?, maxCapitalPercent? } — riskPercent default 1, maxCapitalPercent default 25. ALWAYS call before placing trades.
 
 ### Risk / Session
+- get_risk_config — no params. Returns effective risk limits, manual caps, and stored risk config rows.
+- tune_risk_params — no params. Auto-tunes risk params from recent outcomes and returns updated risk config.
+- update_risk_config — { max_position_pct?, max_daily_loss_pct?, max_concentration_pct?, volatility_scalar?, source? } — updates only recognized risk keys.
 - get_session_state — no params. Current session trades, P&L, lock status.
 - session_record_trade — { realizedPnl } — record a trade result
 - session_lock — { reason? } — lock trading. reason default "manual"
