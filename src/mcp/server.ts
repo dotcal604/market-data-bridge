@@ -22,7 +22,7 @@ import { getOpenOrders, getCompletedOrders, getExecutions, placeOrder, placeBrac
 import { getContractDetails } from "../ibkr/contracts.js";
 import { getIBKRQuote } from "../ibkr/marketdata.js";
 import { readMessages, postMessage, clearMessages, getStats } from "../collab/store.js";
-import { checkRisk } from "../ibkr/risk-gate.js";
+import { checkRisk, getSessionState, recordTradeResult, lockSession, unlockSession, resetSession } from "../ibkr/risk-gate.js";
 import {
   queryOrders,
   queryExecutions,
@@ -721,6 +721,84 @@ export function createMcpServer(): McpServer {
     async () => ({
       content: [{ type: "text" as const, text: JSON.stringify(getStats(), null, 2) }],
     })
+  );
+
+  // =====================================================================
+  // SESSION GUARDRAILS
+  // =====================================================================
+
+  server.tool(
+    "session_state",
+    "Get current trading session state: daily P&L, trade count, consecutive losses, cooldown status, and all session limits. Check this before placing trades.",
+    {},
+    async () => {
+      try {
+        const state = getSessionState();
+        return { content: [{ type: "text", text: JSON.stringify(state, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "session_record_trade",
+    "Record a completed trade result to update session guardrails. Feed this after every trade closes.",
+    {
+      realized_pnl: z.number().describe("P&L of the completed trade (positive = win, negative = loss)"),
+    },
+    async (params) => {
+      try {
+        recordTradeResult(params.realized_pnl);
+        return { content: [{ type: "text", text: JSON.stringify(getSessionState(), null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "session_lock",
+    "Manually lock the session to prevent any new trades. Use when tilting or stepping away.",
+    {
+      reason: z.string().optional().describe("Why you're locking (e.g., 'tilting', 'lunch break', 'done for day')"),
+    },
+    async (params) => {
+      try {
+        lockSession(params.reason);
+        return { content: [{ type: "text", text: JSON.stringify(getSessionState(), null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "session_unlock",
+    "Unlock a manually locked session to resume trading.",
+    {},
+    async () => {
+      try {
+        unlockSession();
+        return { content: [{ type: "text", text: JSON.stringify(getSessionState(), null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "session_reset",
+    "Reset session state. Use at start of day or after a break to clear all counters.",
+    {},
+    async () => {
+      try {
+        resetSession();
+        return { content: [{ type: "text", text: JSON.stringify(getSessionState(), null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
   );
 
   // =====================================================================
