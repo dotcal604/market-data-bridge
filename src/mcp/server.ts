@@ -24,6 +24,7 @@ import { getContractDetails } from "../ibkr/contracts.js";
 import { getIBKRQuote } from "../ibkr/marketdata.js";
 import { readMessages, postMessage, clearMessages, getStats } from "../collab/store.js";
 import { checkRisk, getSessionState, recordTradeResult, lockSession, unlockSession, resetSession } from "../ibkr/risk-gate.js";
+import { runPortfolioStressTest } from "../ibkr/portfolio.js";
 import {
   queryOrders,
   queryExecutions,
@@ -422,6 +423,38 @@ export function createMcpServer(): McpServer {
       try {
         const pnl = await getPnL();
         return { content: [{ type: "text", text: JSON.stringify(pnl, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: stress_test (IBKR — requires TWS/Gateway) ---
+  server.tool(
+    "stress_test",
+    "Run a portfolio stress test using open positions and account net liquidation. Supports optional beta-adjusted shocks.",
+    {
+      shockPercent: z.number().describe("Shock percentage to apply (e.g. -5 for a 5% down shock)"),
+      betaAdjusted: z.boolean().optional().describe("When true, scales each symbol shock by its beta vs SPY"),
+    },
+    async ({ shockPercent, betaAdjusted }) => {
+      if (!isConnected()) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                { error: "IBKR not connected. Start TWS/Gateway for portfolio stress test." },
+                null,
+                2
+              ),
+            },
+          ],
+        };
+      }
+      try {
+        const result = await runPortfolioStressTest(shockPercent, betaAdjusted ?? true);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       } catch (e: any) {
         return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
       }

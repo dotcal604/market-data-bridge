@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { z } from "zod";
 import { getStatus } from "../providers/status.js";
 import {
   getQuote,
@@ -23,6 +24,8 @@ import { getContractDetails } from "../ibkr/contracts.js";
 import { getIBKRQuote } from "../ibkr/marketdata.js";
 import { readMessages, postMessage, clearMessages, getStats } from "../collab/store.js";
 import { checkRisk, getSessionState, recordTradeResult, lockSession, unlockSession, resetSession } from "../ibkr/risk-gate.js";
+import { runPortfolioStressTest } from "../ibkr/portfolio.js";
+import { logger } from "../logging.js";
 import {
   queryOrders,
   queryExecutions,
@@ -60,6 +63,12 @@ function safeLimit(raw: string | undefined, defaultVal: number, max: number = 10
 }
 
 export const router = Router();
+const log = logger.child({ subsystem: "rest-portfolio" });
+
+const portfolioStressTestRequestSchema = z.object({
+  shockPercent: z.number().finite(),
+  betaAdjusted: z.boolean().default(true),
+});
 
 // GET /api/status
 router.get("/status", (_req, res) => {
@@ -260,6 +269,28 @@ router.get("/account/positions", async (_req, res) => {
     const positions = await getPositions();
     res.json({ count: positions.length, positions });
   } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/portfolio/stress-test
+router.post("/portfolio/stress-test", async (req, res) => {
+  if (!isConnected()) {
+    res.json({ error: "IBKR not connected. Start TWS/Gateway for portfolio stress test." });
+    return;
+  }
+
+  const parsedBody = portfolioStressTestRequestSchema.safeParse(req.body ?? {});
+  if (!parsedBody.success) {
+    res.status(400).json({ error: parsedBody.error.issues[0]?.message ?? "Invalid request body" });
+    return;
+  }
+
+  try {
+    const result = await runPortfolioStressTest(parsedBody.data.shockPercent, parsedBody.data.betaAdjusted);
+    res.json(result);
+  } catch (e: any) {
+    log.error({ err: e }, "Portfolio stress test failed");
     res.status(500).json({ error: e.message });
   }
 });
