@@ -172,3 +172,25 @@ export interface EvalResponse {
   guardrail: { allowed: boolean; flags: string[] };
   latency_ms: Record<string, number>;
 }
+
+// Executions API types
+export interface Execution {
+  execId: string;
+  orderId: number;
+  symbol: string;
+  secType: string;
+  side: string;
+  shares: number;
+  price: number;
+  cumQty: number;
+  avgPrice: number;
+  time: string;
+  commission: number;
+  realizedPnL: number;
+}
+
+export interface ExecutionHistoryResponse {
+  count: number;
+  executions: Execution[];
+  error?: string;
+}
