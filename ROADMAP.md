@@ -48,6 +48,7 @@ These directly increase or measure trading edge. **Priority over everything else
 
 | Item | EI | Thesis | Status | Agent | Notes |
 |------|----|--------|--------|-------|-------|
+| **Daily session summary** | 5 | B | **Done** | Claude Code | P&L, win rate, avg R per session. `GET /eval/daily-summary` + `daily_summary` MCP tool. Rolling totals. |
 | **Confidence calibration tracking** | 5 | B | Not started | Codex | Brier score per model, calibration curve. Requires 50+ outcomes. `analytics/calibration.py` |
 | **Structured reasoning log** | 5 | A,B | Not started | Claude Code | `eval_reasoning` table — per-model key_drivers, risk_factors, uncertainties as JSON. Enables drift detection + disagreement diagnosis. ~50 LOC in eval pipeline |
 | **Regime-conditioned accuracy** | 5 | C | Not started | Codex | Win rate by volatility_regime × time_of_day × liquidity_bucket. `analytics/regime.py` |
