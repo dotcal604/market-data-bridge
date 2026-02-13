@@ -55,8 +55,8 @@ const DEPRECATION_CALENDAR = [
     id: "google-genai-sdk-legacy",
     description: "@google/generative-ai SDK deprecated (migrate to @google/genai)",
     deadline: "2026-06-24",
-    severity: "warning",
-    action: "Replace @google/generative-ai with unified @google/genai SDK",
+    severity: "resolved",
+    action: "DONE — migrated to @google/genai SDK (Issue #25)",
   },
   {
     id: "yahoo-finance2-v3",
@@ -78,7 +78,7 @@ const DEPRECATION_CALENDAR = [
 const TRACKED_PACKAGES = [
   "@anthropic-ai/sdk",
   "openai",
-  "@google/generative-ai",
+  "@google/genai",
   "@stoqey/ib",
   "yahoo-finance2",
   "@modelcontextprotocol/sdk",

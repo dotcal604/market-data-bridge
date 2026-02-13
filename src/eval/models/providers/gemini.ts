@@ -1,17 +1,42 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 import { evalConfig } from "../../config.js";
 import { SYSTEM_PROMPT } from "../prompt.js";
 import type { ModelEvaluation } from "../types.js";
 import { ModelOutputSchema } from "../schema.js";
 import { withTimeout } from "../../retry.js";
 
-let genAI: GoogleGenerativeAI | null = null;
+let genAI: GoogleGenAI | null = null;
 
-function getGenAI(): GoogleGenerativeAI {
+function getGenAI(): GoogleGenAI {
   if (!genAI) {
-    genAI = new GoogleGenerativeAI(evalConfig.googleAiApiKey);
+    genAI = new GoogleGenAI({ apiKey: evalConfig.googleAiApiKey });
   }
   return genAI;
+}
+
+function extractText(response: unknown): string {
+  if (typeof response === "object" && response !== null && "text" in response) {
+    const maybeText = (response as { text: unknown }).text;
+    if (typeof maybeText === "string") {
+      return maybeText;
+    }
+  }
+  return "";
+}
+
+function extractTokenCount(response: unknown): number {
+  if (typeof response !== "object" || response === null || !('usageMetadata' in response)) {
+    return 0;
+  }
+
+  const usage = (response as { usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; inputTokenCount?: number; outputTokenCount?: number } }).usageMetadata;
+  if (!usage) {
+    return 0;
+  }
+
+  const promptTokens = usage.promptTokenCount ?? usage.inputTokenCount ?? 0;
+  const outputTokens = usage.candidatesTokenCount ?? usage.outputTokenCount ?? 0;
+  return promptTokens + outputTokens;
 }
 
 export async function evaluateWithGemini(
@@ -26,25 +51,23 @@ export async function evaluateWithGemini(
   }
 
   try {
-    const model = getGenAI().getGenerativeModel({
-      model: evalConfig.geminiModel,
-      systemInstruction: SYSTEM_PROMPT,
-      generationConfig: {
-        temperature: evalConfig.modelTemperature,
-        maxOutputTokens: 1024,
-        responseMimeType: "application/json",
-      },
-    });
-
     const response = await withTimeout(
-      model.generateContent(userPrompt),
+      getGenAI().models.generateContent({
+        model: evalConfig.geminiModel,
+        contents: userPrompt,
+        config: {
+          systemInstruction: SYSTEM_PROMPT,
+          temperature: evalConfig.modelTemperature,
+          maxOutputTokens: 1024,
+          responseMimeType: "application/json",
+        },
+      }),
       evalConfig.modelTimeoutMs,
       "gemini",
     );
 
-    const raw = response.response.text();
-    const usage = response.response.usageMetadata;
-    const tokenCount = (usage?.promptTokenCount ?? 0) + (usage?.candidatesTokenCount ?? 0);
+    const raw = extractText(response);
+    const tokenCount = extractTokenCount(response);
 
     let parsed: unknown;
     try {
