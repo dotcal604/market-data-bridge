@@ -120,36 +120,7 @@ export function startRestServer(): Promise<void> {
     app.use(requestLogger);
 
     // Serve OpenAPI spec for ChatGPT actions (unauthenticated)
-    // ?lite=true returns ≤30 operations (fits ChatGPT Actions limit, keeps memory enabled)
-    app.get("/openapi.json", (req, res) => {
-      if (req.query.lite === "true") {
-        // operationId whitelist — exactly 30 operations for ChatGPT Actions
-        const allow = new Set([
-          "getGptInstructions", "getStatus", "getQuote",
-          "getHistoricalBars", "getStockDetails", "searchSymbols",
-          "getNews", "getFinancials", "getEarnings",
-          "getRecommendations", "getTrending", "runScreener",
-          "getOptionsChain", "getOptionQuote",
-          "getAccountSummary", "getPositions", "getPnL",
-          "getOpenOrders", "getCompletedOrders", "getExecutions",
-          "placeOrder", "placeBracketOrder", "cancelOrder",
-          "getSessionState", "sizePosition",
-          "getCollabMessages", "postCollabMessage",
-          "getJournal", "getOrdersHistory", "getExecutionsHistory",
-        ]);
-        const litePaths: Record<string, unknown> = {};
-        for (const [path, methods] of Object.entries(openApiSpec.paths)) {
-          const filtered: Record<string, unknown> = {};
-          for (const [method, op] of Object.entries(methods as Record<string, { operationId?: string }>)) {
-            if (op.operationId && allow.has(op.operationId)) {
-              filtered[method] = op;
-            }
-          }
-          if (Object.keys(filtered).length > 0) litePaths[path] = filtered;
-        }
-        res.json({ ...openApiSpec, paths: litePaths });
-        return;
-      }
+    app.get("/openapi.json", (_req, res) => {
       res.json(openApiSpec);
     });
 
