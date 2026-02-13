@@ -42,10 +42,12 @@ import {
 } from "../ibkr/data.js";
 import { readMessages, postMessage, clearMessages, getStats } from "../collab/store.js";
 import { getGptInstructions } from "./gpt-instructions.js";
-import { checkRisk, getSessionState, recordTradeResult, lockSession, unlockSession, resetSession } from "../ibkr/risk-gate.js";
+import { checkRisk, getSessionState, recordTradeResult, lockSession, unlockSession, resetSession, getRiskGateConfig } from "../ibkr/risk-gate.js";
 import { runPortfolioStressTest } from "../ibkr/portfolio.js";
 import { calculatePositionSize } from "../ibkr/risk.js";
 import { logger } from "../logging.js";
+import { tuneRiskParams } from "../eval/risk-tuning.js";
+import { RISK_CONFIG_DEFAULTS } from "../db/schema.js";
 import {
   queryOrders,
   queryExecutions,
@@ -53,6 +55,7 @@ import {
   insertJournalEntry,
   updateJournalEntry,
   getJournalById,
+  upsertRiskConfig,
 } from "../db/database.js";
 
 function qs(val: unknown, fallback: string): string {
@@ -130,6 +133,13 @@ const impliedVolatilitySchema = z.object({
   right: z.enum(["C", "P"]),
   optionPrice: z.number().positive(),
   underlyingPrice: z.number().positive(),
+});
+
+const riskConfigUpdateSchema = z.object({
+  max_position_pct: z.number().positive().max(RISK_CONFIG_DEFAULTS.max_position_pct).optional(),
+  max_daily_loss_pct: z.number().positive().max(RISK_CONFIG_DEFAULTS.max_daily_loss_pct).optional(),
+  max_concentration_pct: z.number().positive().max(RISK_CONFIG_DEFAULTS.max_concentration_pct).optional(),
+  volatility_scalar: z.number().positive().max(RISK_CONFIG_DEFAULTS.volatility_scalar).optional(),
 });
 
 const optionPriceSchema = z.object({
@@ -1154,6 +1164,50 @@ router.post("/session/unlock", (_req, res) => {
 router.post("/session/reset", (_req, res) => {
   resetSession();
   res.json(getSessionState());
+});
+
+// GET /api/risk/config — current persisted risk config + effective guardrail values
+router.get("/risk/config", (_req, res) => {
+  try {
+    res.json(getRiskGateConfig());
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// PUT /api/risk/config — manual risk config updates
+router.put("/risk/config", (req, res) => {
+  const parsed = riskConfigUpdateSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid risk config payload" });
+    return;
+  }
+
+  const entries = Object.entries(parsed.data)
+    .filter(([, value]) => value !== undefined)
+    .map(([param, value]) => ({ param, value: value as number, source: "manual" }));
+
+  if (entries.length === 0) {
+    res.status(400).json({ error: "At least one risk parameter must be provided" });
+    return;
+  }
+
+  try {
+    upsertRiskConfig(entries);
+    res.json(getRiskGateConfig());
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/risk/tune — auto-tune risk config from recent outcomes
+router.post("/risk/tune", (_req, res) => {
+  try {
+    const result = tuneRiskParams();
+    res.json({ tune: result, config: getRiskGateConfig() });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // POST /api/risk/size-position — calculate position size based on risk parameters
