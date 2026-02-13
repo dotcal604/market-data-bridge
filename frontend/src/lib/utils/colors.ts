@@ -52,5 +52,13 @@ export function modelColor(modelId: string): string {
   return MODEL_COLORS[modelId] ?? "#6b7280";
 }
 
+/** P&L value color — positive = emerald, negative = red */
+export function pnlColor(value: number | null): string {
+  if (value == null) return "text-muted-foreground";
+  if (value > 0) return "text-emerald-400";
+  if (value < 0) return "text-red-400";
+  return "text-muted-foreground";
+}
+
 /** Recharts-friendly model colors */
 export const CHART_MODEL_COLORS = ["#10b981", "#8b5cf6", "#f59e0b"];
