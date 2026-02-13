@@ -23,6 +23,7 @@ import { computePortfolioExposure } from "../ibkr/portfolio.js";
 import { setFlattenEnabled, getFlattenConfig } from "../scheduler.js";
 import { getContractDetails } from "../ibkr/contracts.js";
 import { getIBKRQuote } from "../ibkr/marketdata.js";
+import { reqHistoricalNews, reqNewsArticle, reqNewsBulletins, reqNewsProviders } from "../ibkr/news.js";
 import { readMessages, postMessage, clearMessages, getStats } from "../collab/store.js";
 import { getGptInstructions } from "./gpt-instructions.js";
 import { checkRisk, getSessionState, recordTradeResult, lockSession, unlockSession, resetSession } from "../ibkr/risk-gate.js";
@@ -71,6 +72,24 @@ const log = logger.child({ subsystem: "rest-portfolio" });
 const portfolioStressTestRequestSchema = z.object({
   shockPercent: z.number().finite(),
   betaAdjusted: z.boolean().default(true),
+});
+
+const newsArticleParamsSchema = z.object({
+  providerId: z.string().min(1, "providerId is required"),
+  articleId: z.string().min(1, "articleId is required"),
+});
+
+const historicalNewsParamsSchema = z.object({
+  symbol: z.string().min(1, "symbol is required"),
+});
+
+const historicalNewsQuerySchema = z.object({
+  providerCodes: z.string().min(1, "providerCodes query param is required"),
+  startDateTime: z.string().min(1, "startDateTime query param is required"),
+  endDateTime: z.string().min(1, "endDateTime query param is required"),
+  secType: z.string().optional(),
+  exchange: z.string().optional(),
+  currency: z.string().optional(),
 });
 
 // GET /api/status
@@ -171,6 +190,99 @@ router.get("/search", async (req, res) => {
     }
     const results = await searchSymbols(query);
     res.json({ count: results.length, results });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/news/providers
+router.get("/news/providers", async (_req, res) => {
+  if (!isConnected()) {
+    res.json({ error: "IBKR not connected. Start TWS/Gateway for news provider data." });
+    return;
+  }
+  try {
+    const providers = await reqNewsProviders();
+    res.json({ count: providers.length, providers });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/news/article/:providerId/:articleId
+router.get("/news/article/:providerId/:articleId", async (req, res) => {
+  if (!isConnected()) {
+    res.json({ error: "IBKR not connected. Start TWS/Gateway for news articles." });
+    return;
+  }
+  const parsedParams = newsArticleParamsSchema.safeParse(req.params);
+  if (!parsedParams.success) {
+    res.status(400).json({ error: parsedParams.error.issues[0]?.message ?? "Invalid path params" });
+    return;
+  }
+  try {
+    const article = await reqNewsArticle(parsedParams.data.providerId, parsedParams.data.articleId);
+    res.json(article);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/news/history/:symbol
+router.get("/news/history/:symbol", async (req, res) => {
+  if (!isConnected()) {
+    res.json({ error: "IBKR not connected. Start TWS/Gateway for historical news." });
+    return;
+  }
+  const parsedParams = historicalNewsParamsSchema.safeParse(req.params);
+  if (!parsedParams.success) {
+    res.status(400).json({ error: parsedParams.error.issues[0]?.message ?? "Invalid path params" });
+    return;
+  }
+  const parsedQuery = historicalNewsQuerySchema.safeParse({
+    providerCodes: qs(req.query.providerCodes, ""),
+    startDateTime: qs(req.query.startDateTime, ""),
+    endDateTime: qs(req.query.endDateTime, ""),
+    secType: qs(req.query.secType, "") || undefined,
+    exchange: qs(req.query.exchange, "") || undefined,
+    currency: qs(req.query.currency, "") || undefined,
+  });
+  if (!parsedQuery.success) {
+    res.status(400).json({ error: parsedQuery.error.issues[0]?.message ?? "Invalid query params" });
+    return;
+  }
+  try {
+    const [contract] = await getContractDetails({
+      symbol: parsedParams.data.symbol,
+      secType: parsedQuery.data.secType,
+      exchange: parsedQuery.data.exchange,
+      currency: parsedQuery.data.currency,
+    });
+    if (!contract) {
+      res.status(404).json({ error: `No contract found for symbol ${parsedParams.data.symbol}` });
+      return;
+    }
+    const headlines = await reqHistoricalNews(
+      contract.conId,
+      parsedQuery.data.providerCodes,
+      parsedQuery.data.startDateTime,
+      parsedQuery.data.endDateTime
+    );
+    res.json({ symbol: parsedParams.data.symbol.toUpperCase(), conId: contract.conId, count: headlines.length, headlines });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/news/bulletins
+router.get("/news/bulletins", async (_req, res) => {
+  if (!isConnected()) {
+    res.json({ error: "IBKR not connected. Start TWS/Gateway for news bulletins." });
+    return;
+  }
+  try {
+    const bulletins = await reqNewsBulletins();
+    res.json({ count: bulletins.length, bulletins });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }

@@ -59,6 +59,10 @@ export function getIB(): IBApi {
   return ib;
 }
 
+export function getIBKRClient(): IBApi {
+  return getIB();
+}
+
 function destroyIB(): void {
   if (ib) {
     try { ib.disconnect(); } catch (e: any) {
