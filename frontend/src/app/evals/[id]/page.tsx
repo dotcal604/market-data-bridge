@@ -7,7 +7,7 @@ import { EnsembleSummary } from "@/components/eval-detail/ensemble-summary";
 import { GuardrailBadges } from "@/components/eval-detail/guardrail-badges";
 import { FeatureTable } from "@/components/eval-detail/feature-table";
 import { FeatureRadarChart } from "@/components/eval-detail/feature-radar-chart";
-import { OutcomePanel } from "@/components/eval-detail/outcome-panel";
+import { OutcomeForm } from "@/components/eval-detail/outcome-form";
 import { DirectionBadge } from "@/components/shared/direction-badge";
 import { ScoreBadge } from "@/components/shared/score-badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -17,7 +17,7 @@ import Link from "next/link";
 
 export default function EvalDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const { data, isLoading, error } = useEvalDetail(id);
+  const { data, isLoading, error, refetch } = useEvalDetail(id);
 
   if (isLoading) {
     return (
@@ -93,7 +93,13 @@ export default function EvalDetailPage({ params }: { params: Promise<{ id: strin
       </div>
 
       {/* Outcome */}
-      <OutcomePanel outcome={outcome} evaluationId={ev.id} />
+      <OutcomeForm
+        evaluationId={ev.id}
+        entryPrice={ev.entry_price}
+        stopPrice={ev.stop_price}
+        existingOutcome={outcome}
+        onSuccess={() => refetch()}
+      />
     </div>
   );
 }
