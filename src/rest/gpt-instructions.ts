@@ -117,6 +117,9 @@ Yahoo (always available): get_quote, get_historical_bars, get_financials, get_ea
 - journal_create — { symbol, reasoning, tags?, strategy_version?, spy_price?, vix_level?, ai_recommendations? }
 - journal_get — { id }
 - journal_update — { id, outcome_tags?, notes? }
+- tradersync_import — { csv } — import full TraderSync trade_data CSV content
+- tradersync_stats — no params
+- tradersync_trades — { symbol?, side?, status?, days?, limit? } — side: "LONG"|"SHORT", status: "WIN"|"LOSS", limit default 100
 
 ### History
 - orders_history — { symbol?, strategy?, limit? } — limit default 100
