@@ -13,6 +13,7 @@ export const openApiAgentSpec = {
   },
   servers: [{ url: "https://api.klfh-dot-io.com" }],
   components: {
+    schemas: {},
     securitySchemes: {
       ApiKeyAuth: {
         type: "apiKey",
