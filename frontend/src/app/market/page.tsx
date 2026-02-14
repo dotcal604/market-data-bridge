@@ -1,13 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { SymbolSearch } from "@/components/market/SymbolSearch";
 import { QuoteCard } from "@/components/market/QuoteCard";
 import { CompanyInfo } from "@/components/market/CompanyInfo";
 import { useQuote, useStockDetails, useFinancials } from "@/lib/hooks/use-market";
 
-export default function MarketPage() {
-  const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
+function MarketPageContent() {
+  const searchParams = useSearchParams();
+  const symbolParam = searchParams.get("symbol");
+  const [selectedSymbol, setSelectedSymbol] = useState<string | null>(symbolParam);
+
+  // Update selected symbol when URL changes
+  useEffect(() => {
+    if (symbolParam) {
+      setSelectedSymbol(symbolParam);
+    }
+  }, [symbolParam]);
 
   const { data: quote, isLoading: isLoadingQuote, error: quoteError } = useQuote(selectedSymbol);
   const { data: details, isLoading: isLoadingDetails, error: detailsError } = useStockDetails(selectedSymbol);
@@ -48,5 +58,13 @@ export default function MarketPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function MarketPage() {
+  return (
+    <Suspense fallback={<div className="flex h-screen items-center justify-center">Loading...</div>}>
+      <MarketPageContent />
+    </Suspense>
   );
 }

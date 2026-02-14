@@ -15,12 +15,14 @@ import {
   MessageSquare,
   GitCompare,
   TrendingUp,
+  Filter,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/market", label: "Market Data", icon: TrendingUp },
+  { href: "/screener", label: "Screener", icon: Filter },
   { href: "/evals", label: "Evaluations", icon: History, children: [
     { href: "/evals/compare", label: "Compare", icon: GitCompare },
   ]},
