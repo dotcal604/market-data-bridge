@@ -82,6 +82,47 @@ export interface Financials {
   profitMargins: number | null;
 }
 
+export interface BarData {
+  time: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+export interface HistoricalBarsResponse {
+  symbol: string;
+  count: number;
+  bars: BarData[];
+}
+
+export interface NewsItem {
+  title: string;
+  publisher: string | null;
+  link: string;
+  publishedAt: string;
+  relatedTickers: string[];
+}
+
+export interface NewsResponse {
+  count: number;
+  articles: NewsItem[];
+}
+
+export interface EarningsData {
+  symbol: string;
+  earningsChart: Array<{
+    quarter: string;
+    actual: number | null;
+    estimate: number | null;
+  }>;
+  financialsChart: {
+    yearly: Array<{ date: number; revenue: number; earnings: number }>;
+    quarterly: Array<{ date: string; revenue: number; earnings: number }>;
+  } | null;
+}
+
 export const marketClient = {
   async searchSymbols(query: string): Promise<SearchResponse> {
     const params = new URLSearchParams({ q: query });
@@ -98,5 +139,22 @@ export const marketClient = {
 
   async getFinancials(symbol: string): Promise<Financials> {
     return fetchJSON<Financials>(`${API_BASE}/financials/${symbol}`);
+  },
+
+  async getHistoricalBars(
+    symbol: string,
+    period: string = "3mo",
+    interval: string = "1d"
+  ): Promise<HistoricalBarsResponse> {
+    const params = new URLSearchParams({ period, interval });
+    return fetchJSON<HistoricalBarsResponse>(`${API_BASE}/history/${symbol}?${params}`);
+  },
+
+  async getNews(query: string): Promise<NewsResponse> {
+    return fetchJSON<NewsResponse>(`${API_BASE}/news/${query}`);
+  },
+
+  async getEarnings(symbol: string): Promise<EarningsData> {
+    return fetchJSON<EarningsData>(`${API_BASE}/earnings/${symbol}`);
   },
 };
