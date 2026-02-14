@@ -35,7 +35,21 @@ import { getGptInstructions } from "./gpt-instructions.js";
 import { checkRisk, getSessionState, recordTradeResult, lockSession, unlockSession, resetSession, getRiskGateConfig } from "../ibkr/risk-gate.js";
 import { calculatePositionSize } from "../ibkr/risk.js";
 import { tuneRiskParams } from "../eval/risk-tuning.js";
-import { queryOrders, queryExecutions, queryJournal, insertJournalEntry, updateJournalEntry, getJournalById, upsertRiskConfig } from "../db/database.js";
+import { computeEnsembleWithWeights } from "../eval/ensemble/scorer.js";
+import { getWeights } from "../eval/ensemble/weights.js";
+import type { ModelEvaluation } from "../eval/models/types.js";
+import {
+  queryOrders,
+  queryExecutions,
+  queryJournal,
+  insertJournalEntry,
+  updateJournalEntry,
+  getJournalById,
+  upsertRiskConfig,
+  getEvaluationById,
+  insertOutcome,
+  getEvalsForSimulation,
+} from "../db/database.js";
 import { RISK_CONFIG_DEFAULTS, type RiskConfigParam } from "../db/schema.js";
 import { logger } from "../logging.js";
 
@@ -63,6 +77,7 @@ function requireIBKR(): void {
 }
 
 const KNOWN_RISK_KEYS = new Set<RiskConfigParam>(Object.keys(RISK_CONFIG_DEFAULTS) as RiskConfigParam[]);
+const VALID_DECISION_TYPES = new Set(["took_trade", "passed_setup", "ensemble_no", "risk_gate_blocked"]);
 
 const actions: Record<string, ActionHandler> = {
   // ── System ──
@@ -159,6 +174,112 @@ const actions: Record<string, ActionHandler> = {
   session_lock: async (p) => { lockSession(str(p, "reason", "manual")); return { locked: true }; },
   session_unlock: async () => unlockSession(),
   session_reset: async () => resetSession(),
+
+  // ── Evaluation ──
+  record_outcome: async (p) => {
+    const evaluation_id = str(p, "evaluation_id");
+    if (!evaluation_id) {
+      throw new Error("evaluation_id is required");
+    }
+
+    const decision_type = p.decision_type;
+    if (decision_type != null) {
+      if (typeof decision_type !== "string" || !VALID_DECISION_TYPES.has(decision_type)) {
+        throw new Error("decision_type must be one of: took_trade, passed_setup, ensemble_no, risk_gate_blocked");
+      }
+    }
+
+    const confidence_rating = p.confidence_rating;
+    if (confidence_rating != null && (typeof confidence_rating !== "number" || confidence_rating < 1 || confidence_rating > 3)) {
+      throw new Error("confidence_rating must be 1 (low), 2 (medium), or 3 (high)");
+    }
+
+    const existing = getEvaluationById(evaluation_id);
+    if (!existing) {
+      throw new Error(`Evaluation ${evaluation_id} not found`);
+    }
+
+    insertOutcome({
+      evaluation_id,
+      trade_taken: bool(p, "trade_taken") ? 1 : 0,
+      decision_type: decision_type ?? null,
+      confidence_rating: confidence_rating ?? null,
+      rule_followed: p.rule_followed == null ? null : bool(p, "rule_followed") ? 1 : 0,
+      setup_type: str(p, "setup_type") || null,
+      actual_entry_price: typeof p.actual_entry_price === "number" ? p.actual_entry_price : null,
+      actual_exit_price: typeof p.actual_exit_price === "number" ? p.actual_exit_price : null,
+      r_multiple: typeof p.r_multiple === "number" ? p.r_multiple : null,
+      exit_reason: str(p, "exit_reason") || null,
+      notes: str(p, "notes") || null,
+    });
+
+    return { success: true, evaluation_id };
+  },
+  simulate_weights: async (p) => {
+    if (typeof p.claude !== "number" || typeof p.gpt4o !== "number" || typeof p.gemini !== "number") {
+      throw new Error("claude, gpt4o, and gemini weights are required (numbers)");
+    }
+
+    const claude = p.claude;
+    const gpt4o = p.gpt4o;
+    const gemini = p.gemini;
+    if (claude < 0 || gpt4o < 0 || gemini < 0) {
+      throw new Error("Weights must be non-negative");
+    }
+
+    const currentWeights = getWeights();
+    const simWeights = {
+      claude,
+      gpt4o,
+      gemini,
+      k: typeof p.k === "number" && p.k >= 0 ? p.k : currentWeights.k,
+    };
+    const rows = getEvalsForSimulation({
+      days: typeof p.days === "number" ? p.days : 90,
+      symbol: str(p, "symbol") || undefined,
+    });
+
+    let currentScoreSum = 0;
+    let simScoreSum = 0;
+    for (const row of rows) {
+      const modelEvals: ModelEvaluation[] = row.model_outputs.map((mo) => ({
+        model_id: mo.model_id as ModelEvaluation["model_id"],
+        output: mo.compliant && mo.trade_score != null
+          ? {
+            trade_score: mo.trade_score,
+            extension_risk: 0,
+            exhaustion_risk: 0,
+            float_rotation_risk: 0,
+            market_alignment: 0,
+            expected_rr: mo.expected_rr ?? 0,
+            confidence: mo.confidence ?? 0,
+            should_trade: mo.should_trade === 1,
+            reasoning: "",
+          }
+          : null,
+        raw_response: "",
+        latency_ms: 0,
+        error: null,
+        compliant: mo.compliant === 1,
+        model_version: "",
+        prompt_hash: "",
+        token_count: 0,
+        api_response_id: "",
+        timestamp: row.timestamp,
+      }));
+
+      const currentResult = computeEnsembleWithWeights(modelEvals, currentWeights);
+      const simResult = computeEnsembleWithWeights(modelEvals, simWeights);
+      currentScoreSum += currentResult.trade_score;
+      simScoreSum += simResult.trade_score;
+    }
+
+    return {
+      simulated_weights: simWeights,
+      evaluations_count: rows.length,
+      average_score_delta: rows.length > 0 ? Math.round(((simScoreSum - currentScoreSum) / rows.length) * 100) / 100 : 0,
+    };
+  },
 
   // ── Flatten Config ──
   get_flatten_config: async () => getFlattenConfig(),
