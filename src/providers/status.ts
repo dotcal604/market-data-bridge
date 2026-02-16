@@ -31,11 +31,12 @@ export function getStatus() {
     screener: "yahoo-finance (always available)",
     ibkr: {
       connected: ibkr.connected,
+      mode: ibkr.mode,
       host: ibkr.host,
       port: ibkr.port,
       clientId: ibkr.clientId,
       note: ibkr.connected
-        ? "Account data available"
+        ? `Account data available (${ibkr.mode})`
         : "Start TWS/Gateway for account data (positions, PnL)",
     },
     timestamp: new Date().toISOString(),
