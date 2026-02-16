@@ -2,6 +2,8 @@ import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
 import { randomUUID, timingSafeEqual } from "node:crypto";
+import { existsSync } from "node:fs";
+import path from "node:path";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { router } from "./routes.js";
 import { evalRouter } from "../eval/routes.js";
@@ -84,6 +86,24 @@ const evalLimiter = rateLimit({
 });
 
 const startTime = Date.now();
+const frontendOutDir = path.resolve(process.cwd(), "frontend", "out");
+
+function configureFrontendStaticHosting(app: express.Express): void {
+  if (!existsSync(frontendOutDir)) {
+    logRest.warn(
+      { frontendOutDir },
+      "Frontend static export not found — dashboard hosting disabled",
+    );
+    return;
+  }
+
+  app.use(express.static(frontendOutDir, { index: false }));
+  app.get(/^\/(?!api|mcp|health|openapi\.json|openapi-agent\.json).*/, (_req, res) => {
+    res.sendFile(path.join(frontendOutDir, "index.html"));
+  });
+
+  logRest.info({ frontendOutDir }, "Frontend static export hosting enabled");
+}
 
 // ── MCP-over-HTTP session management ────────────────────────────────
 // Each ChatGPT conversation gets its own transport + MCP server instance.
@@ -230,6 +250,8 @@ export function startRestServer(): Promise<void> {
     app.use("/api/order", orderLimiter);
     app.use("/api/orders", orderLimiter);
     app.use("/api/collab", collabLimiter);
+
+    configureFrontendStaticHosting(app);
 
     app.listen(config.rest.port, () => {
       logRest.info({ port: config.rest.port }, "REST server listening");
