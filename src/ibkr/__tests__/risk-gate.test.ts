@@ -1,4 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+
+// Mock database to avoid real DB dependency in tests
+// The setup file (risk-gate.setup.ts) sets RISK_ACCOUNT_EQUITY_BASE=1000000
+// to ensure the dynamic risk calculation doesn't constrain test orders
+vi.mock("../../db/database.js", () => ({
+  getRiskConfigRows: vi.fn().mockReturnValue([]),
+}));
+
 import {
   checkRisk,
   getRiskLimits,

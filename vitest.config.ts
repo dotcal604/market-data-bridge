@@ -5,6 +5,7 @@ export default defineConfig({
     globals: true,
     environment: "node",
     include: ["src/**/*.test.ts", "test/**/*.test.ts", "tests/**/*.test.ts"],
+    setupFiles: ["src/ibkr/__tests__/risk-gate.setup.ts"],
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html"],
