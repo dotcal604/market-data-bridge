@@ -1,4 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+
+vi.hoisted(() => {
+  // Keep tests deterministic even if checkRisk() uses local Date methods internally.
+  // This must run before risk-gate is imported because the module initializes session state at import time.
+  process.env.TZ = "America/New_York";
+});
+
 import {
   checkRisk,
   getRiskLimits,
@@ -14,6 +21,7 @@ import {
 describe("Risk Gate", () => {
   // Get the actual limits from the module
   const LIMITS = getRiskLimits();
+  const SAFE_PRICE = Math.max(LIMITS.minSharePrice, Math.min(2, LIMITS.maxNotionalValue / LIMITS.maxOrderSize));
 
   // 10:00 AM ET = 15:00 UTC (during market hours)
   let testStartTime = new Date("2025-01-06T15:00:00Z").getTime();
@@ -21,9 +29,9 @@ describe("Risk Gate", () => {
   beforeEach(() => {
     // Set fake timers and advance to a new time for each test
     // This ensures each test starts with a clean 1-minute window
-    vi.useFakeTimers();
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
     testStartTime += 120_000; // Advance 2 minutes between tests
-    vi.setSystemTime(testStartTime);
+    vi.setSystemTime(new Date(testStartTime));
     // Reset session state so session guardrails don't interfere with per-order tests
     resetSession();
   });
@@ -39,8 +47,8 @@ describe("Risk Gate", () => {
         action: "BUY",
         orderType: "LMT",
         totalQuantity: LIMITS.maxOrderSize + 1,
-        lmtPrice: 150,
-        estimatedPrice: 150,
+        lmtPrice: SAFE_PRICE,
+        estimatedPrice: SAFE_PRICE,
       };
 
       const result = checkRisk(params);
@@ -57,8 +65,8 @@ describe("Risk Gate", () => {
         action: "BUY",
         orderType: "LMT",
         totalQuantity: LIMITS.maxOrderSize,
-        lmtPrice: 10,
-        estimatedPrice: 10,
+        lmtPrice: SAFE_PRICE,
+        estimatedPrice: SAFE_PRICE,
       };
 
       const result = checkRisk(params);
@@ -162,8 +170,8 @@ describe("Risk Gate", () => {
         action: "BUY",
         orderType: "LMT",
         totalQuantity: 100,
-        lmtPrice: 50,
-        estimatedPrice: 50,
+        lmtPrice: SAFE_PRICE,
+        estimatedPrice: SAFE_PRICE,
       };
 
       const result = checkRisk(params);
@@ -244,8 +252,8 @@ describe("Risk Gate", () => {
         action: "BUY",
         orderType: "LMT",
         totalQuantity: 100,
-        lmtPrice: 150,
-        estimatedPrice: 150,
+        lmtPrice: SAFE_PRICE,
+        estimatedPrice: SAFE_PRICE,
       };
 
       const result = checkRisk(params);
@@ -276,8 +284,8 @@ describe("Risk Gate", () => {
         action: "BUY",
         orderType: "LMT",
         totalQuantity: 10,
-        lmtPrice: 150,
-        estimatedPrice: 150,
+        lmtPrice: SAFE_PRICE,
+        estimatedPrice: SAFE_PRICE,
       };
 
       // Submit maxOrdersPerMinute orders
@@ -301,8 +309,8 @@ describe("Risk Gate", () => {
         action: "BUY",
         orderType: "LMT",
         totalQuantity: 10,
-        lmtPrice: 150,
-        estimatedPrice: 150,
+        lmtPrice: SAFE_PRICE,
+        estimatedPrice: SAFE_PRICE,
       };
 
       // Submit maxOrdersPerMinute orders
@@ -327,8 +335,8 @@ describe("Risk Gate", () => {
         action: "BUY",
         orderType: "LMT",
         totalQuantity: 10,
-        lmtPrice: 150,
-        estimatedPrice: 150,
+        lmtPrice: SAFE_PRICE,
+        estimatedPrice: SAFE_PRICE,
       };
 
       // Submit 3 orders
@@ -365,8 +373,8 @@ describe("Risk Gate", () => {
         action: "BUY",
         orderType: "LMT",
         totalQuantity: 0,
-        lmtPrice: 150,
-        estimatedPrice: 150,
+        lmtPrice: SAFE_PRICE,
+        estimatedPrice: SAFE_PRICE,
       };
 
       const result = checkRisk(params);
@@ -398,8 +406,8 @@ describe("Risk Gate", () => {
         action: "BUY",
         orderType: "LMT",
         totalQuantity: 100,
-        lmtPrice: 150,
-        estimatedPrice: 150,
+        lmtPrice: SAFE_PRICE,
+        estimatedPrice: SAFE_PRICE,
       };
 
       // Should not throw error
@@ -413,8 +421,8 @@ describe("Risk Gate", () => {
         action: "BUY",
         orderType: "LMT",
         totalQuantity: 999999999,
-        lmtPrice: 150,
-        estimatedPrice: 150,
+        lmtPrice: SAFE_PRICE,
+        estimatedPrice: SAFE_PRICE,
       };
 
       const result = checkRisk(params);
@@ -446,7 +454,7 @@ describe("Risk Gate", () => {
         action: "BUY",
         orderType: "LMT",
         totalQuantity: 100,
-        lmtPrice: 150,
+        lmtPrice: SAFE_PRICE,
         estimatedPrice: 0.50, // Below minimum
       };
 
@@ -497,7 +505,7 @@ describe("Risk Gate", () => {
         action: "BUY",
         orderType: "MKT",
         totalQuantity: 100,
-        estimatedPrice: 150,
+        estimatedPrice: SAFE_PRICE,
       };
 
       const result = checkRisk(params);
@@ -512,7 +520,7 @@ describe("Risk Gate", () => {
         action: "BUY",
         orderType: "LMT",
         totalQuantity: 50,
-        lmtPrice: 150,
+        lmtPrice: SAFE_PRICE,
       };
 
       const result = checkRisk(params);
@@ -527,7 +535,7 @@ describe("Risk Gate", () => {
         action: "SELL",
         orderType: "STP",
         totalQuantity: 100,
-        auxPrice: 145,
+        auxPrice: SAFE_PRICE,
       };
 
       const result = checkRisk(params);
@@ -542,8 +550,8 @@ describe("Risk Gate", () => {
         action: "BUY",
         orderType: "LMT",
         totalQuantity: 10,
-        lmtPrice: 150,
-        estimatedPrice: 150,
+        lmtPrice: SAFE_PRICE,
+        estimatedPrice: SAFE_PRICE,
       };
 
       const result = checkRisk(params);
@@ -558,8 +566,8 @@ describe("Risk Gate", () => {
         action: "BUY",
         orderType: "LMT",
         totalQuantity: 10,
-        lmtPrice: 150,
-        estimatedPrice: 150,
+        lmtPrice: SAFE_PRICE,
+        estimatedPrice: SAFE_PRICE,
       };
 
       // Should allow up to maxOrdersPerMinute orders
@@ -578,8 +586,8 @@ describe("Risk Gate", () => {
           action: "BUY",
           orderType: "LMT",
           totalQuantity: 10,
-          lmtPrice: 100,
-          estimatedPrice: 100,
+          lmtPrice: SAFE_PRICE,
+          estimatedPrice: SAFE_PRICE,
         };
 
         const result = checkRisk(params);
@@ -596,8 +604,8 @@ describe("Risk Gate", () => {
           action,
           orderType: "LMT",
           totalQuantity: 10,
-          lmtPrice: 150,
-          estimatedPrice: 150,
+          lmtPrice: SAFE_PRICE,
+          estimatedPrice: SAFE_PRICE,
         };
 
         const result = checkRisk(params);
@@ -634,8 +642,8 @@ describe("Risk Gate", () => {
       action: "BUY",
       orderType: "LMT",
       totalQuantity: 10,
-      lmtPrice: 150,
-      estimatedPrice: 150,
+      lmtPrice: SAFE_PRICE,
+      estimatedPrice: SAFE_PRICE,
     };
 
     describe("Manual Lock", () => {
