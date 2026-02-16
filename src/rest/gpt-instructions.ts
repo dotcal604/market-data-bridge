@@ -122,6 +122,20 @@ Yahoo (always available): get_quote, get_historical_bars, get_financials, get_ea
 - tradersync_stats — no params
 - tradersync_trades — { symbol?, side?, status?, days?, limit? } — side: "LONG"|"SHORT", status: "WIN"|"LOSS", limit default 100
 
+### Subscriptions (streaming, requires connection)
+- subscribe_real_time_bars — { symbol, secType?, exchange?, currency?, whatToShow?, useRTH? } — starts 5-second bar stream. Returns subscriptionId. Max ~50 concurrent. Deduplicates by symbol:exchange.
+- unsubscribe_real_time_bars — { subscriptionId } — stops a bar stream
+- get_real_time_bars — { subscriptionId, limit? } — poll buffered bars (limit default 60, max 300 = 25 min)
+- subscribe_account_updates — { account } — starts real-time account value + portfolio stream. One account at a time (IBKR limit).
+- unsubscribe_account_updates — no params
+- get_account_snapshot_stream — no params — poll latest account values and portfolio from active subscription
+- get_scanner_parameters — no params — returns IBKR scanner parameters XML (cached 60 min)
+- list_subscriptions — no params — list all active subscriptions
+
+### Evaluation
+- record_outcome — { evaluation_id, trade_taken, decision_type?, confidence_rating?, rule_followed?, setup_type?, actual_entry_price?, actual_exit_price?, r_multiple?, exit_reason?, notes? } — decision_type: "took_trade"|"passed_setup"|"ensemble_no"|"risk_gate_blocked", confidence_rating: 1-3
+- simulate_weights — { claude, gpt4o, gemini, k?, days?, symbol? } — simulate ensemble weights against historical evaluations
+
 ### History
 - orders_history — { symbol?, strategy?, limit? } — limit default 100
 - executions_history — { symbol?, limit? } — limit default 100
@@ -135,6 +149,11 @@ ALWAYS call size_position before placing trades.
 - Relative Volume: Volume / avgVolume
 - Spread %: (Ask - Bid) / Last * 100. Flag if > 0.5%
 - Flag relative volume < 1.0x, small caps < $300M
+
+## SUBSCRIPTION WORKFLOW
+Real-time bars: subscribe_real_time_bars → poll with get_real_time_bars → unsubscribe_real_time_bars when done.
+Account streaming: subscribe_account_updates → poll with get_account_snapshot_stream → unsubscribe_account_updates when done.
+Always call list_subscriptions to check what's already active before subscribing. Max 50 bar streams.
 
 ## SESSION PROTOCOLS
 closed: Planning mode. Screeners for prior session. No intraday scans.
