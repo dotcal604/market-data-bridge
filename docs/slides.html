@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Market Data Bridge — Status Update</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: #0f172a; color: #e2e8f0; overflow: hidden; }
+
+  .deck { width: 100vw; height: 100vh; position: relative; }
+  .slide { width: 100vw; height: 100vh; display: none; padding: 60px 80px; flex-direction: column; justify-content: center; }
+  .slide.active { display: flex; }
+
+  h1 { font-size: 2.8em; font-weight: 700; color: #f8fafc; margin-bottom: 12px; line-height: 1.15; }
+  h2 { font-size: 2em; font-weight: 600; color: #38bdf8; margin-bottom: 28px; letter-spacing: -0.02em; }
+  h3 { font-size: 1.3em; font-weight: 600; color: #94a3b8; margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.08em; }
+  p, li { font-size: 1.25em; line-height: 1.6; color: #cbd5e1; }
+  ul { list-style: none; padding: 0; }
+  ul li { padding: 8px 0; padding-left: 28px; position: relative; }
+  ul li::before { content: ''; position: absolute; left: 0; top: 18px; width: 12px; height: 12px; border-radius: 3px; background: #38bdf8; }
+
+  .subtitle { font-size: 1.4em; color: #94a3b8; margin-bottom: 40px; }
+  .meta { font-size: 1em; color: #64748b; margin-top: 20px; }
+
+  /* Grid layouts */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 10px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 30px; margin-top: 10px; }
+
+  .card { background: #1e293b; border-radius: 12px; padding: 28px; border: 1px solid #334155; }
+  .card h3 { color: #38bdf8; margin-bottom: 12px; text-transform: none; letter-spacing: normal; font-size: 1.15em; }
+  .card p { font-size: 1.05em; }
+  .card .big-num { font-size: 2.8em; font-weight: 700; color: #f8fafc; line-height: 1.1; margin-bottom: 4px; }
+
+  /* Status colors */
+  .green { color: #4ade80; }
+  .yellow { color: #facc15; }
+  .red { color: #f87171; }
+  .blue { color: #38bdf8; }
+
+  /* Table */
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  th { text-align: left; padding: 12px 16px; font-size: 0.95em; color: #94a3b8; border-bottom: 2px solid #334155; text-transform: uppercase; letter-spacing: 0.05em; }
+  td { padding: 12px 16px; font-size: 1.05em; border-bottom: 1px solid #1e293b; }
+  tr:hover td { background: #1e293b; }
+
+  .tag { display: inline-block; padding: 3px 10px; border-radius: 6px; font-size: 0.85em; font-weight: 600; margin-right: 6px; }
+  .tag-green { background: #064e3b; color: #4ade80; }
+  .tag-yellow { background: #422006; color: #facc15; }
+  .tag-red { background: #450a0a; color: #f87171; }
+
+  /* Architecture diagram */
+  .arch { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.95em; line-height: 1.5; color: #94a3b8; background: #1e293b; padding: 30px; border-radius: 12px; white-space: pre; overflow-x: auto; }
+  .arch .hl { color: #38bdf8; font-weight: 600; }
+
+  /* Navigation */
+  .nav { position: fixed; bottom: 30px; right: 40px; display: flex; gap: 12px; z-index: 100; }
+  .nav button { background: #1e293b; border: 1px solid #334155; color: #e2e8f0; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-size: 1em; transition: background 0.2s; }
+  .nav button:hover { background: #334155; }
+  .nav button:disabled { opacity: 0.3; cursor: default; }
+
+  .slide-counter { position: fixed; bottom: 36px; left: 40px; color: #475569; font-size: 0.95em; z-index: 100; }
+
+  /* Blocker list */
+  .blocker { display: flex; align-items: flex-start; gap: 16px; padding: 16px 0; border-bottom: 1px solid #1e293b; }
+  .blocker-icon { font-size: 1.6em; flex-shrink: 0; margin-top: 2px; }
+  .blocker-text h4 { font-size: 1.1em; color: #f8fafc; margin-bottom: 4px; }
+  .blocker-text p { font-size: 0.95em; color: #94a3b8; }
+
+  /* Timeline */
+  .timeline { margin-top: 20px; }
+  .phase { display: flex; gap: 24px; align-items: flex-start; padding: 20px 0; border-left: 3px solid #334155; padding-left: 28px; position: relative; }
+  .phase::before { content: ''; position: absolute; left: -8px; top: 24px; width: 13px; height: 13px; border-radius: 50%; background: #38bdf8; border: 3px solid #0f172a; }
+  .phase-label { font-size: 0.95em; font-weight: 600; color: #38bdf8; white-space: nowrap; min-width: 120px; }
+  .phase-items { font-size: 1.05em; color: #cbd5e1; }
+  .phase-items li { padding: 3px 0; }
+  .phase-items li::before { width: 8px; height: 8px; top: 13px; }
+</style>
+</head>
+<body>
+
+<div class="deck" id="deck">
+
+  <!-- SLIDE 1: Title -->
+  <div class="slide active">
+    <h3>Project Status Update</h3>
+    <h1>Market Data Bridge</h1>
+    <p class="subtitle">Connecting Interactive Brokers to AI assistants via MCP + REST</p>
+    <div class="meta">
+      <p>v3.0.0 &mdash; February 16, 2026</p>
+      <p style="margin-top: 4px; color: #475569;">TypeScript &bull; Node.js &bull; Next.js &bull; SQLite</p>
+    </div>
+  </div>
+
+  <!-- SLIDE 2: What is it -->
+  <div class="slide">
+    <h2>What Market Data Bridge Does</h2>
+    <div class="grid-2">
+      <div>
+        <ul>
+          <li>Bridges IBKR TWS to Claude, ChatGPT, and custom UIs</li>
+          <li>Real-time quotes, account data, and order execution</li>
+          <li>3-model AI eval engine (Claude + GPT-4o + Gemini)</li>
+          <li>Risk gate with session guardrails and position sizing</li>
+          <li>Trade journal, order history, and TraderSync import</li>
+        </ul>
+      </div>
+      <div>
+        <div class="card" style="margin-bottom: 20px;">
+          <h3>Protocols</h3>
+          <p><strong class="blue">MCP</strong> (stdio) &rarr; Claude Desktop / Claude Code</p>
+          <p><strong class="blue">REST</strong> (Express) &rarr; ChatGPT / Browser / Any HTTP client</p>
+        </div>
+        <div class="card">
+          <h3>Graceful Degradation</h3>
+          <p>TWS down? Yahoo Finance takes over for market data. IBKR-only features (account, orders) report connection status.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 3: By the Numbers -->
+  <div class="slide">
+    <h2>By the Numbers</h2>
+    <div class="grid-3">
+      <div class="card"><div class="big-num">16K</div><p>Lines of production TypeScript</p></div>
+      <div class="card"><div class="big-num">77</div><p>MCP tools registered</p></div>
+      <div class="card"><div class="big-num">71</div><p>REST API endpoints</p></div>
+      <div class="card"><div class="big-num">303</div><p>Unit + integration tests</p></div>
+      <div class="card"><div class="big-num">11</div><p>Frontend dashboard pages</p></div>
+      <div class="card"><div class="big-num">100</div><p>Commits in 3 days</p></div>
+    </div>
+  </div>
+
+  <!-- SLIDE 4: Architecture -->
+  <div class="slide">
+    <h2>Architecture</h2>
+    <div class="arch"><span class="hl">Clients</span>
+  Claude Desktop &bull; Claude Code &bull; ChatGPT &bull; Browser Dashboard
+       |  MCP (stdio)         |  REST (HTTP)        |  Next.js (3001)
+       v                      v                      v
+  +-----------+         +------------+         +-----------+
+  | <span class="hl">MCP Server</span> |         | <span class="hl">REST API</span>   |         | <span class="hl">Frontend</span>  |
+  | 77 tools  |         | 71 routes  |         | React 19  |
+  +-----------+         +------------+         +-----------+
+       \                      |                      /
+        +---------+-----------+----------+---------+
+                  |                      |
+          +-------v--------+    +--------v--------+
+          | <span class="hl">IBKR Module</span>    |    | <span class="hl">Eval Engine</span>    |
+          | Orders, Data,  |    | 3-model ensemble|
+          | Risk Gate,     |    | 13 features,    |
+          | Portfolio      |    | Drift detection |
+          +-------+--------+    +--------+--------+
+                  |                      |
+          +-------v--------+    +--------v--------+
+          | <span class="hl">SQLite DB</span>      |    | <span class="hl">LLM APIs</span>       |
+          | Orders, Evals, |    | Claude, GPT-4o, |
+          | Journal, Collab|    | Gemini          |
+          +-------+--------+    +-----------------+
+                  |
+          +-------v--------+    +----------------+
+          | <span class="hl">IBKR TWS</span>       |    | <span class="hl">Yahoo Finance</span>  |
+          | Live broker    |    | Fallback data  |
+          +----------------+    +----------------+</div>
+  </div>
+
+  <!-- SLIDE 5: Module Breakdown -->
+  <div class="slide">
+    <h2>Module Breakdown</h2>
+    <table>
+      <tr><th>Module</th><th>LOC</th><th>Status</th><th>Coverage</th></tr>
+      <tr>
+        <td>IBKR Integration</td><td>3,814</td>
+        <td><span class="tag tag-green">Working</span></td>
+        <td>Orders (786 LOC tests), risk gate, portfolio</td>
+      </tr>
+      <tr>
+        <td>REST API</td><td>4,472</td>
+        <td><span class="tag tag-green">Working</span></td>
+        <td>Rate limiting, auth, OpenAPI spec</td>
+      </tr>
+      <tr>
+        <td>Eval Engine</td><td>2,689</td>
+        <td><span class="tag tag-green">Working</span></td>
+        <td>13 feature test files, ensemble scorer tests</td>
+      </tr>
+      <tr>
+        <td>MCP Server</td><td>1,988</td>
+        <td><span class="tag tag-green">Working</span></td>
+        <td>77 tools with Zod validation</td>
+      </tr>
+      <tr>
+        <td>Database</td><td>1,578</td>
+        <td><span class="tag tag-green">Working</span></td>
+        <td>Schema + reconciliation + infrastructure tests</td>
+      </tr>
+      <tr>
+        <td>Frontend</td><td>~89 files</td>
+        <td><span class="tag tag-yellow">Early</span></td>
+        <td>11 pages, no frontend tests yet</td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- SLIDE 6: Test Health -->
+  <div class="slide">
+    <h2>Test Health</h2>
+    <div class="grid-2">
+      <div>
+        <div class="card" style="margin-bottom: 20px;">
+          <h3>Overall</h3>
+          <div class="big-num green">92.7%</div>
+          <p>281 passing / 303 total</p>
+          <p style="margin-top: 8px; font-size: 0.9em; color: #64748b;">22 test files &bull; 5,300 lines of test code</p>
+        </div>
+        <div class="card">
+          <h3>Passing Suites (21/22)</h3>
+          <p class="green">Orders &bull; Portfolio &bull; Risk calc &bull; All 13 eval features &bull; Ensemble scorer &bull; Drift detection &bull; Integration (order flow, risk gate) &bull; Infrastructure</p>
+        </div>
+      </div>
+      <div>
+        <div class="card" style="border-color: #991b1b;">
+          <h3 style="color: #f87171;">Failing: risk-gate.test.ts</h3>
+          <div class="big-num red">22</div>
+          <p>tests failing</p>
+          <p style="margin-top: 12px; font-size: 0.95em;">
+            <strong>Root cause:</strong> Timezone/date mocking issue. Tests hardcode UTC timestamps from Jan 2025. Risk gate converts to Eastern Time. Running on a weekend (2026-02-16) = "outside market hours" rejection.
+          </p>
+          <p style="margin-top: 8px; font-size: 0.95em; color: #94a3b8;">
+            <strong>Fix:</strong> Update <code>vi.setSystemTime()</code> calls to mock weekday dates that properly fall within market hours.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 7: What Works Well -->
+  <div class="slide">
+    <h2>What Works Well</h2>
+    <div class="grid-2">
+      <div>
+        <ul>
+          <li><strong>Dual-protocol serving</strong> &mdash; Same backend serves MCP (Claude) and REST (ChatGPT/browser) consistently</li>
+          <li><strong>IBKR resilience</strong> &mdash; Auto-reconnect with clientId collision recovery; graceful Yahoo fallback</li>
+          <li><strong>Risk controls</strong> &mdash; 6 layers: order size, notional cap, rate limit, daily loss, consecutive loss cooldown, late-day lockout</li>
+        </ul>
+      </div>
+      <div>
+        <ul>
+          <li><strong>Advanced brackets</strong> &mdash; OCA groups, trailing stops, parent-child linking, full DB persistence</li>
+          <li><strong>3-model eval ensemble</strong> &mdash; Claude + GPT-4o + Gemini with 13 quantitative features, drift detection, weight tuning</li>
+          <li><strong>Test coverage on money paths</strong> &mdash; Order placement, risk gate, and all eval features have dedicated test suites</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 8: Known Issues -->
+  <div class="slide">
+    <h2>Known Issues</h2>
+    <table>
+      <tr><th>Issue</th><th>Severity</th><th>Impact</th></tr>
+      <tr>
+        <td>Risk gate test timezone bug (22 tests)</td>
+        <td><span class="tag tag-red">High</span></td>
+        <td>Can't trust test suite as a merge gate</td>
+      </tr>
+      <tr>
+        <td>API key comparison not timing-safe</td>
+        <td><span class="tag tag-red">High</span></td>
+        <td>Theoretical timing attack on REST auth</td>
+      </tr>
+      <tr>
+        <td>No CI pipeline</td>
+        <td><span class="tag tag-red">High</span></td>
+        <td>Tests can regress silently on merge</td>
+      </tr>
+      <tr>
+        <td>DB writes before IBKR submission (no rollback)</td>
+        <td><span class="tag tag-yellow">Medium</span></td>
+        <td>Orphaned DB records if IBKR rejects order</td>
+      </tr>
+      <tr>
+        <td>6 hardcoded timeouts in order module</td>
+        <td><span class="tag tag-yellow">Medium</span></td>
+        <td>Can't tune for network conditions</td>
+      </tr>
+      <tr>
+        <td>Eval config values hardcoded</td>
+        <td><span class="tag tag-yellow">Medium</span></td>
+        <td>Trading window + ensemble params not env-configurable</td>
+      </tr>
+      <tr>
+        <td>No Docker / containerization</td>
+        <td><span class="tag tag-yellow">Medium</span></td>
+        <td>Deployment is manual node process</td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- SLIDE 9: Blockers -->
+  <div class="slide">
+    <h2>Blockers</h2>
+    <div style="max-width: 900px;">
+      <div class="blocker">
+        <div class="blocker-icon red">1</div>
+        <div class="blocker-text">
+          <h4>No CI Pipeline</h4>
+          <p>152 PRs merged with no automated test gate. Tests can silently regress.<br><strong>Mitigation:</strong> Add GitHub Actions workflow running <code>npm test</code> on PR.</p>
+        </div>
+      </div>
+      <div class="blocker">
+        <div class="blocker-icon red">2</div>
+        <div class="blocker-text">
+          <h4>Risk Gate Tests Broken</h4>
+          <p>22 failures mask real regressions. Can't use test suite as a safety net until fixed.<br><strong>Mitigation:</strong> Fix timezone mocking in test setup. Straightforward fix.</p>
+        </div>
+      </div>
+      <div class="blocker">
+        <div class="blocker-icon yellow">3</div>
+        <div class="blocker-text">
+          <h4>IBKR Requires Live TWS for Integration Testing</h4>
+          <p>Order execution can't be tested in CI without a running TWS instance.<br><strong>Mitigation:</strong> Build mock IBKR adapter for integration tests.</p>
+        </div>
+      </div>
+      <div class="blocker">
+        <div class="blocker-icon yellow">4</div>
+        <div class="blocker-text">
+          <h4>Solo Developer (Bus Factor = 1)</h4>
+          <p>All project context lives in one person's head.<br><strong>Mitigation:</strong> CLAUDE.md, this status doc, AI-assisted workflows for continuity.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 10: Roadmap -->
+  <div class="slide">
+    <h2>Roadmap</h2>
+    <div class="timeline">
+      <div class="phase">
+        <div class="phase-label">Phase 1<br><span style="color: #94a3b8; font-weight: 400; font-size: 0.9em;">Stabilize<br>Weeks 1-2</span></div>
+        <ul class="phase-items">
+          <li>Fix risk-gate timezone test failures</li>
+          <li>Timing-safe API key comparison</li>
+          <li>Extract all hardcoded timeouts to config</li>
+          <li>GitHub Actions CI (test on PR)</li>
+          <li>Dockerfile for containerized deployment</li>
+        </ul>
+      </div>
+      <div class="phase">
+        <div class="phase-label">Phase 2<br><span style="color: #94a3b8; font-weight: 400; font-size: 0.9em;">Harden<br>Weeks 3-4</span></div>
+        <ul class="phase-items">
+          <li>Negative/edge-case tests for order execution</li>
+          <li>DB transaction rollback on IBKR rejection</li>
+          <li>Rate limits + eval config via env vars</li>
+          <li>Mock IBKR adapter for CI integration tests</li>
+        </ul>
+      </div>
+      <div class="phase">
+        <div class="phase-label">Phase 3<br><span style="color: #94a3b8; font-weight: 400; font-size: 0.9em;">Polish<br>Weeks 5-8</span></div>
+        <ul class="phase-items">
+          <li>Frontend: order entry, real-time updates, mobile</li>
+          <li>Eval engine backtesting and replay</li>
+          <li>Monitoring, health checks, alerting</li>
+          <li>Generated API docs, architecture decision records</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 11: Next Steps -->
+  <div class="slide">
+    <h2>Immediate Next Steps</h2>
+    <div class="grid-2">
+      <div class="card" style="border-color: #166534;">
+        <h3 style="color: #4ade80;">This Week</h3>
+        <ul>
+          <li>Fix risk-gate test timezone bug</li>
+          <li>Add <code>crypto.timingSafeEqual</code> for API auth</li>
+          <li>Set up GitHub Actions CI workflow</li>
+          <li>Extract hardcoded timeouts to env vars</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Decisions Needed</h3>
+        <ul>
+          <li>Docker vs bare-metal deployment strategy?</li>
+          <li>Frontend priority vs backend hardening?</li>
+          <li>Eval engine: more features or backtesting first?</li>
+          <li>When to move from paper to live trading?</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Navigation -->
+<div class="nav">
+  <button id="prev" onclick="go(-1)">&larr; Prev</button>
+  <button id="next" onclick="go(1)">Next &rarr;</button>
+</div>
+<div class="slide-counter" id="counter"></div>
+
+<script>
+  let current = 0;
+  const slides = document.querySelectorAll('.slide');
+  const total = slides.length;
+
+  function show(n) {
+    slides.forEach(s => s.classList.remove('active'));
+    slides[n].classList.add('active');
+    document.getElementById('counter').textContent = `${n + 1} / ${total}`;
+    document.getElementById('prev').disabled = n === 0;
+    document.getElementById('next').disabled = n === total - 1;
+  }
+
+  function go(dir) {
+    const next = current + dir;
+    if (next >= 0 && next < total) { current = next; show(current); }
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); go(1); }
+    if (e.key === 'ArrowLeft') { e.preventDefault(); go(-1); }
+  });
+
+  show(0);
+</script>
+</body>
+</html>
