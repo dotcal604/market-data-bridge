@@ -1250,7 +1250,8 @@ router.post("/risk/size-position", async (req, res) => {
       return;
     }
 
-    const result = await calculatePositionSize({ symbol, entryPrice, stopPrice, riskPercent, riskAmount, maxCapitalPercent });
+    const { volatilityRegime } = req.body ?? {};
+    const result = await calculatePositionSize({ symbol, entryPrice, stopPrice, riskPercent, riskAmount, maxCapitalPercent, volatilityRegime });
     res.json(result);
   } catch (e: any) {
     res.status(500).json({ error: e.message });

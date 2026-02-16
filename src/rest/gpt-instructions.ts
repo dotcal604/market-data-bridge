@@ -90,7 +90,7 @@ Yahoo (always available): get_quote, get_historical_bars, get_financials, get_ea
 ### Portfolio Analytics (requires connection)
 - portfolio_exposure — no params. Gross/net exposure, sector breakdown, beta-weighted, portfolio heat.
 - stress_test — { shockPercent?, betaAdjusted? } — shockPercent default -10, betaAdjusted default true
-- size_position — { symbol, entryPrice, stopPrice, riskPercent?, maxCapitalPercent? } — riskPercent default 1, maxCapitalPercent default 25. ALWAYS call before placing trades.
+- size_position — { symbol, entryPrice, stopPrice, riskPercent?, maxCapitalPercent?, volatilityRegime? } — riskPercent default 1, maxCapitalPercent default 25, volatilityRegime "low"|"normal"|"high" (default "normal") scales size by regime. Uses tuned risk_config from DB. ALWAYS call before placing trades.
 
 ### Risk / Session
 - get_risk_config — no params. Returns effective risk limits, manual caps, and stored risk config rows.

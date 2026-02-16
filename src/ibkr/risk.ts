@@ -1,4 +1,6 @@
 import { getAccountSummary, type AccountSummaryData } from "./account.js";
+import { getRiskConfigRows } from "../db/database.js";
+import { RISK_CONFIG_DEFAULTS } from "../db/schema.js";
 import { logRisk } from "../logging.js";
 
 export interface PositionSizeRequest {
@@ -8,6 +10,8 @@ export interface PositionSizeRequest {
   riskPercent?: number;
   riskAmount?: number;
   maxCapitalPercent?: number;
+  /** Current volatility regime — "low", "normal", "high". Scales position down in high-vol. */
+  volatilityRegime?: string;
 }
 
 export interface PositionSizeResponse {
@@ -21,8 +25,11 @@ export interface PositionSizeResponse {
     byRisk: number;
     byCapital: number;
     byMargin: number;
-    binding: "byRisk" | "byCapital" | "byMargin";
+    byConfig: number;
+    binding: "byRisk" | "byCapital" | "byMargin" | "byConfig";
   };
+  regime: string;
+  volatilityScalar: number;
   warnings: string[];
   netLiquidation: number;
 }
@@ -33,9 +40,35 @@ const MARGIN_MULTIPLIER = 0.25; // 25% initial margin estimate for RegT
 const LARGE_GAP_THRESHOLD = 0.20; // 20% gap between entry and stop
 const LARGE_GAP_REDUCTION = 0.50; // 50% size reduction for large gaps
 
+// Regime-based scaling factors applied to position size
+const REGIME_SCALARS: Record<string, number> = {
+  low: 1.0,     // full size in low-vol regime
+  normal: 0.75, // 75% in normal vol
+  high: 0.5,    // 50% in high vol
+};
+
+/** Load effective risk config from DB (tuned values) with defaults fallback */
+function loadTunedRiskConfig(): { max_position_pct: number; volatility_scalar: number } {
+  try {
+    const rows = getRiskConfigRows();
+    const byParam = new Map(rows.map((r) => [r.param, r.value]));
+    return {
+      max_position_pct: byParam.get("max_position_pct") ?? RISK_CONFIG_DEFAULTS.max_position_pct,
+      volatility_scalar: byParam.get("volatility_scalar") ?? RISK_CONFIG_DEFAULTS.volatility_scalar,
+    };
+  } catch {
+    return {
+      max_position_pct: RISK_CONFIG_DEFAULTS.max_position_pct,
+      volatility_scalar: RISK_CONFIG_DEFAULTS.volatility_scalar,
+    };
+  }
+}
+
 export async function calculatePositionSize(
   request: PositionSizeRequest
 ): Promise<PositionSizeResponse> {
+  const tunedConfig = loadTunedRiskConfig();
+
   const {
     symbol,
     entryPrice,
@@ -90,8 +123,11 @@ export async function calculatePositionSize(
         byRisk: 0,
         byCapital: 0,
         byMargin: 0,
+        byConfig: 0,
         binding: "byRisk",
       },
+      regime: request.volatilityRegime ?? "normal",
+      volatilityScalar: 1,
       warnings: ["Stop price equals entry price - no risk buffer defined"],
       netLiquidation: netLiq,
     };
@@ -122,16 +158,36 @@ export async function calculatePositionSize(
     );
   }
 
-  // Find the binding constraint
+  // Apply tuned max_position_pct cap from risk_config
+  const maxSharesByConfig = Math.floor((netLiq * tunedConfig.max_position_pct) / entryPrice);
+
+  // Find the binding constraint (now includes tuned config cap)
   const constraints = [
     { name: "byRisk" as const, shares: sharesByRisk },
     { name: "byCapital" as const, shares: sharesByCapital },
     { name: "byMargin" as const, shares: sharesByMargin },
+    { name: "byConfig" as const, shares: maxSharesByConfig },
   ];
   const binding = constraints.reduce((min, curr) =>
     curr.shares < min.shares ? curr : min
   );
-  const recommendedShares = Math.max(0, binding.shares);
+  let recommendedShares = Math.max(0, binding.shares);
+
+  // Apply regime-based volatility scaling
+  const regime = request.volatilityRegime ?? "normal";
+  const regimeScalar = REGIME_SCALARS[regime] ?? 0.75;
+  const volScalar = tunedConfig.volatility_scalar;
+  const combinedScalar = regimeScalar * volScalar;
+
+  if (combinedScalar < 1.0) {
+    const preScaleShares = recommendedShares;
+    recommendedShares = Math.floor(recommendedShares * combinedScalar);
+    if (preScaleShares !== recommendedShares) {
+      warnings.push(
+        `Volatility-scaled: ${preScaleShares} → ${recommendedShares} shares (regime=${regime}, scalar=${combinedScalar.toFixed(2)})`,
+      );
+    }
+  }
 
   // Calculate totals
   const totalCapital = recommendedShares * entryPrice;
@@ -153,12 +209,14 @@ export async function calculatePositionSize(
       stopPrice,
       recommendedShares,
       binding: binding.name,
+      regime,
+      combinedScalar,
       riskPerShare,
       totalRisk,
       percentOfEquity,
       warnings,
     },
-    `Position size calculated: ${recommendedShares} shares (${binding.name})`
+    `Position size calculated: ${recommendedShares} shares (${binding.name}, regime=${regime})`,
   );
 
   return {
@@ -172,8 +230,11 @@ export async function calculatePositionSize(
       byRisk: sharesByRisk,
       byCapital: sharesByCapital,
       byMargin: sharesByMargin,
+      byConfig: maxSharesByConfig,
       binding: binding.name,
     },
+    regime,
+    volatilityScalar: combinedScalar,
     warnings,
     netLiquidation: netLiq,
   };

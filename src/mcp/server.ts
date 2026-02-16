@@ -1486,6 +1486,7 @@ export function createMcpServer(): McpServer {
       riskPercent: z.number().positive().max(100).optional().describe("Max % of net liquidation to risk (default 1%)"),
       riskAmount: z.number().positive().optional().describe("Absolute dollar risk cap (overrides riskPercent if provided)"),
       maxCapitalPercent: z.number().positive().max(100).optional().describe("Max % of equity in this position (default 10%)"),
+      volatilityRegime: z.enum(["low", "normal", "high"]).optional().describe("Current volatility regime — scales position down in high vol (default: normal)"),
     },
     async (params) => {
       if (!isConnected()) {

@@ -2,6 +2,7 @@ import { isConnected } from "./ibkr/connection.js";
 import { getAccountSummary, getPositions } from "./ibkr/account.js";
 import { flattenAllPositions } from "./ibkr/orders.js";
 import { insertAccountSnapshot, insertPositionSnapshot } from "./db/database.js";
+import { computeDriftReport, type DriftReport } from "./eval/drift.js";
 import { logger } from "./logging.js";
 
 const log = logger.child({ subsystem: "scheduler" });
@@ -55,6 +56,67 @@ async function takeSnapshots() {
   } catch (e: any) {
     log.error({ err: e }, "Periodic snapshot failed");
   }
+}
+
+// ── Drift Check (scheduled) ──────────────────────────────────────────────
+
+let lastDriftState: { regime_shift_detected: boolean; overall_accuracy: number } | null = null;
+let driftTimer: ReturnType<typeof setInterval> | null = null;
+const DRIFT_CHECK_MS = 30 * 60 * 1000; // every 30 minutes
+
+function checkDrift() {
+  if (!isMarketActive()) return;
+
+  try {
+    const report: DriftReport = computeDriftReport();
+    const prev = lastDriftState;
+
+    // Log on first run or state change
+    if (!prev) {
+      log.info(
+        { regime_shift: report.regime_shift_detected, accuracy: report.overall_accuracy, models: report.by_model.length },
+        "Drift baseline established",
+      );
+    } else if (report.regime_shift_detected && !prev.regime_shift_detected) {
+      // Regime shift just detected — alert
+      const shiftedModels = report.by_model
+        .filter((m) => m.regime_shift_detected)
+        .map((m) => `${m.model_id} (last_50=${m.rolling_accuracy.last_50}, last_10=${m.rolling_accuracy.last_10})`);
+
+      log.warn(
+        {
+          regime_shift: true,
+          overall_accuracy: report.overall_accuracy,
+          shifted_models: shiftedModels,
+          recommendation: report.recommendation,
+        },
+        `DRIFT ALERT: Regime shift detected — ${shiftedModels.length} model(s) degrading`,
+      );
+    } else if (!report.regime_shift_detected && prev.regime_shift_detected) {
+      log.info(
+        { regime_shift: false, accuracy: report.overall_accuracy },
+        "Drift alert cleared — regime shift resolved",
+      );
+    } else if (Math.abs(report.overall_accuracy - prev.overall_accuracy) > 0.05) {
+      // Accuracy moved more than 5% — worth noting
+      const direction = report.overall_accuracy < prev.overall_accuracy ? "degraded" : "improved";
+      log.info(
+        { prev_accuracy: prev.overall_accuracy, accuracy: report.overall_accuracy, direction },
+        `Model accuracy ${direction}: ${prev.overall_accuracy} → ${report.overall_accuracy}`,
+      );
+    }
+
+    lastDriftState = {
+      regime_shift_detected: report.regime_shift_detected,
+      overall_accuracy: report.overall_accuracy,
+    };
+  } catch (e: any) {
+    log.error({ err: e }, "Drift check failed");
+  }
+}
+
+export function getLastDriftState() {
+  return lastDriftState;
 }
 
 // ── EOD Flatten (3:55 PM ET) ─────────────────────────────────────────────
@@ -161,6 +223,14 @@ export function startScheduler(intervalMs: number = DEFAULT_INTERVAL_MS) {
       "EOD flatten scheduler armed",
     );
   }
+
+  // Start drift monitoring (30-min interval)
+  if (!driftTimer) {
+    driftTimer = setInterval(checkDrift, DRIFT_CHECK_MS);
+    // Run first check after 60s (let DB settle on startup)
+    setTimeout(checkDrift, 60_000);
+    log.info({ intervalMin: DRIFT_CHECK_MS / 60_000 }, "Drift monitor armed — checking every 30 min during market hours");
+  }
 }
 
 export function stopScheduler() {
@@ -171,6 +241,10 @@ export function stopScheduler() {
   if (flattenTimer) {
     clearInterval(flattenTimer);
     flattenTimer = null;
+  }
+  if (driftTimer) {
+    clearInterval(driftTimer);
+    driftTimer = null;
   }
   log.info("Scheduler stopped");
 }

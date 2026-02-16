@@ -35,8 +35,8 @@ Every backlog item is scored on 5 dimensions (1-5 scale):
 ## Current State
 
 - **Backend**: 68 REST endpoints, 75 MCP tools, 10 SQLite tables, 3-model eval engine
-- **Frontend**: 14 pages — Dashboard, Evals, Model Stats, Weights, Journal, Executions, Orders, Account, Collab
-- **Tests**: 201 passing (16 test files) — Vitest + in-memory SQLite
+- **Frontend**: 18 pages — Dashboard, Evals, Model Stats, Weights, Journal, Executions, Orders, Account, Collab, Market (symbol lookup, price chart, news/earnings, screener)
+- **Tests**: 284 passing (22 test files) — Vitest + in-memory SQLite
 - **SDK versions**: @anthropic-ai/sdk 0.74, openai 6.21, @google/genai 1.0, @stoqey/ib 1.5.3
 - **MCP transport**: Streamable HTTP at `/mcp` for ChatGPT connector (session management, 30-min idle TTL)
 - **Hardening**: Input validation on order routes, symbol regex, crash handlers, safe JSON parsing
@@ -52,13 +52,13 @@ These directly increase or measure trading edge. **Priority over everything else
 | Item | EI | Thesis | Status | Agent | Notes |
 |------|----|--------|--------|-------|-------|
 | **Daily session summary** | 5 | B | **Done** | Claude Code | P&L, win rate, avg R per session. `GET /eval/daily-summary` + `daily_summary` MCP tool. Rolling totals. |
-| **Confidence calibration tracking** | 5 | B | Assigned | Codex | #56 — Brier score per model, calibration curve. Requires 50+ outcomes. `analytics/calibration.py` |
-| **Structured reasoning log** | 5 | A,B | Not started | Claude Code | `eval_reasoning` table — per-model key_drivers, risk_factors, uncertainties as JSON. Enables drift detection + disagreement diagnosis. ~50 LOC in eval pipeline |
-| **Regime-conditioned accuracy** | 5 | C | Assigned | Codex | #57 — Win rate by volatility_regime × time_of_day × liquidity_bucket. `analytics/regime.py` |
-| **Weight recalibration script** | 4 | B | Assigned | Codex | #58 — Compute performance scores from outcomes, normalize weights, write `data/weights.json`. Automated edge tuning. |
-| **Drift reconciliation** | 4 | B,C | Not started | Claude Code | Detect when model predictions diverge from recent outcomes. Alert when ensemble is miscalibrated. |
-| **Model agreement analysis** | 4 | B | Assigned | Codex | #59 — Unanimous/majority/split classification. Track: does agreement predict outcome? |
-| **Risk gate tuning** | 4 | A | Not started | Claude Code | Parameterize risk limits from data (max position size by regime, volatility-adjusted sizing) |
+| **Confidence calibration tracking** | 5 | B | **Done** | Codex | #56 — Brier score per model, calibration curve. `analytics/calibration.py` |
+| **Structured reasoning log** | 5 | A,B | **Done** | Claude Code | `src/eval/reasoning/extractor.ts` — per-model key_drivers, risk_factors, uncertainties as JSON. Enables drift detection + disagreement diagnosis. |
+| **Regime-conditioned accuracy** | 5 | C | **Done** | Codex | #57 — Win rate by volatility_regime × time_of_day × liquidity_bucket. `analytics/regime.py` |
+| **Weight recalibration script** | 4 | B | **Done** | Codex | #58 — Compute performance scores from outcomes, normalize weights, write `data/weights.json`. |
+| **Drift reconciliation** | 4 | B,C | **Done** | Claude Code | `src/eval/drift.ts` — rolling accuracy, calibration by decile, regime shift detection, REST + MCP tool. Automated alerting via scheduler (30-min checks during market hours, WARN-level log on regime shift). Dead code `drift-detector.ts` removed. |
+| **Model agreement analysis** | 4 | B | **Done** | Codex | #59 — Unanimous/majority/split classification. Track: does agreement predict outcome? |
+| **Risk gate tuning** | 4 | A | **Done** | Claude Code | risk_config table, half-Kelly auto-tuning, volatility_scalar, REST/MCP endpoints, risk gate enforcement. `calculatePositionSize` now reads tuned config from DB (max_position_pct, volatility_scalar). Regime-based scaling: low=1.0×, normal=0.75×, high=0.5× via `volatilityRegime` param on REST, MCP, and agent routes. |
 | **Weight simulation endpoint** | 4 | B | **Done** | Claude Code | `POST /api/eval/weights/simulate` + `simulate_weights` MCP tool. Re-scores historical evals with custom weights. |
 
 ---
@@ -71,7 +71,7 @@ Protect capital and prevent silent failures.
 |------|----|--------|-------|-------|
 | **Input validation hardening** | 3 | **Done** | Claude Code | Symbol regex, order price validation, limit capping, crash handlers |
 | **Risk gate unit tests** | 3 | **Done** | Copilot | PR #36 — 34 tests |
-| **Weight history tracking** | 3 | Not started | Claude Code | INSERT into existing weight_history table on each recalibration. Audit trail. |
+| **Weight history tracking** | 3 | **Done** | Claude Code | `insertWeightHistory()` — records each recalibration. Audit trail. |
 | **Min TWS version check** | 3 | Not started | Claude Code | Startup warning if connected TWS < 10.30 |
 | **One-message bracket orders** | 3 | Blocked | — | Depends on @stoqey/ib update for TWS 10.42. Reduces race conditions. |
 
@@ -88,10 +88,10 @@ See what's happening. Required before edge experiments can be measured.
 | **Journal history + detail** | 2 | **Done** | Copilot | PR #54 — searchable, outcome updates |
 | **Score scatter chart** | 2 | **Done** | Copilot | PR #11 |
 | **Eval outcomes endpoint** | 2 | **Done** | Claude Code | `GET /api/eval/outcomes` + `eval_outcomes` MCP tool. Evals joined with outcomes — unblocks calibration + regime analytics. |
-| **Score distribution histogram** | 2 | Assigned | Copilot | #120 — 3-model overlay in 10-point buckets |
-| **Calibration curve UI** | 2 | Assigned | Copilot | #126 — Predicted confidence vs actual win rate |
-| **Model agreement heatmap** | 2 | Assigned | Copilot | #127 — Pairwise agreement rates, divergence signals |
-| **Run Comparer** | 2 | Assigned | Copilot | #121 — Select 2-5 evals, side-by-side comparison |
+| **Score distribution histogram** | 2 | **Done** | Copilot | PR #129 — 3-model overlay in 10-point buckets |
+| **Calibration curve UI** | 2 | **Done** | Copilot | PR #152 — Predicted confidence vs actual win rate |
+| **Model agreement heatmap** | 2 | **Done** | Copilot | PR #152 — Pairwise agreement rates, divergence signals |
+| **Run Comparer** | 2 | **Done** | Copilot | #121 — Select 2-5 evals, side-by-side comparison |
 | **Collab channel feed** | 2 | **Done** | Copilot | PR #55 — human visibility into AI-to-AI chat |
 
 ---
@@ -128,10 +128,10 @@ Frontend pages exposing the 68 REST endpoints that currently have no UI.
 
 | Item | EI | Status | Agent | Notes |
 |------|----|--------|-------|-------|
-| **Symbol lookup + quote** | 1 | Assigned | Copilot | #122 — Search, live quote, company info |
-| **Price chart** | 1 | Assigned | Copilot | #123 — Historical bars, period selector |
-| **News + earnings** | 1 | Assigned | Copilot | #124 — News feed, earnings history, trending |
-| **Stock screener** | 1 | Assigned | Copilot | #125 — Pre-built screeners, results table |
+| **Symbol lookup + quote** | 1 | **Done** | Copilot | PR #131 — Search, live quote, company info |
+| **Price chart** | 1 | **Done** | Copilot | PR #151 — Historical bars, period selector |
+| **News + earnings** | 1 | **Done** | Copilot | PR #151 — News feed, earnings history, trending |
+| **Stock screener** | 1 | **Done** | Copilot | PR #150 — Pre-built screeners, results table |
 
 ---
 

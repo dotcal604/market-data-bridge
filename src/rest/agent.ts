@@ -148,7 +148,7 @@ const actions: Record<string, ActionHandler> = {
   // ── Portfolio Analytics ──
   portfolio_exposure: async () => { requireIBKR(); return computePortfolioExposure(); },
   stress_test: async (p) => { requireIBKR(); return runPortfolioStressTest(num(p, "shockPercent", -10), bool(p, "betaAdjusted", true)); },
-  size_position: async (p) => { requireIBKR(); return calculatePositionSize({ symbol: str(p, "symbol"), entryPrice: num(p, "entryPrice"), stopPrice: num(p, "stopPrice"), riskPercent: num(p, "riskPercent", 1), maxCapitalPercent: num(p, "maxCapitalPercent", 25) }); },
+  size_position: async (p) => { requireIBKR(); return calculatePositionSize({ symbol: str(p, "symbol"), entryPrice: num(p, "entryPrice"), stopPrice: num(p, "stopPrice"), riskPercent: num(p, "riskPercent", 1), maxCapitalPercent: num(p, "maxCapitalPercent", 25), volatilityRegime: typeof p.volatilityRegime === "string" ? p.volatilityRegime : undefined }); },
 
   // ── Risk / Session ──
   get_risk_config: async () => getRiskGateConfig(),
