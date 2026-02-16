@@ -24,7 +24,7 @@ export function getIB(): IBApi {
     ib.on(EventName.connected, () => {
       connected = true;
       clientIdRetries = 0;
-      console.error(`[IBKR] Connected to TWS/Gateway (clientId=${currentClientId})`);
+      console.error(`[IBKR] Connected to TWS/Gateway (clientId=${currentClientId}, mode=${accountMode()}, port=${config.ibkr.port})`);
       if (reconnectTimer) {
         clearTimeout(reconnectTimer);
         reconnectTimer = null;
@@ -133,11 +133,20 @@ export function isConnected(): boolean {
   return connected;
 }
 
+/** Derive account mode from port convention: 7497/4002 = paper, 7496/4001 = live */
+function accountMode(): "paper" | "live" | "unknown" {
+  const p = config.ibkr.port;
+  if (p === 7497 || p === 4002) return "paper";
+  if (p === 7496 || p === 4001) return "live";
+  return "unknown";
+}
+
 export function getConnectionStatus() {
   return {
     connected,
     host: config.ibkr.host,
     port: config.ibkr.port,
     clientId: currentClientId,
+    mode: accountMode(),
   };
 }
