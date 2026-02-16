@@ -13,6 +13,7 @@ import { runReconciliation } from "./db/reconcile.js";
 import { closeDb } from "./db/database.js";
 import { startScheduler, stopScheduler } from "./scheduler.js";
 import { initWeights } from "./eval/ensemble/weights.js";
+import { unsubscribeAll } from "./ibkr/subscriptions.js";
 
 type Mode = "mcp" | "rest" | "both";
 
@@ -77,6 +78,7 @@ async function main() {
   const shutdown = () => {
     logger.info("Shutting down...");
     stopScheduler();
+    unsubscribeAll();
     disconnect();
     closeDb();
     process.exit(0);

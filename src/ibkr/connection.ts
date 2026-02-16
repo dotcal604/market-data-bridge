@@ -8,6 +8,12 @@ let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 // Randomize clientId to avoid collisions when Desktop spawns multiple MCP processes
 let currentClientId = config.ibkr.clientId + Math.floor(Math.random() * 100);
 let clientIdRetries = 0;
+let onReconnectCallback: (() => void) | null = null;
+
+/** Register a callback to run after reconnection (used by subscriptions manager) */
+export function onReconnect(cb: () => void): void {
+  onReconnectCallback = cb;
+}
 
 export function getNextReqId(): number {
   return nextReqId++;
@@ -25,6 +31,11 @@ export function getIB(): IBApi {
       connected = true;
       clientIdRetries = 0;
       console.error(`[IBKR] Connected to TWS/Gateway (clientId=${currentClientId}, mode=${accountMode()}, port=${config.ibkr.port})`);
+      if (onReconnectCallback) {
+        try { onReconnectCallback(); } catch (e: any) {
+          console.error(`[IBKR] Reconnect callback error: ${e.message}`);
+        }
+      }
       if (reconnectTimer) {
         clearTimeout(reconnectTimer);
         reconnectTimer = null;

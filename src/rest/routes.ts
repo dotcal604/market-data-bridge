@@ -26,6 +26,11 @@ import { getContractDetails } from "../ibkr/contracts.js";
 import { getIBKRQuote, getHistoricalTicks } from "../ibkr/marketdata.js";
 import { reqHistoricalNews, reqNewsArticle, reqNewsBulletins, reqNewsProviders } from "../ibkr/news.js";
 import {
+  subscribeRealTimeBars, unsubscribeRealTimeBars, getRealTimeBars,
+  subscribeAccountUpdates, unsubscribeAccountUpdates, getAccountSnapshot,
+  getScannerParameters, listSubscriptions,
+} from "../ibkr/subscriptions.js";
+import {
   calculateImpliedVolatility,
   calculateOptionPrice,
   reqAutoOpenOrders,
@@ -1451,4 +1456,79 @@ router.get("/gpt-instructions", (_req, res) => {
     role: "system",
     instructions: getGptInstructions(),
   });
+});
+
+// =====================================================================
+// STREAMING SUBSCRIPTIONS
+// =====================================================================
+
+// POST /api/subscriptions/real-time-bars — Start 5s bar stream
+router.post("/subscriptions/real-time-bars", (req, res) => {
+  if (!isConnected()) { res.status(503).json({ error: "IBKR not connected" }); return; }
+  try {
+    const info = subscribeRealTimeBars(req.body ?? {});
+    res.status(201).json(info);
+  } catch (e: any) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// DELETE /api/subscriptions/real-time-bars/:id — Cancel bar stream
+router.delete("/subscriptions/real-time-bars/:id", (req, res) => {
+  const removed = unsubscribeRealTimeBars(req.params.id);
+  res.json({ removed });
+});
+
+// GET /api/subscriptions/real-time-bars/:id/bars — Poll buffered bars
+router.get("/subscriptions/real-time-bars/:id/bars", (req, res) => {
+  try {
+    const limit = Math.min(parseInt(qs(req.query.limit, "60"), 10) || 60, 300);
+    const bars = getRealTimeBars(req.params.id, limit);
+    res.json({ subscriptionId: req.params.id, count: bars.length, bars });
+  } catch (e: any) {
+    res.status(404).json({ error: e.message });
+  }
+});
+
+// POST /api/subscriptions/account-updates — Start account stream
+router.post("/subscriptions/account-updates", (req, res) => {
+  if (!isConnected()) { res.status(503).json({ error: "IBKR not connected" }); return; }
+  try {
+    const { account } = req.body ?? {};
+    if (!account) { res.status(400).json({ error: "account is required" }); return; }
+    const info = subscribeAccountUpdates(account);
+    res.status(201).json(info);
+  } catch (e: any) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// DELETE /api/subscriptions/account-updates — Cancel account stream
+router.delete("/subscriptions/account-updates", (_req, res) => {
+  const removed = unsubscribeAccountUpdates();
+  res.json({ removed });
+});
+
+// GET /api/subscriptions/account-updates/snapshot — Poll account data
+router.get("/subscriptions/account-updates/snapshot", (_req, res) => {
+  const snapshot = getAccountSnapshot();
+  if (!snapshot) { res.status(404).json({ error: "No active account updates subscription" }); return; }
+  res.json(snapshot);
+});
+
+// GET /api/subscriptions/scanner-parameters — Cached scanner params XML
+router.get("/subscriptions/scanner-parameters", async (_req, res) => {
+  if (!isConnected()) { res.status(503).json({ error: "IBKR not connected" }); return; }
+  try {
+    const xml = await getScannerParameters();
+    res.type("application/xml").send(xml);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/subscriptions — List all active subscriptions
+router.get("/subscriptions", (_req, res) => {
+  const subs = listSubscriptions();
+  res.json({ count: subs.length, subscriptions: subs });
 });

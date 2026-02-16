@@ -25,6 +25,11 @@ import { getContractDetails } from "../ibkr/contracts.js";
 import { getIBKRQuote, getHistoricalTicks } from "../ibkr/marketdata.js";
 import { reqHistoricalNews, reqNewsArticle, reqNewsBulletins, reqNewsProviders } from "../ibkr/news.js";
 import {
+  subscribeRealTimeBars, unsubscribeRealTimeBars, getRealTimeBars,
+  subscribeAccountUpdates, unsubscribeAccountUpdates, getAccountSnapshot,
+  getScannerParameters, listSubscriptions,
+} from "../ibkr/subscriptions.js";
+import {
   calculateImpliedVolatility,
   calculateOptionPrice,
   reqAutoOpenOrders,
@@ -655,6 +660,120 @@ export function createMcpServer(): McpServer {
       } catch (e: any) {
         return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
       }
+    }
+  );
+
+  // =====================================================================
+  // STREAMING SUBSCRIPTIONS (src/ibkr/subscriptions.ts)
+  // =====================================================================
+
+  server.tool(
+    "subscribe_real_time_bars",
+    "Subscribe to IBKR 5-second real-time bars. Returns subscription ID. Poll with get_real_time_bars. Max ~50 concurrent.",
+    {
+      symbol: z.string().describe("Ticker symbol, e.g. AAPL"),
+      secType: z.string().optional().describe("Security type: STK, FUT, OPT (default: STK)"),
+      exchange: z.string().optional().describe("Exchange (default: SMART)"),
+      currency: z.string().optional().describe("Currency (default: USD)"),
+      whatToShow: z.string().optional().describe("TRADES, MIDPOINT, BID, ASK (default: TRADES)"),
+      useRTH: z.boolean().optional().describe("Regular trading hours only (default: true)"),
+    },
+    async (params) => {
+      if (!isConnected()) return { content: [{ type: "text", text: JSON.stringify({ error: "IBKR not connected" }) }] };
+      try {
+        const info = subscribeRealTimeBars(params);
+        return { content: [{ type: "text", text: JSON.stringify(info, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "unsubscribe_real_time_bars",
+    "Cancel a real-time bars subscription by ID.",
+    { subscriptionId: z.string().describe("Subscription ID from subscribe_real_time_bars") },
+    async ({ subscriptionId }) => {
+      const removed = unsubscribeRealTimeBars(subscriptionId);
+      return { content: [{ type: "text", text: JSON.stringify({ removed }) }] };
+    }
+  );
+
+  server.tool(
+    "get_real_time_bars",
+    "Get buffered real-time bars for an active subscription (up to 300 = 25 min of 5s bars).",
+    {
+      subscriptionId: z.string().describe("Subscription ID"),
+      limit: z.number().int().min(1).max(300).optional().describe("Max bars to return (default: 60)"),
+    },
+    async ({ subscriptionId, limit }) => {
+      try {
+        const bars = getRealTimeBars(subscriptionId, limit ?? 60);
+        return { content: [{ type: "text", text: JSON.stringify({ count: bars.length, bars }, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "subscribe_account_updates",
+    "Subscribe to real-time account value and portfolio updates. One account at a time (IBKR limit). Poll with get_account_snapshot.",
+    { account: z.string().describe("Account code, e.g. DUA482209") },
+    async ({ account }) => {
+      if (!isConnected()) return { content: [{ type: "text", text: JSON.stringify({ error: "IBKR not connected" }) }] };
+      try {
+        const info = subscribeAccountUpdates(account);
+        return { content: [{ type: "text", text: JSON.stringify(info, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "unsubscribe_account_updates",
+    "Cancel the account updates subscription.",
+    {},
+    async () => {
+      const removed = unsubscribeAccountUpdates();
+      return { content: [{ type: "text", text: JSON.stringify({ removed }) }] };
+    }
+  );
+
+  server.tool(
+    "get_account_snapshot",
+    "Get latest account values and portfolio from active account updates subscription.",
+    {},
+    async () => {
+      const snapshot = getAccountSnapshot();
+      if (!snapshot) return { content: [{ type: "text", text: JSON.stringify({ error: "No active account subscription" }) }] };
+      return { content: [{ type: "text", text: JSON.stringify(snapshot, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    "get_scanner_parameters",
+    "Get IBKR scanner parameters XML (cached 60 min). Lists available scan codes, instruments, locations.",
+    {},
+    async () => {
+      if (!isConnected()) return { content: [{ type: "text", text: JSON.stringify({ error: "IBKR not connected" }) }] };
+      try {
+        const xml = await getScannerParameters();
+        return { content: [{ type: "text", text: xml.slice(0, 50000) }] }; // Truncate large XML
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "list_subscriptions",
+    "List all active streaming subscriptions (real-time bars, account updates).",
+    {},
+    async () => {
+      const subs = listSubscriptions();
+      return { content: [{ type: "text", text: JSON.stringify({ count: subs.length, subscriptions: subs }, null, 2) }] };
     }
   );
 

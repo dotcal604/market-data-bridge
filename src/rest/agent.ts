@@ -55,6 +55,11 @@ import {
 import { RISK_CONFIG_DEFAULTS, type RiskConfigParam } from "../db/schema.js";
 import { importTraderSyncCSV } from "../tradersync/importer.js";
 import { logger } from "../logging.js";
+import {
+  subscribeRealTimeBars, unsubscribeRealTimeBars, getRealTimeBars,
+  subscribeAccountUpdates, unsubscribeAccountUpdates, getAccountSnapshot,
+  getScannerParameters, listSubscriptions,
+} from "../ibkr/subscriptions.js";
 
 const log = logger.child({ module: "agent" });
 
@@ -320,6 +325,16 @@ const actions: Record<string, ActionHandler> = {
   // ── History ──
   orders_history: async (p) => queryOrders({ symbol: str(p, "symbol") || undefined, strategy: str(p, "strategy") || undefined, limit: num(p, "limit", 100) }),
   executions_history: async (p) => queryExecutions({ symbol: str(p, "symbol") || undefined, limit: num(p, "limit", 100) }),
+
+  // ── Subscriptions (streaming) ──
+  subscribe_real_time_bars: async (p) => { requireIBKR(); return subscribeRealTimeBars({ symbol: str(p, "symbol"), secType: str(p, "secType", "STK"), exchange: str(p, "exchange", "SMART"), currency: str(p, "currency", "USD"), whatToShow: str(p, "whatToShow", "TRADES"), useRTH: bool(p, "useRTH", true) }); },
+  unsubscribe_real_time_bars: async (p) => { requireIBKR(); return { removed: unsubscribeRealTimeBars(str(p, "subscriptionId")) }; },
+  get_real_time_bars: async (p) => { const limit = Math.min(num(p, "limit", 60), 300); const bars = getRealTimeBars(str(p, "subscriptionId"), limit); return { subscriptionId: str(p, "subscriptionId"), count: bars.length, bars }; },
+  subscribe_account_updates: async (p) => { requireIBKR(); return subscribeAccountUpdates(str(p, "account")); },
+  unsubscribe_account_updates: async () => { requireIBKR(); return { removed: unsubscribeAccountUpdates() }; },
+  get_account_snapshot_stream: async () => { const snapshot = getAccountSnapshot(); if (!snapshot) throw new Error("No active account updates subscription"); return snapshot; },
+  get_scanner_parameters: async () => { requireIBKR(); return { xml: await getScannerParameters() }; },
+  list_subscriptions: async () => { const subs = listSubscriptions(); return { count: subs.length, subscriptions: subs }; },
 };
 
 // ── Dispatcher ───────────────────────────────────────────────────
