@@ -23,6 +23,12 @@ import { getOpenOrders, getCompletedOrders, getExecutions, placeOrder, placeBrac
 import { setFlattenEnabled, getFlattenConfig } from "../scheduler.js";
 import { getContractDetails } from "../ibkr/contracts.js";
 import { getIBKRQuote, getHistoricalTicks } from "../ibkr/marketdata.js";
+import {
+  getActiveSubscriptions,
+  getScannerParameters,
+  subscribe,
+  unsubscribe,
+} from "../ibkr/subscriptions.js";
 import { reqHistoricalNews, reqNewsArticle, reqNewsBulletins, reqNewsProviders } from "../ibkr/news.js";
 import {
   calculateImpliedVolatility,
@@ -185,6 +191,73 @@ export function createMcpServer(): McpServer {
         };
       } catch (e: any) {
         return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "subscribe_realtime_bars",
+    "Start a 5-second IBKR real-time bars subscription and return request ID.",
+    {
+      symbol: z.string().describe("Ticker symbol, e.g. AAPL"),
+      secType: z.string().optional().describe("Security type (default STK)"),
+      exchange: z.string().optional().describe("Exchange (default SMART)"),
+      whatToShow: z.enum(["TRADES", "MIDPOINT", "BID", "ASK"]).optional(),
+    },
+    async ({ symbol, secType, exchange, whatToShow }) => {
+      if (!isConnected()) {
+        return { content: [{ type: "text", text: "Error: IBKR not connected. Start TWS/Gateway for subscriptions." }], isError: true };
+      }
+
+      try {
+        const reqId = subscribe("realTimeBars", { symbol, secType, exchange, whatToShow });
+        return { content: [{ type: "text", text: JSON.stringify({ data: { reqId } }, null, 2) }] };
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : "Unknown error";
+        return { content: [{ type: "text", text: `Error: ${message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "unsubscribe",
+    "Cancel any tracked IBKR subscription by reqId.",
+    {
+      reqId: z.number().int().positive(),
+    },
+    async ({ reqId }) => {
+      try {
+        unsubscribe(reqId);
+        return { content: [{ type: "text", text: JSON.stringify({ data: { reqId, unsubscribed: true } }, null, 2) }] };
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : "Unknown error";
+        return { content: [{ type: "text", text: `Error: ${message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "list_subscriptions",
+    "List active tracked IBKR subscriptions.",
+    {},
+    async () => ({ content: [{ type: "text", text: JSON.stringify({ data: getActiveSubscriptions() }, null, 2) }] })
+  );
+
+  server.tool(
+    "get_scanner_parameters",
+    "Get cached IBKR scanner parameters (refreshes cache when empty).",
+    {},
+    async () => {
+      if (!isConnected()) {
+        return { content: [{ type: "text", text: "Error: IBKR not connected. Start TWS/Gateway for scanner parameters." }], isError: true };
+      }
+
+      try {
+        const data = await getScannerParameters();
+        return { content: [{ type: "text", text: JSON.stringify({ data }, null, 2) }] };
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : "Unknown error";
+        return { content: [{ type: "text", text: `Error: ${message}` }], isError: true };
       }
     }
   );

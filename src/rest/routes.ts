@@ -24,6 +24,12 @@ import { computePortfolioExposure } from "../ibkr/portfolio.js";
 import { setFlattenEnabled, getFlattenConfig } from "../scheduler.js";
 import { getContractDetails } from "../ibkr/contracts.js";
 import { getIBKRQuote, getHistoricalTicks } from "../ibkr/marketdata.js";
+import {
+  getActiveSubscriptions,
+  getScannerParameters,
+  subscribe,
+  unsubscribe,
+} from "../ibkr/subscriptions.js";
 import { reqHistoricalNews, reqNewsArticle, reqNewsBulletins, reqNewsProviders } from "../ibkr/news.js";
 import {
   calculateImpliedVolatility,
@@ -151,9 +157,71 @@ const optionPriceSchema = z.object({
   underlyingPrice: z.number().positive(),
 });
 
+const realTimeBarsSubscriptionSchema = z.object({
+  symbol: z.string().trim().min(1).max(20),
+  secType: z.string().trim().min(1).max(10).optional(),
+  exchange: z.string().trim().min(1).max(20).optional(),
+  whatToShow: z.enum(["TRADES", "MIDPOINT", "BID", "ASK"]).optional(),
+});
+
 // GET /api/status
 router.get("/status", (_req, res) => {
   res.json(getStatus());
+});
+
+// POST /api/subscribe/realtime-bars
+router.post("/subscribe/realtime-bars", (req, res) => {
+  if (!isConnected()) {
+    res.status(503).json({ error: "IBKR not connected. Start TWS/Gateway for real-time subscriptions." });
+    return;
+  }
+
+  const parsed = realTimeBarsSubscriptionSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid payload" });
+    return;
+  }
+
+  try {
+    const reqId = subscribe("realTimeBars", parsed.data);
+    res.json({ data: { reqId } });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    res.status(400).json({ error: message });
+  }
+});
+
+// DELETE /api/subscribe/:reqId
+router.delete("/subscribe/:reqId", (req, res) => {
+  const reqId = Number.parseInt(req.params.reqId, 10);
+  if (!Number.isFinite(reqId) || reqId < 1) {
+    res.status(400).json({ error: "reqId must be a positive integer" });
+    return;
+  }
+
+  unsubscribe(reqId);
+  res.json({ data: { reqId, unsubscribed: true } });
+});
+
+// GET /api/subscriptions
+router.get("/subscriptions", (_req, res) => {
+  res.json({ data: getActiveSubscriptions() });
+});
+
+// GET /api/scanner/parameters
+router.get("/scanner/parameters", async (_req, res) => {
+  if (!isConnected()) {
+    res.status(503).json({ error: "IBKR not connected. Start TWS/Gateway for scanner parameters." });
+    return;
+  }
+
+  try {
+    const data = await getScannerParameters();
+    res.json({ data });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
 });
 
 // GET /api/quote/:symbol — Smart quote: IBKR real-time first, Yahoo fallback

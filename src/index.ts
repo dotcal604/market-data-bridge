@@ -4,6 +4,7 @@ import "./suppress-stdout.js";
 
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { connect, disconnect, isConnected, scheduleReconnect } from "./ibkr/connection.js";
+import { unsubscribeAll } from "./ibkr/subscriptions.js";
 import { createMcpServer } from "./mcp/server.js";
 import { startRestServer } from "./rest/server.js";
 import { logger, pruneOldLogs } from "./logging.js";
@@ -77,6 +78,7 @@ async function main() {
   const shutdown = () => {
     logger.info("Shutting down...");
     stopScheduler();
+    unsubscribeAll();
     disconnect();
     closeDb();
     process.exit(0);
