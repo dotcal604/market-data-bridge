@@ -2,6 +2,8 @@ import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
 import { randomUUID, timingSafeEqual } from "node:crypto";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { router } from "./routes.js";
 import { evalRouter } from "../eval/routes.js";
@@ -117,51 +119,46 @@ process.on("unhandledRejection", (reason) => {
   logRest.error({ reason }, "Unhandled rejection — keeping server alive");
 });
 
-export function startRestServer(): Promise<void> {
-  return new Promise((resolve) => {
-    const app = express();
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const frontendDir = path.join(__dirname, "../../frontend/out");
 
-    app.use(cors());
-    app.use(express.json());
+export function createRestApp(): express.Express {
+  const app = express();
 
-    // Request logging
-    app.use(requestLogger);
+  app.use(cors());
+  app.use(express.json());
 
-    // Serve OpenAPI specs (unauthenticated)
-    app.get("/openapi.json", (_req, res) => { res.json(openApiSpec); });
-    app.get("/openapi-agent.json", (_req, res) => { res.json(openApiAgentSpec); });
+  // Request logging
+  app.use(requestLogger);
 
-    // Health check (unauthenticated)
-    app.get("/", (_req, res) => {
-      res.json({
-        name: "market-data-bridge",
-        version: "3.0.0",
-        docs: "/openapi.json",
-        api: "/api/status",
-        mcp: "/mcp",
-      });
-    });
+  // Serve OpenAPI specs (unauthenticated)
+  app.get("/openapi.json", (_req, res) => {
+    res.json(openApiSpec);
+  });
+  app.get("/openapi-agent.json", (_req, res) => {
+    res.json(openApiAgentSpec);
+  });
 
-    // GET /health — detailed health check (unauthenticated)
-    app.get("/health", (_req, res) => {
-      const health = {
-        status: "ok" as "ok" | "degraded",
-        uptime_seconds: Math.floor((Date.now() - startTime) / 1000),
-        ibkr_connected: isConnected(),
-        db_writable: isDbWritable(),
-        rest_server: true,
-        mcp_sessions: mcpSessions.size,
-        timestamp: new Date().toISOString(),
-      };
-      if (!health.ibkr_connected || !health.db_writable) {
-        health.status = "degraded";
-      }
-      res.json(health);
-    });
+  // GET /health — detailed health check (unauthenticated)
+  app.get("/health", (_req, res) => {
+    const health = {
+      status: "ok" as "ok" | "degraded",
+      uptime_seconds: Math.floor((Date.now() - startTime) / 1000),
+      ibkr_connected: isConnected(),
+      db_writable: isDbWritable(),
+      rest_server: true,
+      mcp_sessions: mcpSessions.size,
+      timestamp: new Date().toISOString(),
+    };
+    if (!health.ibkr_connected || !health.db_writable) {
+      health.status = "degraded";
+    }
+    res.json(health);
+  });
 
-    // ── MCP Streamable HTTP endpoint (for ChatGPT MCP connector) ──
-    // POST /mcp — JSON-RPC requests (initialize, tool calls, etc.)
-    app.post("/mcp", apiKeyAuth, async (req: Request, res: Response) => {
+  // ── MCP Streamable HTTP endpoint (for ChatGPT MCP connector) ──
+  // POST /mcp — JSON-RPC requests (initialize, tool calls, etc.)
+  app.post("/mcp", apiKeyAuth, async (req: Request, res: Response) => {
       const sessionId = req.headers["mcp-session-id"] as string | undefined;
       let transport = sessionId ? mcpSessions.get(sessionId) : undefined;
 
@@ -192,10 +189,10 @@ export function startRestServer(): Promise<void> {
       const server = createMcpServer();
       await server.connect(newTransport);
       await newTransport.handleRequest(req, res, req.body);
-    });
+  });
 
-    // GET /mcp — SSE stream for server-to-client notifications
-    app.get("/mcp", apiKeyAuth, async (req: Request, res: Response) => {
+  // GET /mcp — SSE stream for server-to-client notifications
+  app.get("/mcp", apiKeyAuth, async (req: Request, res: Response) => {
       const sessionId = req.headers["mcp-session-id"] as string | undefined;
       if (!sessionId || !mcpSessions.has(sessionId)) {
         res.status(400).json({ error: "Invalid or missing Mcp-Session-Id header" });
@@ -204,10 +201,10 @@ export function startRestServer(): Promise<void> {
       touchSession(sessionId);
       const transport = mcpSessions.get(sessionId)!;
       await transport.handleRequest(req, res);
-    });
+  });
 
-    // DELETE /mcp — close a session
-    app.delete("/mcp", apiKeyAuth, async (req: Request, res: Response) => {
+  // DELETE /mcp — close a session
+  app.delete("/mcp", apiKeyAuth, async (req: Request, res: Response) => {
       const sessionId = req.headers["mcp-session-id"] as string | undefined;
       if (!sessionId || !mcpSessions.has(sessionId)) {
         res.status(400).json({ error: "Invalid or missing Mcp-Session-Id header" });
@@ -215,21 +212,42 @@ export function startRestServer(): Promise<void> {
       }
       const transport = mcpSessions.get(sessionId)!;
       await transport.handleRequest(req, res);
-    });
+  });
 
-    // Agent dispatcher — single endpoint for ChatGPT Actions (no 30-op limit)
-    app.post("/api/agent", apiKeyAuth, globalLimiter, (req, res) => { void handleAgentRequest(req, res); });
+  // Agent dispatcher — single endpoint for ChatGPT Actions (no 30-op limit)
+  app.post("/api/agent", apiKeyAuth, globalLimiter, (req, res) => {
+    void handleAgentRequest(req, res);
+  });
 
-    // Mount API routes with rate limiting (authenticated)
-    app.use("/api", apiKeyAuth, globalLimiter, router);
+  // Mount API routes with rate limiting (authenticated)
+  app.use("/api", apiKeyAuth, globalLimiter, router);
 
-    // Mount eval router (under /api/eval, inside auth)
-    app.use("/api/eval", apiKeyAuth, evalLimiter, evalRouter);
+  // Mount eval router (under /api/eval, inside auth)
+  app.use("/api/eval", apiKeyAuth, evalLimiter, evalRouter);
 
-    // Apply stricter rate limits to order and collab routes
-    app.use("/api/order", orderLimiter);
-    app.use("/api/orders", orderLimiter);
-    app.use("/api/collab", collabLimiter);
+  // Apply stricter rate limits to order and collab routes
+  app.use("/api/order", orderLimiter);
+  app.use("/api/orders", orderLimiter);
+  app.use("/api/collab", collabLimiter);
+
+  // Static export from Next.js (frontend/out)
+  app.use(express.static(frontendDir));
+
+  // SPA fallback for client-side routes
+  app.get("*", (req, res, next) => {
+    if (req.path.startsWith("/api/")) {
+      next();
+      return;
+    }
+    res.sendFile(path.join(frontendDir, "index.html"));
+  });
+
+  return app;
+}
+
+export function startRestServer(): Promise<void> {
+  return new Promise((resolve) => {
+    const app = createRestApp();
 
     app.listen(config.rest.port, () => {
       logRest.info({ port: config.rest.port }, "REST server listening");
