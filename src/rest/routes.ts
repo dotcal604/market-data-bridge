@@ -51,6 +51,7 @@ import { checkRisk, getSessionState, recordTradeResult, lockSession, unlockSessi
 import { runPortfolioStressTest } from "../ibkr/portfolio.js";
 import { calculatePositionSize } from "../ibkr/risk.js";
 import { logger } from "../logging.js";
+import { getOpenApiSpec } from "./openapi.js";
 import { tuneRiskParams } from "../eval/risk-tuning.js";
 import { RISK_CONFIG_DEFAULTS } from "../db/schema.js";
 import {
@@ -91,7 +92,12 @@ function safeLimit(raw: string | undefined, defaultVal: number, max: number = 10
 }
 
 export const router = Router();
+export const publicRouter = Router();
 const log = logger.child({ subsystem: "rest-portfolio" });
+
+publicRouter.get("/openapi.json", (_req, res) => {
+  res.json(getOpenApiSpec());
+});
 
 const portfolioStressTestRequestSchema = z.object({
   shockPercent: z.number().finite(),
