@@ -8,6 +8,24 @@ let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 // Randomize clientId to avoid collisions when Desktop spawns multiple MCP processes
 let currentClientId = config.ibkr.clientId + Math.floor(Math.random() * 100);
 let clientIdRetries = 0;
+let hadDisconnect = false;
+const restoreHooks = new Set<() => void>();
+
+function emitConnectionRestored(): void {
+  for (const hook of restoreHooks) {
+    try {
+      hook();
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[IBKR] Connection restore hook failed: ${message}`);
+    }
+  }
+}
+
+export function onConnectionRestored(hook: () => void): () => void {
+  restoreHooks.add(hook);
+  return () => restoreHooks.delete(hook);
+}
 
 export function getNextReqId(): number {
   return nextReqId++;
@@ -22,6 +40,7 @@ export function getIB(): IBApi {
     });
 
     ib.on(EventName.connected, () => {
+      const isRestore = hadDisconnect;
       connected = true;
       clientIdRetries = 0;
       console.error(`[IBKR] Connected to TWS/Gateway (clientId=${currentClientId})`);
@@ -29,10 +48,15 @@ export function getIB(): IBApi {
         clearTimeout(reconnectTimer);
         reconnectTimer = null;
       }
+      if (isRestore) {
+        hadDisconnect = false;
+        emitConnectionRestored();
+      }
     });
 
     ib.on(EventName.disconnected, () => {
       connected = false;
+      hadDisconnect = true;
       console.error("[IBKR] Disconnected from TWS/Gateway");
       scheduleReconnect();
     });

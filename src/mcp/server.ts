@@ -23,6 +23,8 @@ import { getOpenOrders, getCompletedOrders, getExecutions, placeOrder, placeBrac
 import { setFlattenEnabled, getFlattenConfig } from "../scheduler.js";
 import { getContractDetails } from "../ibkr/contracts.js";
 import { getIBKRQuote, getHistoricalTicks } from "../ibkr/marketdata.js";
+import { getQuote as getCachedQuote } from "../ibkr/market-cache.js";
+import { subscribe, unsubscribe, getSubscriptionStatus } from "../ibkr/subscriptions.js";
 import { reqHistoricalNews, reqNewsArticle, reqNewsBulletins, reqNewsProviders } from "../ibkr/news.js";
 import {
   calculateImpliedVolatility,
@@ -1088,6 +1090,74 @@ export function createMcpServer(): McpServer {
       try {
         const quote = await getIBKRQuote({ symbol, secType, exchange, currency });
         return { content: [{ type: "text", text: JSON.stringify(quote, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: stream_subscribe ---
+  server.tool(
+    "stream_subscribe",
+    "Subscribe a symbol to persistent IBKR market stream cache with priority tier and line-budget management.",
+    {
+      symbol: z.string().describe("Symbol, e.g. AAPL"),
+      priority: z.enum(["open_positions", "pending_orders", "watchlist", "scanner"]).default("watchlist"),
+    },
+    async ({ symbol, priority }) => {
+      if (!isConnected()) {
+        return { content: [{ type: "text", text: JSON.stringify({ error: "IBKR not connected." }, null, 2) }] };
+      }
+      try {
+        const result = subscribe(symbol, priority);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: stream_unsubscribe ---
+  server.tool(
+    "stream_unsubscribe",
+    "Unsubscribe a symbol from persistent IBKR market stream cache.",
+    {
+      symbol: z.string().describe("Symbol, e.g. AAPL"),
+    },
+    async ({ symbol }) => {
+      try {
+        return { content: [{ type: "text", text: JSON.stringify({ symbol: symbol.toUpperCase(), removed: unsubscribe(symbol) }, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: stream_status ---
+  server.tool(
+    "stream_status",
+    "Get active IBKR stream subscriptions and line budget usage.",
+    {},
+    async () => {
+      try {
+        return { content: [{ type: "text", text: JSON.stringify(getSubscriptionStatus(), null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: get_cached_quote ---
+  server.tool(
+    "get_cached_quote",
+    "Get the latest in-memory quote from the IBKR market stream cache for a symbol.",
+    {
+      symbol: z.string().describe("Symbol, e.g. AAPL"),
+    },
+    async ({ symbol }) => {
+      try {
+        const quote = getCachedQuote(symbol);
+        return { content: [{ type: "text", text: JSON.stringify({ symbol: symbol.toUpperCase(), quote }, null, 2) }] };
       } catch (e: any) {
         return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
       }

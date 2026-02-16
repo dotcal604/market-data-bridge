@@ -13,6 +13,7 @@ import { runReconciliation } from "./db/reconcile.js";
 import { closeDb } from "./db/database.js";
 import { startScheduler, stopScheduler } from "./scheduler.js";
 import { initWeights } from "./eval/ensemble/weights.js";
+import { initMarketStream } from "./ibkr/market-stream.js";
 
 type Mode = "mcp" | "rest" | "both";
 
@@ -37,6 +38,9 @@ async function main() {
 
   // Prune old log files (keep 30 days)
   pruneOldLogs();
+
+  // Initialize real-time market stream listeners once for IBKR tick events.
+  initMarketStream();
 
   // IBKR connection is optional — only needed for account data (positions, PnL).
   // Market data comes from Yahoo Finance and works without IBKR.

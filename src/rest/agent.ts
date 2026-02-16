@@ -22,6 +22,8 @@ import { computePortfolioExposure, runPortfolioStressTest } from "../ibkr/portfo
 import { setFlattenEnabled, getFlattenConfig } from "../scheduler.js";
 import { getContractDetails } from "../ibkr/contracts.js";
 import { getIBKRQuote, getHistoricalTicks } from "../ibkr/marketdata.js";
+import { getQuote as getCachedQuote } from "../ibkr/market-cache.js";
+import { subscribe, unsubscribe, getSubscriptionStatus } from "../ibkr/subscriptions.js";
 import { reqHistoricalNews, reqNewsArticle, reqNewsBulletins, reqNewsProviders } from "../ibkr/news.js";
 import {
   calculateImpliedVolatility, calculateOptionPrice,
@@ -107,6 +109,10 @@ const actions: Record<string, ActionHandler> = {
   get_ibkr_quote: async (p) => { requireIBKR(); return getIBKRQuote({ symbol: str(p, "symbol"), secType: str(p, "secType", "STK"), exchange: str(p, "exchange", "SMART"), currency: str(p, "currency", "USD") }); },
   get_historical_ticks: async (p) => { requireIBKR(); return getHistoricalTicks(str(p, "symbol"), str(p, "startTime"), str(p, "endTime", ""), str(p, "type", "TRADES") as "TRADES" | "BID_ASK" | "MIDPOINT", num(p, "count", 1000)); },
   get_contract_details: async (p) => { requireIBKR(); return getContractDetails({ symbol: str(p, "symbol"), secType: str(p, "secType", "STK"), currency: str(p, "currency", "USD"), exchange: str(p, "exchange", "SMART") }); },
+  stream_subscribe: async (p) => { requireIBKR(); return subscribe(str(p, "symbol"), str(p, "priority", "watchlist") as "open_positions" | "pending_orders" | "watchlist" | "scanner"); },
+  stream_unsubscribe: async (p) => ({ symbol: str(p, "symbol").toUpperCase(), removed: unsubscribe(str(p, "symbol")) }),
+  stream_status: async () => getSubscriptionStatus(),
+  get_cached_quote: async (p) => ({ symbol: str(p, "symbol").toUpperCase(), quote: getCachedQuote(str(p, "symbol")) }),
 
   // ── IBKR News ──
   get_news_providers: async () => { requireIBKR(); return reqNewsProviders(); },

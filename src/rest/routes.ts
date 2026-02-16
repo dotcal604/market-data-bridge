@@ -24,6 +24,8 @@ import { computePortfolioExposure } from "../ibkr/portfolio.js";
 import { setFlattenEnabled, getFlattenConfig } from "../scheduler.js";
 import { getContractDetails } from "../ibkr/contracts.js";
 import { getIBKRQuote, getHistoricalTicks } from "../ibkr/marketdata.js";
+import { getQuote as getCachedQuote } from "../ibkr/market-cache.js";
+import { subscribe, unsubscribe, getSubscriptionStatus, type SubscriptionPriority } from "../ibkr/subscriptions.js";
 import { reqHistoricalNews, reqNewsArticle, reqNewsBulletins, reqNewsProviders } from "../ibkr/news.js";
 import {
   calculateImpliedVolatility,
@@ -150,12 +152,62 @@ const optionPriceSchema = z.object({
   volatility: z.number().positive(),
   underlyingPrice: z.number().positive(),
 });
+const marketStreamSubscribeSchema = z.object({
+  symbol: z.string().trim().min(1).max(20),
+  priority: z.enum(["open_positions", "pending_orders", "watchlist", "scanner"]).default("watchlist"),
+});
+
+const marketStreamUnsubscribeSchema = z.object({
+  symbol: z.string().trim().min(1).max(20),
+});
+
 
 // GET /api/status
 router.get("/status", (_req, res) => {
   res.json(getStatus());
 });
 
+
+
+// GET /api/market/stream/status
+router.get("/market/stream/status", (_req, res) => {
+  res.json({ data: getSubscriptionStatus() });
+});
+
+// POST /api/market/stream/subscribe
+router.post("/market/stream/subscribe", (req, res) => {
+  if (!isConnected()) {
+    res.status(503).json({ error: "IBKR not connected. Start TWS/Gateway for market stream subscriptions." });
+    return;
+  }
+
+  const parsed = marketStreamSubscribeSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid request body" });
+    return;
+  }
+
+  try {
+    const result = subscribe(parsed.data.symbol, parsed.data.priority as SubscriptionPriority);
+    const cachedQuote = getCachedQuote(parsed.data.symbol);
+    res.json({ data: { ...result, cachedQuote } });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    res.status(400).json({ error: message });
+  }
+});
+
+// DELETE /api/market/stream/unsubscribe
+router.delete("/market/stream/unsubscribe", (req, res) => {
+  const parsed = marketStreamUnsubscribeSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid request body" });
+    return;
+  }
+
+  const removed = unsubscribe(parsed.data.symbol);
+  res.json({ data: { symbol: parsed.data.symbol.toUpperCase(), removed } });
+});
 // GET /api/quote/:symbol — Smart quote: IBKR real-time first, Yahoo fallback
 router.get("/quote/:symbol", async (req, res) => {
   try {
