@@ -1,6 +1,7 @@
 import { getRiskConfigRows } from "../db/database.js";
 import { RISK_CONFIG_DEFAULTS } from "../db/schema.js";
 import { logRisk } from "../logging.js";
+import { config } from "../config.js";
 
 const ACCOUNT_EQUITY_BASE = parseFloat(process.env.RISK_ACCOUNT_EQUITY_BASE ?? "25000");
 
@@ -169,6 +170,12 @@ export interface RiskCheckResult {
 }
 
 export function checkRisk(params: RiskCheckParams): RiskCheckResult {
+  // Paper trading bypasses all risk gates — safe to test freely
+  const paperPorts = new Set([7497, 4002]);
+  if (paperPorts.has(config.ibkr.port)) {
+    return { allowed: true };
+  }
+
   ensureToday();
   const effective = getEffectiveRiskConfig();
   const dynamicMaxNotional = Math.min(

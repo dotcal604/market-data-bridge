@@ -4,6 +4,8 @@ vi.hoisted(() => {
   // Keep tests deterministic even if checkRisk() uses local Date methods internally.
   // This must run before risk-gate is imported because the module initializes session state at import time.
   process.env.TZ = "America/New_York";
+  // Force live port so paper-mode bypass doesn't skip risk checks in tests
+  process.env.IBKR_PORT = "7496";
 });
 
 import {
