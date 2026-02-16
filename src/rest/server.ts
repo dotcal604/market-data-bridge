@@ -15,6 +15,7 @@ import { requestLogger, logRest } from "../logging.js";
 import { isConnected } from "../ibkr/connection.js";
 import { isDbWritable } from "../db/database.js";
 import { createMcpServer } from "../mcp/server.js";
+import { initWebSocket } from "../ws/server.js";
 
 function apiKeyAuth(req: Request, res: Response, next: NextFunction): void {
   const key = config.rest.apiKey;
@@ -253,10 +254,11 @@ export function startRestServer(): Promise<void> {
 
     configureFrontendStaticHosting(app);
 
-    app.listen(config.rest.port, () => {
+    const httpServer = app.listen(config.rest.port, () => {
       logRest.info({ port: config.rest.port }, "REST server listening");
       logRest.info({ url: `http://localhost:${config.rest.port}/openapi.json` }, "OpenAPI spec available");
       logRest.info({ url: `http://localhost:${config.rest.port}/mcp` }, "MCP Streamable HTTP endpoint available");
+      initWebSocket(httpServer);
       if (config.rest.apiKey) {
         logRest.info("API key authentication enabled");
       } else {
