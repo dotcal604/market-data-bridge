@@ -19,6 +19,9 @@ A TypeScript server that bridges IBKR TWS/Gateway to AI tools via:
 npm install
 npm run build
 cp .env.example .env   # adjust port if needed
+
+# Optional: build the dashboard static export and serve everything from port 3000
+npm run start:prod
 ```
 
 ### Run modes

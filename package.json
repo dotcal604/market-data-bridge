@@ -1,12 +1,12 @@
 {
   "name": "market-data-bridge",
   "version": "3.0.0",
-  "description": "Market data bridge for ChatGPT and Claude — Yahoo Finance + Finviz + IBKR account — MCP server + REST API + 3-model eval engine",
+  "description": "Market data bridge for ChatGPT and Claude \u2014 Yahoo Finance + Finviz + IBKR account \u2014 MCP server + REST API + 3-model eval engine",
   "type": "module",
   "main": "build/index.js",
   "scripts": {
     "build": "tsc",
-    "build:frontend": "cd frontend && npm run build",
+    "build:frontend": "cd frontend && FRONTEND_STATIC_EXPORT=1 npm run build",
     "start": "node build/index.js",
     "start:mcp": "node build/index.js --mode mcp",
     "start:rest": "node build/index.js --mode rest",
@@ -21,7 +21,9 @@
     "start:paper": "cross-env IBKR_PORT=7497 node build/index.js",
     "start:live": "cross-env IBKR_PORT=7496 node build/index.js",
     "dev:paper": "cross-env IBKR_PORT=7497 concurrently -n api,ui -c blue,magenta \"node build/index.js\" \"cd frontend && npm run dev -- -p 3001\"",
-    "dev:live": "cross-env IBKR_PORT=7496 concurrently -n api,ui -c blue,magenta \"node build/index.js\" \"cd frontend && npm run dev -- -p 3001\""
+    "dev:live": "cross-env IBKR_PORT=7496 concurrently -n api,ui -c blue,magenta \"node build/index.js\" \"cd frontend && npm run dev -- -p 3001\"",
+    "build:all": "npm run build && npm run build:frontend",
+    "start:prod": "npm run build:all && npm start"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.74.0",
