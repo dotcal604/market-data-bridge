@@ -5,9 +5,8 @@ import { randomUUID, timingSafeEqual } from "node:crypto";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { router } from "./routes.js";
+import { publicRouter, router } from "./routes.js";
 import { evalRouter } from "../eval/routes.js";
-import { openApiSpec } from "./openapi.js";
 import { openApiAgentSpec } from "./openapi-agent.js";
 import { handleAgentRequest } from "./agent.js";
 import { config } from "../config.js";
@@ -148,8 +147,10 @@ export function startRestServer(): Promise<void> {
     // Request logging
     app.use(requestLogger);
 
-    // Serve OpenAPI specs (unauthenticated)
-    app.get("/openapi.json", (_req, res) => { res.json(openApiSpec); });
+    // Serve public routes (unauthenticated)
+    app.use(publicRouter);
+
+    // Serve OpenAPI agent spec (unauthenticated)
     app.get("/openapi-agent.json", (_req, res) => { res.json(openApiAgentSpec); });
 
     // Health check (unauthenticated)
