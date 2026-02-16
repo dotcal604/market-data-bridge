@@ -19,7 +19,7 @@ import {
 } from "../providers/yahoo.js";
 import { isConnected } from "../ibkr/connection.js";
 import { getAccountSummary, getPositions, getPnL } from "../ibkr/account.js";
-import { getOpenOrders, getCompletedOrders, getExecutions, placeOrder, placeBracketOrder, placeAdvancedBracket, cancelOrder, cancelAllOrders, flattenAllPositions, validateOrder } from "../ibkr/orders.js";
+import { getOpenOrders, getCompletedOrders, getExecutions, placeOrder, placeBracketOrder, placeAdvancedBracket, modifyOrder, cancelOrder, cancelAllOrders, flattenAllPositions, validateOrder } from "../ibkr/orders.js";
 import { computePortfolioExposure } from "../ibkr/portfolio.js";
 import { setFlattenEnabled, getFlattenConfig } from "../scheduler.js";
 import { getContractDetails } from "../ibkr/contracts.js";
@@ -1054,6 +1054,26 @@ router.post("/order/bracket-advanced", async (req, res) => {
       tif, outsideRth, secType, exchange, currency,
       strategy_version, order_source: "rest", journal_id,
     });
+    res.json(result);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// PATCH /api/order/:orderId — Modify an existing order in-place (preserves bracket/OCA)
+router.patch("/order/:orderId", async (req, res) => {
+  if (!isConnected()) {
+    res.json({ error: "IBKR not connected. Start TWS/Gateway to modify orders." });
+    return;
+  }
+  try {
+    const orderId = parseInt(req.params.orderId, 10);
+    if (isNaN(orderId)) {
+      res.status(400).json({ error: "orderId must be a number" });
+      return;
+    }
+    const { lmtPrice, auxPrice, totalQuantity, orderType, tif, trailingPercent, trailStopPrice } = req.body;
+    const result = await modifyOrder({ orderId, lmtPrice, auxPrice, totalQuantity, orderType, tif, trailingPercent, trailStopPrice });
     res.json(result);
   } catch (e: any) {
     res.status(500).json({ error: e.message });

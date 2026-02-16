@@ -83,6 +83,7 @@ Yahoo (always available): get_quote, get_historical_bars, get_financials, get_ea
 - place_order — { symbol, action, orderType, totalQuantity, lmtPrice?, auxPrice?, secType?, exchange?, currency?, tif? } — action: "BUY"|"SELL", orderType: "MKT"|"LMT"|"STP"|"STP_LMT"|"TRAIL"|"TRAIL_LIMIT"|"REL"
 - place_bracket_order — { symbol, action, totalQuantity, entryType, entryPrice?, takeProfitPrice, stopLossPrice, secType?, tif? }
 - place_advanced_bracket — { symbol, action, totalQuantity, entry: { type, price?, tif? }, takeProfit: { type, price }, stopLoss: { type, price }, outsideRth?, ocaType?, trailingAmount?, trailingPercent? }
+- modify_order — { orderId, lmtPrice?, auxPrice?, totalQuantity?, orderType?, tif? } — Modifies an EXISTING open order IN-PLACE. Preserves bracket/OCA links. Use this to edit a bracket leg's price instead of cancel+re-place.
 - cancel_order — { orderId }
 - cancel_all_orders — no params
 - flatten_positions — no params. MKT sells all positions immediately.

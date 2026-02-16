@@ -1000,6 +1000,176 @@ export async function placeAdvancedBracket(params: AdvancedBracketParams): Promi
   });
 }
 
+// ── Modify Order ─────────────────────────────────────────────────────────
+// IBKR modifies an order in-place when you call placeOrder() with the SAME
+// orderId.  This avoids the cancel→reopen race that breaks OCA/bracket links.
+
+export interface ModifyOrderParams {
+  orderId: number;
+  // Fields that can be modified on a live order:
+  lmtPrice?: number;
+  auxPrice?: number; // stop trigger price
+  totalQuantity?: number;
+  orderType?: string; // e.g. change STP → STP LMT
+  tif?: string;
+  // Trailing fields
+  trailingPercent?: number;
+  trailStopPrice?: number;
+}
+
+export interface ModifyOrderResult {
+  orderId: number;
+  symbol: string;
+  action: string;
+  orderType: string;
+  totalQuantity: number;
+  lmtPrice: number | null;
+  auxPrice: number | null;
+  status: string;
+  modified: string[]; // list of fields that were changed
+}
+
+export async function modifyOrder(params: ModifyOrderParams): Promise<ModifyOrderResult> {
+  const ib = getIB();
+
+  // 1. Fetch the live order from TWS to get current contract + order state
+  const openOrders = await getOpenOrders();
+  const existing = openOrders.find((o) => o.orderId === params.orderId);
+  if (!existing) {
+    throw new Error(`Order ${params.orderId} not found in open orders — cannot modify a filled/cancelled order`);
+  }
+
+  // 2. Build contract from the existing order's fields
+  const contract: Contract = {
+    symbol: existing.symbol,
+    secType: existing.secType as any,
+    exchange: existing.exchange || "SMART",
+    currency: existing.currency || "USD",
+  };
+
+  // 3. Build the modified order — start with existing values, overlay changes
+  const modified: string[] = [];
+  const newLmtPrice = params.lmtPrice ?? (existing.lmtPrice as number) ?? 0;
+  const newAuxPrice = params.auxPrice ?? (existing.auxPrice as number) ?? 0;
+  const newQuantity = params.totalQuantity ?? existing.totalQuantity;
+  const newOrderType = params.orderType ?? existing.orderType;
+  const newTif = params.tif ?? existing.tif;
+
+  if (params.lmtPrice !== undefined) modified.push(`lmtPrice→${params.lmtPrice}`);
+  if (params.auxPrice !== undefined) modified.push(`auxPrice→${params.auxPrice}`);
+  if (params.totalQuantity !== undefined) modified.push(`totalQuantity→${params.totalQuantity}`);
+  if (params.orderType !== undefined) modified.push(`orderType→${params.orderType}`);
+  if (params.tif !== undefined) modified.push(`tif→${params.tif}`);
+
+  if (modified.length === 0) {
+    throw new Error("No fields to modify — provide at least one of: lmtPrice, auxPrice, totalQuantity, orderType, tif");
+  }
+
+  const order: Order = {
+    orderId: params.orderId,
+    action: existing.action as any,
+    orderType: newOrderType as any,
+    totalQuantity: newQuantity,
+    lmtPrice: newLmtPrice,
+    auxPrice: newAuxPrice,
+    tif: newTif as any,
+    transmit: true,
+    parentId: existing.parentId ?? 0,
+  };
+
+  // Trailing fields — only set if provided (avoids IBKR rejecting zero defaults)
+  if (params.trailingPercent !== undefined) {
+    (order as any).trailingPercent = params.trailingPercent;
+    modified.push(`trailingPercent→${params.trailingPercent}`);
+  }
+  if (params.trailStopPrice !== undefined) {
+    (order as any).trailStopPrice = params.trailStopPrice;
+    modified.push(`trailStopPrice→${params.trailStopPrice}`);
+  }
+
+  logOrder.info({ orderId: params.orderId, modified, order }, "Modifying order in-place via IBKR");
+
+  // 4. Update DB record with new values
+  try {
+    const db = (await import("../db/database.js")).getDb();
+    const setClauses: string[] = [];
+    const values: any = { order_id: params.orderId };
+
+    if (params.lmtPrice !== undefined) { setClauses.push("lmt_price = @lmt_price"); values.lmt_price = params.lmtPrice; }
+    if (params.auxPrice !== undefined) { setClauses.push("aux_price = @aux_price"); values.aux_price = params.auxPrice; }
+    if (params.totalQuantity !== undefined) { setClauses.push("total_quantity = @total_quantity"); values.total_quantity = params.totalQuantity; }
+    if (params.orderType !== undefined) { setClauses.push("order_type = @order_type"); values.order_type = params.orderType; }
+    if (params.tif !== undefined) { setClauses.push("tif = @tif"); values.tif = params.tif; }
+    setClauses.push("updated_at = datetime('now')");
+
+    if (setClauses.length > 1) {
+      db.prepare(`UPDATE orders SET ${setClauses.join(", ")} WHERE order_id = @order_id`).run(values);
+    }
+  } catch (e: any) {
+    logOrder.error({ err: e, orderId: params.orderId }, "Failed to update modified order in DB — continuing with IBKR placement");
+  }
+
+  // 5. Send to IBKR — same orderId = in-place modification
+  return new Promise((resolve, reject) => {
+    let settled = false;
+
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve({
+        orderId: params.orderId,
+        symbol: existing.symbol,
+        action: existing.action,
+        orderType: newOrderType,
+        totalQuantity: newQuantity,
+        lmtPrice: newLmtPrice || null,
+        auxPrice: newAuxPrice || null,
+        status: "Modified (timeout waiting for confirmation)",
+        modified,
+      });
+    }, config.ibkr.orderTimeoutMs);
+
+    const onOrderStatus = (id: number, status: string) => {
+      if (id !== params.orderId) return;
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve({
+        orderId: params.orderId,
+        symbol: existing.symbol,
+        action: existing.action,
+        orderType: newOrderType,
+        totalQuantity: newQuantity,
+        lmtPrice: newLmtPrice || null,
+        auxPrice: newAuxPrice || null,
+        status,
+        modified,
+      });
+    };
+
+    const onError = (err: Error, code: ErrorCode, id: number) => {
+      if (id !== params.orderId && id !== -1) return;
+      if (isNonFatalError(code, err)) return;
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error(`Modify order error (${code}): ${err.message}`));
+    };
+
+    const cleanup = () => {
+      clearTimeout(timeout);
+      ib.off(EventName.orderStatus, onOrderStatus);
+      ib.off(EventName.error, onError);
+    };
+
+    ib.on(EventName.orderStatus, onOrderStatus);
+    ib.on(EventName.error, onError);
+
+    ib.placeOrder(params.orderId, contract, order);
+  });
+}
+
 // ── Cancel Order ─────────────────────────────────────────────────────────
 
 export async function cancelOrder(orderId: number): Promise<{ orderId: number; status: string }> {

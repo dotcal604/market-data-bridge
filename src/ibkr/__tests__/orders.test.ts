@@ -2,8 +2,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   validateOrder,
   placeAdvancedBracket,
+  modifyOrder,
   type PlaceOrderParams,
   type AdvancedBracketParams,
+  type ModifyOrderParams,
 } from "../orders.js";
 
 // Mock the IBKR connection and database
@@ -780,6 +782,183 @@ describe("Order Validation and Advanced Brackets", () => {
       expect(result.stopLoss.price).toBe(145.0);
       expect(result.ocaGroup).toBeDefined();
       expect(result.correlation_id).toBe("test-correlation-id");
+    });
+  });
+
+  describe("modifyOrder()", () => {
+    let mockIB: any;
+
+    // Helper: set up mockIB so getOpenOrders() returns a known open order,
+    // then modifyOrder's placeOrder() call triggers an orderStatus event.
+    function setupMockIBForModify(openOrders: Array<{
+      orderId: number; symbol: string; action: string; orderType: string;
+      totalQuantity: number; lmtPrice: number | null; auxPrice: number | null;
+      secType: string; exchange: string; currency: string; tif: string; parentId: number;
+    }>) {
+      let openOrderHandler: Function | null = null;
+      let openOrderEndHandler: Function | null = null;
+      let orderStatusHandler: Function | null = null;
+
+      mockIB = {
+        placeOrder: vi.fn((_orderId: number) => {
+          // Simulate orderStatus "PreSubmitted" after a short delay
+          setTimeout(() => {
+            if (orderStatusHandler) orderStatusHandler(_orderId, "PreSubmitted");
+          }, 10);
+        }),
+        on: vi.fn((event: string, handler: Function) => {
+          if (event === "openOrder") openOrderHandler = handler;
+          if (event === "openOrderEnd") openOrderEndHandler = handler;
+          if (event === "orderStatus") orderStatusHandler = handler;
+        }),
+        off: vi.fn(),
+        reqAllOpenOrders: vi.fn(() => {
+          // Deliver all open orders, then fire end
+          setTimeout(() => {
+            for (const o of openOrders) {
+              if (openOrderHandler) {
+                openOrderHandler(
+                  o.orderId,
+                  { symbol: o.symbol, secType: o.secType, exchange: o.exchange, currency: o.currency },
+                  { action: o.action, orderType: o.orderType, totalQuantity: o.totalQuantity, lmtPrice: o.lmtPrice, auxPrice: o.auxPrice, tif: o.tif, parentId: o.parentId, account: "TEST" },
+                  { status: "PreSubmitted" },
+                );
+              }
+            }
+            if (openOrderEndHandler) openOrderEndHandler();
+          }, 5);
+        }),
+      };
+
+      return mockIB;
+    }
+
+    beforeEach(async () => {
+      const connectionModule = await import("../connection.js");
+      const openOrder = {
+        orderId: 500,
+        symbol: "AAPL",
+        action: "SELL",
+        orderType: "LMT",
+        totalQuantity: 100,
+        lmtPrice: 155.0,
+        auxPrice: null,
+        secType: "STK",
+        exchange: "SMART",
+        currency: "USD",
+        tif: "GTC",
+        parentId: 499,
+      };
+      const ib = setupMockIBForModify([openOrder]);
+      vi.mocked(connectionModule.getIB).mockImplementation(() => ib);
+    });
+
+    afterEach(() => {
+      vi.clearAllMocks();
+    });
+
+    it("should modify lmtPrice in-place using same orderId", async () => {
+      const result = await modifyOrder({ orderId: 500, lmtPrice: 160.0 });
+
+      expect(result.orderId).toBe(500);
+      expect(result.symbol).toBe("AAPL");
+      expect(result.lmtPrice).toBe(160.0);
+      expect(result.modified).toContain("lmtPrice→160");
+      expect(result.status).toBe("PreSubmitted");
+
+      // Verify placeOrder was called with the SAME orderId (not a new one)
+      expect(mockIB.placeOrder).toHaveBeenCalledTimes(1);
+      const call = mockIB.placeOrder.mock.calls[0];
+      expect(call[0]).toBe(500); // same orderId
+      expect(call[2].lmtPrice).toBe(160.0);
+      expect(call[2].orderId).toBe(500);
+    });
+
+    it("should preserve parentId on bracket leg modification", async () => {
+      const result = await modifyOrder({ orderId: 500, lmtPrice: 158.0 });
+
+      const call = mockIB.placeOrder.mock.calls[0];
+      const order = call[2];
+      expect(order.parentId).toBe(499); // preserved from open order
+      expect(result.orderId).toBe(500);
+    });
+
+    it("should modify auxPrice (stop trigger)", async () => {
+      // Set up an open STP order
+      const connectionModule = await import("../connection.js");
+      const stpOrder = {
+        orderId: 501,
+        symbol: "AAPL",
+        action: "SELL",
+        orderType: "STP",
+        totalQuantity: 100,
+        lmtPrice: null,
+        auxPrice: 145.0,
+        secType: "STK",
+        exchange: "SMART",
+        currency: "USD",
+        tif: "GTC",
+        parentId: 499,
+      };
+      const ib = setupMockIBForModify([stpOrder]);
+      vi.mocked(connectionModule.getIB).mockImplementation(() => ib);
+
+      const result = await modifyOrder({ orderId: 501, auxPrice: 143.0 });
+
+      expect(result.auxPrice).toBe(143.0);
+      expect(result.modified).toContain("auxPrice→143");
+      const call = mockIB.placeOrder.mock.calls[0];
+      expect(call[2].auxPrice).toBe(143.0);
+    });
+
+    it("should modify totalQuantity", async () => {
+      const result = await modifyOrder({ orderId: 500, totalQuantity: 50 });
+
+      expect(result.totalQuantity).toBe(50);
+      expect(result.modified).toContain("totalQuantity→50");
+    });
+
+    it("should modify multiple fields at once", async () => {
+      const result = await modifyOrder({
+        orderId: 500,
+        lmtPrice: 162.0,
+        totalQuantity: 75,
+        tif: "DAY",
+      });
+
+      expect(result.lmtPrice).toBe(162.0);
+      expect(result.totalQuantity).toBe(75);
+      expect(result.modified).toContain("lmtPrice→162");
+      expect(result.modified).toContain("totalQuantity→75");
+      expect(result.modified).toContain("tif→DAY");
+    });
+
+    it("should throw when no fields are provided to modify", async () => {
+      await expect(modifyOrder({ orderId: 500 })).rejects.toThrow(
+        "No fields to modify"
+      );
+    });
+
+    it("should throw when order is not found in open orders", async () => {
+      await expect(
+        modifyOrder({ orderId: 9999, lmtPrice: 100 })
+      ).rejects.toThrow("Order 9999 not found in open orders");
+    });
+
+    it("should preserve existing values for unmodified fields", async () => {
+      const result = await modifyOrder({ orderId: 500, lmtPrice: 161.0 });
+
+      // orderType should remain LMT (from original), not be changed
+      expect(result.orderType).toBe("LMT");
+      // action should remain SELL
+      expect(result.action).toBe("SELL");
+      // totalQuantity should remain 100
+      expect(result.totalQuantity).toBe(100);
+
+      const call = mockIB.placeOrder.mock.calls[0];
+      expect(call[2].orderType).toBe("LMT");
+      expect(call[2].totalQuantity).toBe(100);
+      expect(call[2].tif).toBe("GTC");
     });
   });
 });

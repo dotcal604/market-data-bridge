@@ -19,7 +19,7 @@ import {
 } from "../providers/yahoo.js";
 import { isConnected } from "../ibkr/connection.js";
 import { getAccountSummary, getPositions, getPnL } from "../ibkr/account.js";
-import { getOpenOrders, getCompletedOrders, getExecutions, placeOrder, placeBracketOrder, placeAdvancedBracket, cancelOrder, cancelAllOrders, flattenAllPositions, validateOrder } from "../ibkr/orders.js";
+import { getOpenOrders, getCompletedOrders, getExecutions, placeOrder, placeBracketOrder, placeAdvancedBracket, modifyOrder, cancelOrder, cancelAllOrders, flattenAllPositions, validateOrder } from "../ibkr/orders.js";
 import { setFlattenEnabled, getFlattenConfig } from "../scheduler.js";
 import { getContractDetails } from "../ibkr/contracts.js";
 import { getIBKRQuote, getHistoricalTicks } from "../ibkr/marketdata.js";
@@ -1221,6 +1221,35 @@ export function createMcpServer(): McpServer {
           return { content: [{ type: "text", text: JSON.stringify({ error: `Risk gate rejected: ${riskResult.reason}` }, null, 2) }] };
         }
         const result = await placeAdvancedBracket({ ...params, order_source: "mcp" });
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: modify_order (IBKR — requires TWS/Gateway) ---
+  server.tool(
+    "modify_order",
+    "Modify an existing open order IN-PLACE (preserves bracket/OCA links). Use this instead of cancel+re-place to edit a bracket leg's price or quantity. Requires TWS/Gateway.",
+    {
+      orderId: z.number().describe("The order ID to modify (must be an open/working order)"),
+      lmtPrice: z.number().optional().describe("New limit price"),
+      auxPrice: z.number().optional().describe("New stop/trigger price"),
+      totalQuantity: z.number().optional().describe("New total quantity"),
+      orderType: z.string().optional().describe("New order type (e.g. STP → STP LMT)"),
+      tif: z.string().optional().describe("New time-in-force (DAY, GTC, IOC, etc.)"),
+      trailingPercent: z.number().optional().describe("New trailing stop percentage"),
+      trailStopPrice: z.number().optional().describe("New trail stop price anchor"),
+    },
+    async (params) => {
+      if (!isConnected()) {
+        return {
+          content: [{ type: "text", text: JSON.stringify({ error: "IBKR not connected." }, null, 2) }],
+        };
+      }
+      try {
+        const result = await modifyOrder(params);
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       } catch (e: any) {
         return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };

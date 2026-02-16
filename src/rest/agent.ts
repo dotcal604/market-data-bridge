@@ -16,7 +16,7 @@ import { getAccountSummary, getPositions, getPnL } from "../ibkr/account.js";
 import {
   getOpenOrders, getCompletedOrders, getExecutions,
   placeOrder, placeBracketOrder, placeAdvancedBracket,
-  cancelOrder, cancelAllOrders, flattenAllPositions,
+  modifyOrder, cancelOrder, cancelAllOrders, flattenAllPositions,
 } from "../ibkr/orders.js";
 import { computePortfolioExposure, runPortfolioStressTest } from "../ibkr/portfolio.js";
 import { setFlattenEnabled, getFlattenConfig } from "../scheduler.js";
@@ -141,6 +141,7 @@ const actions: Record<string, ActionHandler> = {
   place_order: async (p) => { requireIBKR(); return placeOrder(p as never); },
   place_bracket_order: async (p) => { requireIBKR(); return placeBracketOrder(p as never); },
   place_advanced_bracket: async (p) => { requireIBKR(); return placeAdvancedBracket(p as never); },
+  modify_order: async (p) => { requireIBKR(); return modifyOrder({ orderId: num(p, "orderId"), lmtPrice: p.lmtPrice != null ? Number(p.lmtPrice) : undefined, auxPrice: p.auxPrice != null ? Number(p.auxPrice) : undefined, totalQuantity: p.totalQuantity != null ? Number(p.totalQuantity) : undefined, orderType: typeof p.orderType === "string" ? p.orderType : undefined, tif: typeof p.tif === "string" ? p.tif : undefined }); },
   cancel_order: async (p) => { requireIBKR(); return cancelOrder(num(p, "orderId")); },
   cancel_all_orders: async () => { requireIBKR(); return cancelAllOrders(); },
   flatten_positions: async () => { requireIBKR(); return flattenAllPositions(); },
