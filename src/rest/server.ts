@@ -1,7 +1,7 @@
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
-import { randomUUID } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { router } from "./routes.js";
 import { evalRouter } from "../eval/routes.js";
@@ -14,6 +14,11 @@ import { isConnected } from "../ibkr/connection.js";
 import { isDbWritable } from "../db/database.js";
 import { createMcpServer } from "../mcp/server.js";
 
+function safeCompare(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(Buffer.from(a), Buffer.from(b));
+}
+
 function apiKeyAuth(req: Request, res: Response, next: NextFunction): void {
   const key = config.rest.apiKey;
   if (!key) {
@@ -23,7 +28,7 @@ function apiKeyAuth(req: Request, res: Response, next: NextFunction): void {
   const provided =
     (req.headers["x-api-key"] as string) ??
     req.headers.authorization?.replace(/^Bearer\s+/i, "");
-  if (provided === key) {
+  if (provided && safeCompare(provided, key)) {
     next();
   } else {
     res.status(401).json({ error: "Unauthorized: invalid or missing API key" });

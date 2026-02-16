@@ -19,6 +19,7 @@ import {
   getOrderByOrderId,
 } from "../db/database.js";
 import { logOrder, logExec } from "../logging.js";
+import { config } from "../config.js";
 
 // ── Open Orders ──────────────────────────────────────────────────────────
 
@@ -52,7 +53,7 @@ export async function getOpenOrders(): Promise<OpenOrderData[]> {
       settled = true;
       cleanup();
       resolve(orders);
-    }, 10000);
+    }, config.ibkr.orderTimeoutMs);
 
     const onOpenOrder = (
       orderId: number,
@@ -143,7 +144,7 @@ export async function getCompletedOrders(): Promise<CompletedOrderData[]> {
       settled = true;
       cleanup();
       resolve(orders);
-    }, 10000);
+    }, config.ibkr.orderTimeoutMs);
 
     const onCompleted = (
       contract: Contract,
@@ -238,7 +239,7 @@ export async function getExecutions(filter?: {
       settled = true;
       cleanup();
       resolve([...execMap.values()]);
-    }, 15000);
+    }, config.ibkr.executionTimeoutMs);
 
     const onExecDetails = (
       id: number,
@@ -564,7 +565,7 @@ export async function placeOrder(params: PlaceOrderParams): Promise<PlaceOrderRe
         status: "Submitted (timeout waiting for confirmation)",
         correlation_id: correlationId,
       });
-    }, 10000);
+    }, config.ibkr.orderTimeoutMs);
 
     const onOrderStatus = (
       id: number,
@@ -738,7 +739,7 @@ export async function placeBracketOrder(params: BracketOrderParams): Promise<Bra
         status: parentStatus || "Submitted (awaiting confirmation)",
         correlation_id: correlationId,
       });
-    }, 10000);
+    }, config.ibkr.orderTimeoutMs);
 
     const onOrderStatus = (
       id: number,
@@ -813,6 +814,7 @@ export interface AdvancedBracketParams {
   };
   tif?: string;
   outsideRth?: boolean;
+  ocaType?: 1 | 2 | 3; // 1=Cancel with block, 2=Reduce with block, 3=Reduce non-block
   // DB tracking
   strategy_version?: string;
   order_source?: string;
@@ -907,8 +909,9 @@ export async function placeAdvancedBracket(params: AdvancedBracketParams): Promi
   }
 
   // OCA type: cancel with block (when one child fills, cancel the other)
-  (tpOrder as any).ocaType = 1;
-  (slOrder as any).ocaType = 1;
+  const ocaType = params.ocaType ?? 1;
+  (tpOrder as any).ocaType = ocaType;
+  (slOrder as any).ocaType = ocaType;
 
   // Write all 3 to DB
   const dbFields = {
@@ -938,7 +941,7 @@ export async function placeAdvancedBracket(params: AdvancedBracketParams): Promi
       settled = true;
       cleanup();
       resolve(buildResult(parentStatus || "Submitted (awaiting confirmation)"));
-    }, 10000);
+    }, config.ibkr.orderTimeoutMs);
 
     const onOrderStatus = (id: number, status: string) => {
       if (id === parentId) {

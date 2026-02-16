@@ -9,6 +9,8 @@ export const config = {
     port: parseInt(process.env.IBKR_PORT ?? "7496", 10),
     clientId: parseInt(process.env.IBKR_CLIENT_ID ?? "0", 10),
     maxClientIdRetries: 5,
+    orderTimeoutMs: parseInt(process.env.IBKR_ORDER_TIMEOUT_MS ?? "10000", 10),
+    executionTimeoutMs: parseInt(process.env.IBKR_EXECUTION_TIMEOUT_MS ?? "15000", 10),
   },
   rest: {
     port: parseInt(process.env.REST_PORT ?? "3000", 10),
