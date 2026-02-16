@@ -38,6 +38,7 @@ export interface OpenOrderData {
   remaining: number;
   tif: string;
   parentId: number;
+  ocaGroup: string;
   account: string;
 }
 
@@ -76,6 +77,7 @@ export async function getOpenOrders(): Promise<OpenOrderData[]> {
         remaining: (order.totalQuantity as number) ?? 0,
         tif: order.tif ?? "",
         parentId: order.parentId ?? 0,
+        ocaGroup: (order as any).ocaGroup ?? "",
         account: order.account ?? "",
       });
     };
@@ -1032,11 +1034,22 @@ export interface ModifyOrderResult {
 export async function modifyOrder(params: ModifyOrderParams): Promise<ModifyOrderResult> {
   const ib = getIB();
 
+  // 0. Input validation
+  if (params.lmtPrice !== undefined && params.lmtPrice < 0) throw new Error("lmtPrice must be non-negative");
+  if (params.auxPrice !== undefined && params.auxPrice < 0) throw new Error("auxPrice must be non-negative");
+  if (params.totalQuantity !== undefined && params.totalQuantity <= 0) throw new Error("totalQuantity must be positive");
+
   // 1. Fetch the live order from TWS to get current contract + order state
   const openOrders = await getOpenOrders();
   const existing = openOrders.find((o) => o.orderId === params.orderId);
   if (!existing) {
     throw new Error(`Order ${params.orderId} not found in open orders — cannot modify a filled/cancelled order`);
+  }
+
+  // Only modify orders in a working state
+  const modifiableStatuses = new Set(["PreSubmitted", "Submitted"]);
+  if (!modifiableStatuses.has(existing.status)) {
+    throw new Error(`Order ${params.orderId} is not modifiable (status: ${existing.status})`);
   }
 
   // 2. Build contract from the existing order's fields
@@ -1077,6 +1090,11 @@ export async function modifyOrder(params: ModifyOrderParams): Promise<ModifyOrde
     parentId: existing.parentId ?? 0,
   };
 
+  // Preserve OCA group — critical for bracket orders
+  if (existing.ocaGroup) {
+    (order as any).ocaGroup = existing.ocaGroup;
+  }
+
   // Trailing fields — only set if provided (avoids IBKR rejecting zero defaults)
   if (params.trailingPercent !== undefined) {
     (order as any).trailingPercent = params.trailingPercent;
@@ -1089,45 +1107,51 @@ export async function modifyOrder(params: ModifyOrderParams): Promise<ModifyOrde
 
   logOrder.info({ orderId: params.orderId, modified, order }, "Modifying order in-place via IBKR");
 
-  // 4. Update DB record with new values
-  try {
-    const db = (await import("../db/database.js")).getDb();
-    const setClauses: string[] = [];
-    const values: any = { order_id: params.orderId };
+  // 4. Build DB update (but defer execution until IBKR confirms)
+  const dbUpdate = () => {
+    try {
+      const { getDb } = require("../db/database.js");
+      const db = getDb();
+      const setClauses: string[] = [];
+      const values: any = { order_id: params.orderId };
 
-    if (params.lmtPrice !== undefined) { setClauses.push("lmt_price = @lmt_price"); values.lmt_price = params.lmtPrice; }
-    if (params.auxPrice !== undefined) { setClauses.push("aux_price = @aux_price"); values.aux_price = params.auxPrice; }
-    if (params.totalQuantity !== undefined) { setClauses.push("total_quantity = @total_quantity"); values.total_quantity = params.totalQuantity; }
-    if (params.orderType !== undefined) { setClauses.push("order_type = @order_type"); values.order_type = params.orderType; }
-    if (params.tif !== undefined) { setClauses.push("tif = @tif"); values.tif = params.tif; }
-    setClauses.push("updated_at = datetime('now')");
+      if (params.lmtPrice !== undefined) { setClauses.push("lmt_price = @lmt_price"); values.lmt_price = params.lmtPrice; }
+      if (params.auxPrice !== undefined) { setClauses.push("aux_price = @aux_price"); values.aux_price = params.auxPrice; }
+      if (params.totalQuantity !== undefined) { setClauses.push("total_quantity = @total_quantity"); values.total_quantity = params.totalQuantity; }
+      if (params.orderType !== undefined) { setClauses.push("order_type = @order_type"); values.order_type = params.orderType; }
+      if (params.tif !== undefined) { setClauses.push("tif = @tif"); values.tif = params.tif; }
+      setClauses.push("updated_at = datetime('now')");
 
-    if (setClauses.length > 1) {
-      db.prepare(`UPDATE orders SET ${setClauses.join(", ")} WHERE order_id = @order_id`).run(values);
+      if (setClauses.length > 1) {
+        db.prepare(`UPDATE orders SET ${setClauses.join(", ")} WHERE order_id = @order_id`).run(values);
+      }
+    } catch (e: any) {
+      logOrder.error({ err: e, orderId: params.orderId }, "Failed to update modified order in DB");
     }
-  } catch (e: any) {
-    logOrder.error({ err: e, orderId: params.orderId }, "Failed to update modified order in DB — continuing with IBKR placement");
-  }
+  };
 
   // 5. Send to IBKR — same orderId = in-place modification
   return new Promise((resolve, reject) => {
     let settled = false;
 
+    const buildResult = (status: string): ModifyOrderResult => ({
+      orderId: params.orderId,
+      symbol: existing.symbol,
+      action: existing.action,
+      orderType: newOrderType,
+      totalQuantity: newQuantity,
+      lmtPrice: newLmtPrice || null,
+      auxPrice: newAuxPrice || null,
+      status,
+      modified,
+    });
+
     const timeout = setTimeout(() => {
       if (settled) return;
       settled = true;
       cleanup();
-      resolve({
-        orderId: params.orderId,
-        symbol: existing.symbol,
-        action: existing.action,
-        orderType: newOrderType,
-        totalQuantity: newQuantity,
-        lmtPrice: newLmtPrice || null,
-        auxPrice: newAuxPrice || null,
-        status: "Modified (timeout waiting for confirmation)",
-        modified,
-      });
+      dbUpdate(); // Still update DB on timeout — order likely accepted
+      resolve(buildResult("Modified (timeout waiting for confirmation)"));
     }, config.ibkr.orderTimeoutMs);
 
     const onOrderStatus = (id: number, status: string) => {
@@ -1135,17 +1159,8 @@ export async function modifyOrder(params: ModifyOrderParams): Promise<ModifyOrde
       if (settled) return;
       settled = true;
       cleanup();
-      resolve({
-        orderId: params.orderId,
-        symbol: existing.symbol,
-        action: existing.action,
-        orderType: newOrderType,
-        totalQuantity: newQuantity,
-        lmtPrice: newLmtPrice || null,
-        auxPrice: newAuxPrice || null,
-        status,
-        modified,
-      });
+      dbUpdate(); // DB update AFTER IBKR confirms
+      resolve(buildResult(status));
     };
 
     const onError = (err: Error, code: ErrorCode, id: number) => {
@@ -1154,6 +1169,7 @@ export async function modifyOrder(params: ModifyOrderParams): Promise<ModifyOrde
       if (settled) return;
       settled = true;
       cleanup();
+      // No DB update on rejection — order still has old values
       reject(new Error(`Modify order error (${code}): ${err.message}`));
     };
 

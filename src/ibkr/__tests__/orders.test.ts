@@ -793,7 +793,8 @@ describe("Order Validation and Advanced Brackets", () => {
     function setupMockIBForModify(openOrders: Array<{
       orderId: number; symbol: string; action: string; orderType: string;
       totalQuantity: number; lmtPrice: number | null; auxPrice: number | null;
-      secType: string; exchange: string; currency: string; tif: string; parentId: number;
+      secType: string; exchange: string; currency: string; tif: string;
+      parentId: number; ocaGroup?: string; status?: string;
     }>) {
       let openOrderHandler: Function | null = null;
       let openOrderEndHandler: Function | null = null;
@@ -820,8 +821,8 @@ describe("Order Validation and Advanced Brackets", () => {
                 openOrderHandler(
                   o.orderId,
                   { symbol: o.symbol, secType: o.secType, exchange: o.exchange, currency: o.currency },
-                  { action: o.action, orderType: o.orderType, totalQuantity: o.totalQuantity, lmtPrice: o.lmtPrice, auxPrice: o.auxPrice, tif: o.tif, parentId: o.parentId, account: "TEST" },
-                  { status: "PreSubmitted" },
+                  { action: o.action, orderType: o.orderType, totalQuantity: o.totalQuantity, lmtPrice: o.lmtPrice, auxPrice: o.auxPrice, tif: o.tif, parentId: o.parentId, ocaGroup: o.ocaGroup ?? "", account: "TEST" },
+                  { status: o.status ?? "PreSubmitted" },
                 );
               }
             }
@@ -959,6 +960,75 @@ describe("Order Validation and Advanced Brackets", () => {
       expect(call[2].orderType).toBe("LMT");
       expect(call[2].totalQuantity).toBe(100);
       expect(call[2].tif).toBe("GTC");
+    });
+
+    it("should preserve ocaGroup on bracket leg modification", async () => {
+      const connectionModule = await import("../connection.js");
+      const ocaOrder = {
+        orderId: 502,
+        symbol: "AAPL",
+        action: "SELL",
+        orderType: "LMT",
+        totalQuantity: 100,
+        lmtPrice: 155.0,
+        auxPrice: null,
+        secType: "STK",
+        exchange: "SMART",
+        currency: "USD",
+        tif: "GTC",
+        parentId: 499,
+        ocaGroup: "bracket_499_1700000000",
+      };
+      const ib = setupMockIBForModify([ocaOrder]);
+      vi.mocked(connectionModule.getIB).mockImplementation(() => ib);
+
+      await modifyOrder({ orderId: 502, lmtPrice: 160.0 });
+
+      const call = mockIB.placeOrder.mock.calls[0];
+      expect(call[2].ocaGroup).toBe("bracket_499_1700000000");
+    });
+
+    it("should reject negative lmtPrice", async () => {
+      await expect(
+        modifyOrder({ orderId: 500, lmtPrice: -100 })
+      ).rejects.toThrow("lmtPrice must be non-negative");
+    });
+
+    it("should reject negative auxPrice", async () => {
+      await expect(
+        modifyOrder({ orderId: 500, auxPrice: -5 })
+      ).rejects.toThrow("auxPrice must be non-negative");
+    });
+
+    it("should reject zero totalQuantity", async () => {
+      await expect(
+        modifyOrder({ orderId: 500, totalQuantity: 0 })
+      ).rejects.toThrow("totalQuantity must be positive");
+    });
+
+    it("should reject modification of non-modifiable order status", async () => {
+      const connectionModule = await import("../connection.js");
+      const cancellingOrder = {
+        orderId: 503,
+        symbol: "AAPL",
+        action: "SELL",
+        orderType: "LMT",
+        totalQuantity: 100,
+        lmtPrice: 155.0,
+        auxPrice: null,
+        secType: "STK",
+        exchange: "SMART",
+        currency: "USD",
+        tif: "GTC",
+        parentId: 0,
+        status: "PendingCancel",
+      };
+      const ib = setupMockIBForModify([cancellingOrder]);
+      vi.mocked(connectionModule.getIB).mockImplementation(() => ib);
+
+      await expect(
+        modifyOrder({ orderId: 503, lmtPrice: 160.0 })
+      ).rejects.toThrow("not modifiable (status: PendingCancel)");
     });
   });
 });
