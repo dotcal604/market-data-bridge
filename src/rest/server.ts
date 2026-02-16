@@ -1,7 +1,7 @@
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
-import { randomUUID } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { router } from "./routes.js";
 import { evalRouter } from "../eval/routes.js";
@@ -23,7 +23,13 @@ function apiKeyAuth(req: Request, res: Response, next: NextFunction): void {
   const provided =
     (req.headers["x-api-key"] as string) ??
     req.headers.authorization?.replace(/^Bearer\s+/i, "");
-  if (provided === key) {
+  const providedBuffer = Buffer.from(provided ?? "");
+  const keyBuffer = Buffer.from(key);
+
+  if (
+    providedBuffer.length === keyBuffer.length &&
+    timingSafeEqual(providedBuffer, keyBuffer)
+  ) {
     next();
   } else {
     res.status(401).json({ error: "Unauthorized: invalid or missing API key" });
