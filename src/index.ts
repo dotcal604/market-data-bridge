@@ -15,6 +15,8 @@ import { startScheduler, stopScheduler } from "./scheduler.js";
 import { initWeights } from "./eval/ensemble/weights.js";
 import { unsubscribeAll } from "./ibkr/subscriptions.js";
 import { startHollyWatcher, stopHollyWatcher } from "./holly/watcher.js";
+import { config } from "./config.js";
+import { validateConfig } from "./config-validator.js";
 
 type Mode = "mcp" | "rest" | "both";
 
@@ -30,6 +32,20 @@ function parseMode(): Mode {
 async function main() {
   const mode = parseMode();
   logger.info({ mode }, "Market Bridge starting");
+
+  // Validate configuration early
+  const validation = validateConfig(config);
+  if (validation.warnings.length > 0) {
+    for (const warning of validation.warnings) {
+      logger.warn(warning);
+    }
+  }
+  if (validation.errors.length > 0) {
+    for (const error of validation.errors) {
+      logger.error(error);
+    }
+    throw new Error("Configuration validation failed. Please fix the errors above.");
+  }
 
   // Initialize DB-backed collab store (loads persisted messages)
   initCollabFromDb();
