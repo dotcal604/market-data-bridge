@@ -67,6 +67,20 @@ describe("Action Catalog", () => {
         "holly_import",
         "holly_stats",
         "holly_symbols",
+        "holly_predictor_candidates",
+        "holly_predictor_profiles",
+        "holly_predictor_refresh",
+        "holly_predictor_scan",
+        "holly_predictor_scan_batch",
+        "holly_predictor_status",
+        "holly_extract_rules",
+        "holly_backtest",
+        "holly_strategy_breakdown",
+        "holly_trade_import",
+        "holly_trade_import_file",
+        "holly_trade_stats",
+        "holly_trades",
+        "holly_exit_autopsy",
         "journal_create",
         "journal_get",
         "journal_read",
@@ -111,7 +125,7 @@ describe("Action Catalog", () => {
     });
 
     it("has exactly 96 actions", () => {
-      expect(Object.keys(actionsMeta)).toHaveLength(96);
+      expect(Object.keys(actionsMeta)).toHaveLength(110);
     });
 
     it("every action has a non-empty description", () => {
@@ -282,7 +296,7 @@ describe("Action Catalog", () => {
 
     it("returns an object with all action metadata", () => {
       const catalog = getActionCatalog();
-      expect(Object.keys(catalog)).toHaveLength(96);
+      expect(Object.keys(catalog)).toHaveLength(110);
       
       for (const [action, meta] of Object.entries(catalog)) {
         expect(meta).toHaveProperty("description");

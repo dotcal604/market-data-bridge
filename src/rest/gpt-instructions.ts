@@ -147,6 +147,28 @@ Yahoo (always available): get_quote, get_historical_bars, get_financials, get_ea
 - holly_stats — no params — aggregate stats (total alerts, unique symbols, strategies, date range)
 - holly_symbols — { limit? } — latest distinct symbols from Holly alerts (default 20). Use for ensemble scoring.
 
+### Holly Pre-Alert Predictor
+- holly_predictor_status — no params — predictor status: profiles built, strategies learned, total historical alerts used
+- holly_predictor_profiles — { min_samples? } — get learned feature distribution profiles per Holly strategy (mean/std/min/max for each feature)
+- holly_predictor_scan — { symbol, threshold? } — scan one symbol against Holly profiles. Returns match scores (0-100) per strategy. 80+ = strong pre-alert match.
+- holly_predictor_scan_batch — { symbols, threshold? } — scan multiple symbols in parallel against Holly profiles
+- holly_predictor_candidates — { symbols?, threshold?, limit? } — top pre-alert candidates: symbols most likely to trigger Holly alerts soon. Default scans recent Holly symbols.
+- holly_predictor_refresh — { min_samples? } — force-rebuild profiles from latest data (call after new Holly alerts + auto-eval)
+
+### Holly Reverse-Engineering & Backtest
+- holly_extract_rules — { min_alerts?, min_separation?, since? } — reverse-engineer Holly trigger conditions: extracts feature thresholds (RVOL, gap%, extension%, etc.) that distinguish Holly alerts from baseline using Cohen's d effect sizes
+- holly_backtest — { days?, symbols?, min_match_score?, since?, until? } — backtest extracted Holly rules across any symbol universe + timeframe. Reports precision, win rate, Sharpe, P&L per strategy and aggregate.
+- holly_strategy_breakdown — { since? } — quick strategy-level breakdown: defining features, separation scores, tradeable rate, outcome P&L per strategy
+
+### Holly Trade Data (Historical Trade Ideas Export)
+- holly_trade_import — { csv } — import Holly trade CSV content (Trade Ideas export with MFE/MAE/exit data)
+- holly_trade_import_file — { file_path } — import Holly trades from a file on disk
+- holly_trade_stats — no params — aggregate stats: total trades, win rate, avg R, avg giveback ratio, avg hold time, total P&L
+- holly_trades — { symbol?, strategy?, segment?, since?, until?, limit? } — query trades with full MFE/MAE/giveback/time-to-MFE metrics
+
+### Holly Exit Autopsy
+- holly_exit_autopsy — { since?, until? } — full exit autopsy: strategy leaderboard (Sharpe, profit factor, expectancy), MFE/MAE giveback profiles, exit policy recommendations (early_peaker/late_grower/bleeder archetypes), time-of-day performance, segment comparison (Grail vs Neo)
+
 ### Signals / Auto-Eval Pipeline
 - signal_feed — { symbol?, direction?, since?, limit? } — query evaluated signals from auto-eval. Each signal links a Holly alert to its ensemble evaluation. limit default 50.
 - signal_stats — no params — aggregate signal stats (total, tradeable, blocked by prefilter, by direction)
