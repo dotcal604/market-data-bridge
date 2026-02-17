@@ -17,29 +17,11 @@ interface SimulationResultsPanelProps {
 }
 
 interface SimulationResult {
-  simulated_weights: { claude: number; gpt4o: number; gemini: number; k: number };
-  current_weights: { claude: number; gpt4o: number; gemini: number; k: number };
-  evaluations_count: number;
-  outcomes_with_trades: number;
-  comparison: {
-    current: {
-      avg_score: number;
-      trade_rate: number;
-      accuracy: number | null;
-    };
-    simulated: {
-      avg_score: number;
-      trade_rate: number;
-      accuracy: number | null;
-    };
-    delta: {
-      avg_score: number;
-      trade_rate: number;
-      accuracy: number | null;
-      decisions_changed: number;
-      decisions_changed_pct: number;
-    };
-  };
+  avg_score_delta: number;
+  trade_rate_delta: number;
+  accuracy_delta: number;
+  decisions_changed: number;
+  sample_size: number;
 }
 
 function DeltaCell({ label, value, suffix = "", format = "decimal" }: {
@@ -48,7 +30,7 @@ function DeltaCell({ label, value, suffix = "", format = "decimal" }: {
   suffix?: string;
   format?: "decimal" | "percent";
 }) {
-  if (value === null) {
+  if (value === null || value === undefined) {
     return (
       <div className="space-y-1">
         <p className="text-xs text-muted-foreground">{label}</p>
@@ -60,7 +42,7 @@ function DeltaCell({ label, value, suffix = "", format = "decimal" }: {
   const color = value > 0 ? "text-emerald-400" : value < 0 ? "text-red-400" : "text-muted-foreground";
   const sign = value > 0 ? "+" : "";
   const formatted = format === "percent" ? (value * 100).toFixed(1) : value.toFixed(2);
-  
+
   return (
     <div className="space-y-1">
       <p className="text-xs text-muted-foreground">{label}</p>
@@ -79,17 +61,16 @@ export function SimulationResultsPanel({ weights }: SimulationResultsPanelProps)
   const [symbol, setSymbol] = useState<string>("");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Auto-fire simulation on weight change (debounced 300ms)
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    
+
     debounceRef.current = setTimeout(async () => {
       const { claude, gpt4o, gemini, k } = weights;
       if (claude + gpt4o + gemini === 0) return;
-      
+
       setIsLoading(true);
       setError(null);
-      
+
       try {
         const data = await evalClient.simulateWeights({
           claude,
@@ -99,7 +80,7 @@ export function SimulationResultsPanel({ weights }: SimulationResultsPanelProps)
           days,
           symbol: symbol || undefined,
         });
-        setResult(data as SimulationResult);
+        setResult(data);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Simulation failed");
         setResult(null);
@@ -107,7 +88,7 @@ export function SimulationResultsPanel({ weights }: SimulationResultsPanelProps)
         setIsLoading(false);
       }
     }, 300);
-    
+
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
@@ -162,61 +143,21 @@ export function SimulationResultsPanel({ weights }: SimulationResultsPanelProps)
             {/* Sample size badge */}
             <div className="flex items-center gap-2">
               <Badge variant="outline" className="font-mono text-xs">
-                {result.evaluations_count} evaluations
+                {result.sample_size} evaluations
               </Badge>
-              {result.outcomes_with_trades > 0 && (
-                <Badge variant="outline" className="font-mono text-xs text-muted-foreground">
-                  {result.outcomes_with_trades} with outcomes
-                </Badge>
-              )}
             </div>
 
             {/* Delta metrics */}
             <div className="grid grid-cols-2 gap-3 rounded-md border border-border bg-card/50 p-3">
-              <DeltaCell label="Score Delta" value={result.comparison.delta.avg_score} />
-              <DeltaCell label="Trade Rate Δ" value={result.comparison.delta.trade_rate} format="percent" suffix="%" />
-              <DeltaCell label="Accuracy Δ" value={result.comparison.delta.accuracy} format="percent" suffix="%" />
+              <DeltaCell label="Score Delta" value={result.avg_score_delta} />
+              <DeltaCell label="Trade Rate Δ" value={result.trade_rate_delta} format="percent" suffix="%" />
+              <DeltaCell label="Accuracy Δ" value={result.accuracy_delta} format="percent" suffix="%" />
               <div className="space-y-1">
                 <p className="text-xs text-muted-foreground">Decisions Changed</p>
                 <p className="font-mono text-sm font-bold">
-                  {result.comparison.delta.decisions_changed}
-                  <span className="text-xs text-muted-foreground ml-1">
-                    ({(result.comparison.delta.decisions_changed_pct * 100).toFixed(1)}%)
-                  </span>
+                  {result.decisions_changed}
                 </p>
               </div>
-            </div>
-
-            {/* Comparison table */}
-            <div className="rounded-md border border-border overflow-hidden">
-              <table className="w-full text-xs">
-                <thead className="bg-muted/50">
-                  <tr>
-                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">Metric</th>
-                    <th className="px-3 py-2 text-right font-medium text-muted-foreground">Current</th>
-                    <th className="px-3 py-2 text-right font-medium text-muted-foreground">Simulated</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  <tr>
-                    <td className="px-3 py-2 text-muted-foreground">Avg Score</td>
-                    <td className="px-3 py-2 text-right font-mono">{result.comparison.current.avg_score.toFixed(2)}</td>
-                    <td className="px-3 py-2 text-right font-mono font-semibold">{result.comparison.simulated.avg_score.toFixed(2)}</td>
-                  </tr>
-                  <tr>
-                    <td className="px-3 py-2 text-muted-foreground">Trade Rate</td>
-                    <td className="px-3 py-2 text-right font-mono">{(result.comparison.current.trade_rate * 100).toFixed(1)}%</td>
-                    <td className="px-3 py-2 text-right font-mono font-semibold">{(result.comparison.simulated.trade_rate * 100).toFixed(1)}%</td>
-                  </tr>
-                  {result.comparison.current.accuracy !== null && (
-                    <tr>
-                      <td className="px-3 py-2 text-muted-foreground">Accuracy</td>
-                      <td className="px-3 py-2 text-right font-mono">{(result.comparison.current.accuracy * 100).toFixed(1)}%</td>
-                      <td className="px-3 py-2 text-right font-mono font-semibold">{(result.comparison.simulated.accuracy! * 100).toFixed(1)}%</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
             </div>
           </>
         ) : (
