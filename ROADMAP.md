@@ -120,7 +120,7 @@ Keep the system running. Don't over-invest here.
 | **News stack** | 1 | **Done** | Codex | PR #117 — 4 news methods |
 | **Prompt caching** | 1 | **Done** | Codex | PR #116 — Anthropic + Gemini |
 | **Yahoo recommendations** | 1 | **Done** | Copilot | PR #115 — analyst consensus |
-| WebSocket real-time updates | 1 | Not started | Claude Code | #290 — replaces polling, cross-cutting |
+| WebSocket real-time updates | 1 | **Partial** | Claude Code | #290 — Account, PnL, Status implemented |
 | Production build | 1 | Not started | Claude Code | #291 — static export from Express, cross-cutting |
 | Subscription APIs (6 methods) | 1 | Deferred | Claude Code | #105 — needs architecture session (streaming) |
 
