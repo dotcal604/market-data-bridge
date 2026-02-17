@@ -17,12 +17,14 @@ import {
   TrendingUp,
   Filter,
   Server,
+  Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/status", label: "Status", icon: Server },
+  { href: "/session", label: "Session", icon: Shield },
   { href: "/market", label: "Market Data", icon: TrendingUp },
   { href: "/screener", label: "Screener", icon: Filter },
   { href: "/evals", label: "Evaluations", icon: History, children: [

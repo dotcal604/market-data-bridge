@@ -433,3 +433,42 @@ export interface FlattenResult {
   skipped: Array<{ symbol: string; reason: string }>;
   error?: string;
 }
+
+// Session / Risk Gate types
+export interface SessionLimits {
+  maxDailyLoss: number;
+  maxDailyTrades: number;
+  consecutiveLossLimit: number;
+  cooldownMinutes: number;
+  lateDayLockoutMinutes: number;
+  marketOpenHour: number;
+  marketOpenMinute: number;
+  marketCloseHour: number;
+  marketCloseMinute: number;
+}
+
+export interface SessionState {
+  date: string;
+  realizedPnl: number;
+  tradeCount: number;
+  consecutiveLosses: number;
+  lastTradeTime: number;
+  lastLossTime: number;
+  locked: boolean;
+  lockReason: string | null;
+  limits: SessionLimits;
+}
+
+export interface RiskConfig {
+  max_position_pct: number;
+  max_daily_loss_pct: number;
+  max_concentration_pct: number;
+  volatility_scalar: number;
+}
+
+export interface RiskGateConfig {
+  effective: RiskConfig;
+  floors: RiskConfig;
+  manual: RiskConfig;
+  rows: Array<{ param: string; value: number; source: string; last_updated: string }>;
+}
