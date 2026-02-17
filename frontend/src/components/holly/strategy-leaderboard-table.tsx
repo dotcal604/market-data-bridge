@@ -102,7 +102,7 @@ export function StrategyLeaderboardTable({ strategies }: StrategyLeaderboardTabl
             </th>
             <th
               className="px-3 py-2 text-right font-medium text-muted-foreground cursor-pointer hover:text-foreground transition-colors"
-              onClick={() => handleSort("giveback_ratio")}
+              onClick={() => handleSort("avg_giveback_ratio")}
             >
               <div className="flex items-center justify-end gap-1">
                 Giveback % <SortIcon colKey="avg_giveback_ratio" />
