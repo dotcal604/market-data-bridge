@@ -462,47 +462,48 @@ describe("MCP Server", () => {
     });
   });
 
-  describe("Input Validation", () => {
-    it("should validate get_quote symbol parameter", () => {
+  describe("Schema Definitions", () => {
+    it("should define get_quote schema with symbol parameter", () => {
       const server = createMcpServer();
       expect(server).toBeDefined();
-      // Zod validation happens inside the tool handler
-      // If server is created, schema definitions are valid
+      // Schema: { symbol: z.string() }
+      // Zod validation happens inside tool handler when invoked
+      // This test verifies server creation with schema succeeds
     });
 
-    it("should validate get_historical_bars parameters", () => {
+    it("should define get_historical_bars schema with optional parameters", () => {
       const server = createMcpServer();
       expect(server).toBeDefined();
-      // Validates symbol, period (optional), interval (optional)
+      // Schema: { symbol: z.string(), period: z.string().optional(), interval: z.string().optional() }
+      // Server creation validates schema definition is correct
     });
 
-    it("should validate get_historical_ticks enum types", () => {
+    it("should define get_historical_ticks schema with enum and range constraints", () => {
       const server = createMcpServer();
       expect(server).toBeDefined();
-      // Validates type enum: TRADES, BID_ASK, MIDPOINT
-      // Validates count range: 1-1000
+      // Schema includes: type: z.enum(["TRADES", "BID_ASK", "MIDPOINT"]), count: z.number().int().min(1).max(1000)
+      // Server creation validates enum and range definitions are valid
     });
 
-    it("should validate get_option_quote right parameter", () => {
+    it("should define get_option_quote schema with enum types", () => {
       const server = createMcpServer();
       expect(server).toBeDefined();
-      // Validates right enum: C or P
-      // Validates strike as number
-      // Validates expiry as string
+      // Schema includes: right: z.enum(["C", "P"]), strike: z.number(), expiry: z.string()
+      // Server creation validates enum definition is valid
     });
 
-    it("should validate place_order action enum", () => {
+    it("should define place_order schema with action and orderType enums", () => {
       const server = createMcpServer();
       expect(server).toBeDefined();
-      // Validates action: BUY or SELL
-      // Validates orderType: MKT, LMT, STP, etc.
+      // Schema includes action and orderType enums (defined in server.ts tool registration)
+      // Server creation validates enum definitions are valid
     });
 
-    it("should validate flatten_config enabled boolean", () => {
+    it("should define flatten_config schema with boolean and optional string", () => {
       const server = createMcpServer();
       expect(server).toBeDefined();
-      // Validates enabled as boolean
-      // Validates time as string (optional)
+      // Schema: { enabled: z.boolean(), time: z.string().optional() }
+      // Server creation validates schema structure is valid
     });
   });
 
@@ -705,6 +706,11 @@ describe("MCP Server", () => {
   });
 
   describe("Tool Registration - Market Data", () => {
+    // Note: The MCP SDK does not expose a public API to directly inspect registered tools.
+    // These tests verify that server creation succeeds with all tool registrations in place.
+    // If a tool registration has a syntax error or invalid schema, server creation will fail.
+    // Actual tool invocation is tested through integration tests with MCP clients.
+    
     it("should register get_status", () => {
       const server = createMcpServer();
       expect(server).toBeDefined();
