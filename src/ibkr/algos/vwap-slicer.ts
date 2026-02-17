@@ -61,35 +61,37 @@ export class VWAPSlicer extends EventEmitter {
   private async sliceLoop() {
     const intervalMs = 60000; // Check every minute
 
-    const loop = setInterval(async () => {
-      if (this.state !== 'RUNNING') {
-        clearInterval(loop);
-        return;
-      }
+    const loop = setInterval(() => {
+      (async () => {
+        if (this.state !== 'RUNNING') {
+          clearInterval(loop);
+          return;
+        }
 
-      const now = Date.now();
-      if (now >= this.config.endTime || this.filledQty >= this.config.totalQuantity) {
-        this.state = 'COMPLETED';
+        const now = Date.now();
+        if (now >= this.config.endTime || this.filledQty >= this.config.totalQuantity) {
+          this.state = 'COMPLETED';
+          this.emit('status', this.state);
+          clearInterval(loop);
+          return;
+        }
+
+        // 1. Calculate Target Quantity
+        const progress = (now - this.config.startTime) / (this.config.endTime - this.config.startTime);
+        const targetPct = this.getTargetCumVolPct(progress);
+        const targetQty = Math.floor(this.config.totalQuantity * targetPct);
+
+        const qtyNeeded = targetQty - this.filledQty;
+
+        if (qtyNeeded > 0) {
+          await this.placeChildOrder(qtyNeeded);
+        }
+      })().catch((err) => {
+        console.error(`[VWAP] Slice loop error (swallowed): ${err}`);
+        this.state = 'FAILED';
         this.emit('status', this.state);
         clearInterval(loop);
-        return;
-      }
-
-      // 1. Calculate Target Quantity
-      const progress = (now - this.config.startTime) / (this.config.endTime - this.config.startTime);
-      const targetPct = this.getTargetCumVolPct(progress);
-      const targetQty = Math.floor(this.config.totalQuantity * targetPct);
-      
-      const qtyNeeded = targetQty - this.filledQty;
-
-      if (qtyNeeded > 0) {
-        // 2. Check Price Deviation (Alpha signal)
-        // If price is too far from VWAP, pause or get aggressive
-        // For this implementation, we assume neutral and just execute.
-        
-        await this.placeChildOrder(qtyNeeded);
-      }
-
+      });
     }, intervalMs);
   }
 

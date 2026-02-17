@@ -5,6 +5,9 @@ let ib: IBApi | null = null;
 let connected = false;
 let nextReqId = 1;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let reconnectAttempts = 0;
+const RECONNECT_BASE_MS = 5_000;     // start at 5s
+const RECONNECT_MAX_MS = 5 * 60_000; // cap at 5 minutes
 let twsVersion: number | null = null;
 
 /** Minimum TWS server version we expect. Below this we log a warning. */
@@ -58,6 +61,7 @@ export function getIB(): IBApi {
     ib.on(EventName.connected, () => {
       connected = true;
       clientIdRetries = 0;
+      reconnectAttempts = 0; // reset backoff on successful connect
       twsVersion = ib!.serverVersion ?? null;
       console.error(`[IBKR] Connected to TWS/Gateway (clientId=${currentClientId}, mode=${accountMode()}, port=${config.ibkr.port}, serverVersion=${twsVersion})`);
       if (twsVersion !== null && twsVersion < MIN_TWS_VERSION) {
@@ -118,13 +122,19 @@ function destroyIB(): void {
   }
 }
 
-export function scheduleReconnect(delayMs = 5000): void {
+export function scheduleReconnect(delayMs?: number): void {
   if (reconnectTimer) return;
+  const delay = delayMs ?? Math.min(RECONNECT_BASE_MS * Math.pow(2, reconnectAttempts), RECONNECT_MAX_MS);
+  reconnectAttempts++;
+  // Only log every 5th attempt after the first few to reduce spam
+  const shouldLog = reconnectAttempts <= 3 || reconnectAttempts % 5 === 0;
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
-    console.error(`[IBKR] Attempting reconnect (clientId=${currentClientId})...`);
+    if (shouldLog) {
+      console.error(`[IBKR] Attempting reconnect (clientId=${currentClientId}, attempt=${reconnectAttempts}, nextDelay=${Math.min(RECONNECT_BASE_MS * Math.pow(2, reconnectAttempts), RECONNECT_MAX_MS)}ms)...`);
+    }
     connect().catch(() => scheduleReconnect());
-  }, delayMs);
+  }, delay);
 }
 
 export async function connect(): Promise<void> {

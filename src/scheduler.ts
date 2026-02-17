@@ -236,13 +236,17 @@ const FLATTEN_CHECK_MS = 30 * 1000;         // check every 30s (tight window)
 export function startScheduler(intervalMs: number = DEFAULT_INTERVAL_MS) {
   if (snapshotTimer) return;
   log.info({ intervalMs }, "Scheduler started — periodic snapshots enabled");
-  snapshotTimer = setInterval(takeSnapshots, intervalMs);
+  snapshotTimer = setInterval(() => {
+    takeSnapshots().catch((err) => log.error({ err }, "Snapshot timer error (swallowed)"));
+  }, intervalMs);
   // Also take one immediately
-  takeSnapshots();
+  takeSnapshots().catch((err) => log.error({ err }, "Initial snapshot error (swallowed)"));
 
   // Start flatten check (30s interval — must not miss the 1-minute window)
   if (!flattenTimer) {
-    flattenTimer = setInterval(checkFlatten, FLATTEN_CHECK_MS);
+    flattenTimer = setInterval(() => {
+      checkFlatten().catch((err) => log.error({ err }, "Flatten timer error (swallowed)"));
+    }, FLATTEN_CHECK_MS);
     log.info(
       { flattenTime: `${FLATTEN_HOUR}:${String(FLATTEN_MINUTE).padStart(2, "0")} ET`, enabled: flattenEnabled },
       "EOD flatten scheduler armed",
@@ -251,9 +255,13 @@ export function startScheduler(intervalMs: number = DEFAULT_INTERVAL_MS) {
 
   // Start drift monitoring (30-min interval)
   if (!driftTimer) {
-    driftTimer = setInterval(checkDrift, DRIFT_CHECK_MS);
+    driftTimer = setInterval(() => {
+      try { checkDrift(); } catch (err) { log.error({ err }, "Drift timer error (swallowed)"); }
+    }, DRIFT_CHECK_MS);
     // Run first check after 60s (let DB settle on startup)
-    setTimeout(checkDrift, 60_000);
+    setTimeout(() => {
+      try { checkDrift(); } catch (err) { log.error({ err }, "Initial drift check error (swallowed)"); }
+    }, 60_000);
     log.info({ intervalMin: DRIFT_CHECK_MS / 60_000 }, "Drift monitor armed — checking every 30 min during market hours");
   }
 }

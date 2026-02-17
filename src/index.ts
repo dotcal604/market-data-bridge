@@ -118,16 +118,31 @@ async function main() {
   process.on("SIGINT", () => { shutdown().catch((e) => logger.error({ err: e }, "Shutdown error")); });
   process.on("SIGTERM", () => { shutdown().catch((e) => logger.error({ err: e }, "Shutdown error")); });
 
-  // Catch unhandled async rejections — log and shut down cleanly
-  process.on("unhandledRejection", (reason, promise) => {
-    logger.error({ reason, promise }, "Unhandled promise rejection — shutting down");
-    shutdown().catch((e) => logger.error({ err: e }, "Shutdown error"));
+  // Catch unhandled async rejections — log but keep running.
+  // Shutting down on every unhandled rejection kills the bridge 40x/day
+  // during market hours when transient IBKR/network errors bubble up
+  // through timer callbacks. The individual error is already logged;
+  // pm2 handles restart if the process truly becomes unrecoverable.
+  let unhandledCount = 0;
+  process.on("unhandledRejection", (reason) => {
+    unhandledCount++;
+    logger.error({ reason, unhandledCount }, "Unhandled promise rejection (swallowed — keeping server alive)");
+    // If we get 50+ unhandled rejections, something is truly broken — restart
+    if (unhandledCount >= 50) {
+      logger.fatal({ unhandledCount }, "Too many unhandled rejections — shutting down");
+      shutdown().catch((e) => logger.error({ err: e }, "Shutdown error"));
+    }
   });
 
-  // Catch uncaught sync exceptions
+  // Catch uncaught sync exceptions — these are more serious but we still
+  // try to keep alive unless it's clearly fatal (OOM, stack overflow, etc.)
   process.on("uncaughtException", (err) => {
-    logger.fatal({ err }, "Uncaught exception — shutting down");
-    shutdown().catch((e) => logger.error({ err: e }, "Shutdown error"));
+    logger.fatal({ err }, "Uncaught exception (keeping server alive — may be degraded)");
+    // Only shut down for truly unrecoverable errors
+    if (err.message?.includes("out of memory") || err.message?.includes("Maximum call stack")) {
+      logger.fatal("Unrecoverable error — forcing exit");
+      process.exit(1);
+    }
   });
 }
 

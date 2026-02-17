@@ -129,13 +129,9 @@ function touchSession(sessionId: string): void {
   );
 }
 
-// Prevent uncaught errors from killing the process during RTH
-process.on("uncaughtException", (err) => {
-  logRest.error({ err }, "Uncaught exception — keeping server alive");
-});
-process.on("unhandledRejection", (reason) => {
-  logRest.error({ reason }, "Unhandled rejection — keeping server alive");
-});
+// NOTE: Do NOT register process.on("uncaughtException"/"unhandledRejection") here.
+// The main index.ts handlers own process lifecycle. Duplicate handlers here
+// would shadow them and leave the process in a corrupted state.
 
 export function createApp(): express.Express {
   const app = express();
