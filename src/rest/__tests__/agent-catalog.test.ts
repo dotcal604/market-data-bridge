@@ -89,6 +89,8 @@ describe("Action Catalog", () => {
         "journal_update",
         "list_subscriptions",
         "modify_order",
+        "multi_model_consensus",
+        "multi_model_score",
         "orders_history",
         "place_advanced_bracket",
         "place_bracket_order",
@@ -215,6 +217,13 @@ describe("Action Catalog", () => {
       expect(meta.description).toBe("Record outcome for an evaluation");
       expect(meta.params).toContain("evaluation_id");
       expect(meta.params).toContain("trade_taken");
+      expect(meta.requiresIBKR).toBeFalsy();
+    });
+
+    it("multi_model_score has correct metadata", () => {
+      const meta = actionsMeta.multi_model_score;
+      expect(meta.description).toBe("Collect weighted scores from GPT, Gemini, and Claude providers");
+      expect(meta.params).toEqual(["symbol", "features?"]);
       expect(meta.requiresIBKR).toBeFalsy();
     });
   });
