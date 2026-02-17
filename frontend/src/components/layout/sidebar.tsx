@@ -21,6 +21,7 @@ import {
   Zap,
   Crosshair,
   Microscope,
+  CalendarDays,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -32,7 +33,9 @@ const NAV_ITEMS = [
   { href: "/evals", label: "Evaluations", icon: History, children: [
     { href: "/evals/compare", label: "Compare", icon: GitCompare },
   ]},
-  { href: "/journal", label: "Journal", icon: BookOpen },
+  { href: "/journal", label: "Journal", icon: BookOpen, children: [
+    { href: "/journal/timeline", label: "Timeline", icon: CalendarDays },
+  ]},
   { href: "/executions", label: "Executions", icon: Receipt },
   { href: "/signals", label: "Signals", icon: Zap },
   { href: "/model-stats", label: "Model Stats", icon: BarChart3 },
