@@ -35,8 +35,9 @@ import { getGptInstructions } from "./gpt-instructions.js";
 import { checkRisk, getSessionState, recordTradeResult, lockSession, unlockSession, resetSession, getRiskGateConfig } from "../ibkr/risk-gate.js";
 import { calculatePositionSize } from "../ibkr/risk.js";
 import { tuneRiskParams } from "../eval/risk-tuning.js";
-import { queryOrders, queryExecutions, queryJournal, insertJournalEntry, updateJournalEntry, getJournalById, upsertRiskConfig } from "../db/database.js";
+import { queryOrders, queryExecutions, queryJournal, insertJournalEntry, updateJournalEntry, getJournalById, upsertRiskConfig, getTraderSyncStats, getTraderSyncTrades } from "../db/database.js";
 import { RISK_CONFIG_DEFAULTS, type RiskConfigParam } from "../db/schema.js";
+import { importTraderSyncCSV } from "../tradersync/importer.js";
 import { logger } from "../logging.js";
 
 const log = logger.child({ module: "agent" });
@@ -179,6 +180,23 @@ const actions: Record<string, ActionHandler> = {
   // ── History ──
   orders_history: async (p) => queryOrders({ symbol: str(p, "symbol") || undefined, strategy: str(p, "strategy") || undefined, limit: num(p, "limit", 100) }),
   executions_history: async (p) => queryExecutions({ symbol: str(p, "symbol") || undefined, limit: num(p, "limit", 100) }),
+
+  // ── TraderSync ──
+  tradersync_import: async (p) => {
+    const csv = str(p, "csv");
+    if (!csv) {
+      throw new Error("csv is required");
+    }
+    return importTraderSyncCSV(csv);
+  },
+  tradersync_stats: async () => getTraderSyncStats(),
+  tradersync_trades: async (p) => getTraderSyncTrades({
+    symbol: str(p, "symbol") || undefined,
+    side: str(p, "side") || undefined,
+    status: str(p, "status") || undefined,
+    days: p.days !== undefined ? num(p, "days") : undefined,
+    limit: p.limit !== undefined ? num(p, "limit") : undefined,
+  }),
 };
 
 // ── Dispatcher ───────────────────────────────────────────────────

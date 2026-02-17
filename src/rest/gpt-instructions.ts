@@ -22,6 +22,7 @@ Call get_status (no params) before every conversation. Use marketSession and ibk
 ## DATA ROUTING
 IBKR (requires connection): get_ibkr_quote, get_account_summary, get_positions, get_pnl, get_open_orders, get_completed_orders, get_executions, get_contract_details, get_historical_ticks, portfolio_exposure, stress_test, size_position, all order actions
 Yahoo (always available): get_quote, get_historical_bars, get_financials, get_earnings, get_news, get_stock_details, get_options_chain, get_option_quote, search_symbols, get_trending, run_screener, run_screener_with_quotes, get_recommendations
+TraderSync (database-backed): tradersync_import, tradersync_stats, tradersync_trades
 
 ## ACTION CATALOG
 
@@ -121,6 +122,11 @@ Yahoo (always available): get_quote, get_historical_bars, get_financials, get_ea
 ### History
 - orders_history — { symbol?, strategy?, limit? } — limit default 100
 - executions_history — { symbol?, limit? } — limit default 100
+
+### TraderSync
+- tradersync_import — { csv } — import TraderSync CSV content into the database
+- tradersync_stats — no params
+- tradersync_trades — { symbol?, side?, status?, days?, limit? }
 
 ## ORDER EXECUTION RULES
 ALWAYS use place_advanced_bracket for bracket orders. NEVER manually sequence entry then TP/SL.
