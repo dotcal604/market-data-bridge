@@ -433,3 +433,43 @@ export interface FlattenResult {
   skipped: Array<{ symbol: string; reason: string }>;
   error?: string;
 }
+
+// Drift monitoring types
+export interface DecileCalibration {
+  decile: number;
+  count: number;
+  predicted_win_rate: number;
+  actual_win_rate: number;
+  abs_error: number;
+}
+
+export interface ModelDriftReport {
+  model_id: string;
+  sample_size: number;
+  rolling_accuracy: {
+    last_50: number;
+    last_20: number;
+    last_10: number;
+  };
+  calibration_error: number;
+  calibration_by_decile: DecileCalibration[];
+  regime_shift_detected: boolean;
+}
+
+export interface DriftReport {
+  overall_accuracy: number;
+  by_model: ModelDriftReport[];
+  regime_shift_detected: boolean;
+  recommendation: string;
+}
+
+export interface DriftAlert {
+  id?: number;
+  alert_type: "accuracy_low" | "calibration_high" | "regime_shift";
+  model_id: string | null;
+  metric_value: number;
+  threshold: number;
+  message: string;
+  timestamp: string;
+  created_at?: string;
+}

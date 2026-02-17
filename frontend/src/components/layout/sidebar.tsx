@@ -17,6 +17,7 @@ import {
   TrendingUp,
   Filter,
   Server,
+  AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -31,6 +32,7 @@ const NAV_ITEMS = [
   { href: "/journal", label: "Journal", icon: BookOpen },
   { href: "/executions", label: "Executions", icon: Receipt },
   { href: "/model-stats", label: "Model Stats", icon: BarChart3 },
+  { href: "/drift", label: "Drift Monitor", icon: AlertTriangle },
   { href: "/weights", label: "Weights", icon: SlidersHorizontal },
   { href: "/orders", label: "Orders", icon: ShoppingCart },
   { href: "/account", label: "Account", icon: Wallet },
