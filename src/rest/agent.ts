@@ -31,7 +31,7 @@ import {
   reqMktDepthExchanges, reqPnLSingleBySymbol, reqSmartComponents,
 } from "../ibkr/data.js";
 import { readMessages, postMessage, clearMessages, getStats } from "../collab/store.js";
-import { readInbox, markRead, markAllRead, clearInbox, getInboxStats, pruneInbox, getInboxDigest } from "../inbox/store.js";
+import { readInbox, markRead, markAllRead, clearInbox, getInboxStats } from "../inbox/store.js";
 import { getGptInstructions } from "./gpt-instructions.js";
 import { checkRisk, getSessionState, recordTradeResult, lockSession, unlockSession, resetSession, getRiskGateConfig } from "../ibkr/risk-gate.js";
 import { calculatePositionSize } from "../ibkr/risk.js";
@@ -53,11 +53,6 @@ import {
   getEvaluationById,
   insertOutcome,
   getEvalsForSimulation,
-  getEvalStats,
-  getEvalOutcomes,
-  getReasoningForEval,
-  getDailySummaries,
-  getWeightHistory,
   getTraderSyncStats,
   getTraderSyncTrades,
   getDb,
@@ -120,6 +115,226 @@ const MultiModelScoreParamsSchema = z.object({
 const MultiModelConsensusParamsSchema = z.object({
   scores: ProviderScoresSchema,
 });
+
+interface OpsRunbookEntry {
+  readonly scenario: string;
+  readonly keywords: readonly string[];
+  readonly symptoms: readonly string[];
+  readonly diagnosis: readonly string[];
+  readonly recovery: readonly string[];
+  readonly prevention: readonly string[];
+}
+
+const OPS_RUNBOOK: Record<string, OpsRunbookEntry> = {
+  bridge_crash: {
+    scenario: "bridge_crash",
+    keywords: ["crash", "bridge", "restart"],
+    symptoms: [
+      "PM2 shows market-bridge stopped, errored, or restart looping",
+      "REST API requests fail with connection refused/timeouts",
+      "MCP clients cannot complete tool calls",
+    ],
+    diagnosis: [
+      "Run pm2 status to verify process state",
+      "Review logs with pm2 logs market-bridge --lines 100",
+      "Confirm port 3000 is bound and reachable locally",
+      "Check local readiness endpoint at /health/ready",
+    ],
+    recovery: [
+      "Restart the process with pm2 restart market-bridge",
+      "Validate /health/deep after restart",
+      "If crash loop persists, roll back to last known-good build",
+      "If exposure is unknown, execute flatten_positions immediately",
+    ],
+    prevention: [
+      "Alert on repeated PM2 restarts",
+      "Verify npm test and npm run build before deploy",
+      "Keep startup persistence configured in PM2",
+    ],
+  },
+  ibkr_disconnect: {
+    scenario: "ibkr_disconnect",
+    keywords: ["disconnect", "ibkr", "gateway"],
+    symptoms: [
+      "IBKR actions return not connected errors",
+      "Account/position/order endpoints fail",
+      "Ops uptime metrics show IBKR availability drop",
+    ],
+    diagnosis: [
+      "Check IBKR connection status via health/ops endpoints",
+      "Confirm TWS/Gateway is running and authenticated",
+      "Review reconnect attempts and disconnect logs",
+      "Verify host/port/clientId settings are unchanged",
+    ],
+    recovery: [
+      "Restore TWS/Gateway session and unlock prompts",
+      "Restart market-bridge if reconnect does not recover",
+      "Verify get_account_summary and get_positions succeed",
+      "Re-check risk/session state before resuming orders",
+    ],
+    prevention: [
+      "Monitor disconnect frequency and reconnect attempt spikes",
+      "Document TWS/Gateway maintenance windows",
+      "Use stable host/network path for IBKR client",
+    ],
+  },
+  tunnel_down: {
+    scenario: "tunnel_down",
+    keywords: ["tunnel", "cloudflare", "external"],
+    symptoms: [
+      "Public URL api.klfh-dot-io.com is unavailable",
+      "Local health checks pass while external health fails",
+      "Remote operators cannot reach the bridge",
+    ],
+    diagnosis: [
+      "Test localhost /health/deep and external tunnel health URL",
+      "Check Cloudflare tunnel process status",
+      "Inspect tunnel logs for auth/routing failures",
+      "Confirm DNS/tunnel route still targets localhost:3000",
+    ],
+    recovery: [
+      "Restart tunnel process/service",
+      "Re-validate external /health/deep",
+      "Confirm TLS and route configuration is valid",
+      "Notify operators of external degradation until restored",
+    ],
+    prevention: [
+      "Monitor tunnel endpoint independently from local health",
+      "Keep tunnel credentials current and documented",
+      "Run tunnel under supervised process management",
+    ],
+  },
+  mcp_transport_broken: {
+    scenario: "mcp_transport_broken",
+    keywords: ["mcp", "transport", "stdio"],
+    symptoms: [
+      "MCP tool calls fail while REST might still work",
+      "Agent clients report transport/handshake errors",
+      "Logs contain MCP protocol failures",
+    ],
+    diagnosis: [
+      "Check /health/deep to confirm process is otherwise healthy",
+      "Inspect PM2 logs for MCP handshake or stdio errors",
+      "Verify process mode is configured as both (MCP + REST)",
+      "Confirm no stdout pollution in MCP transport path",
+    ],
+    recovery: [
+      "Restart market-bridge via PM2",
+      "Reconnect MCP client sessions",
+      "Test a basic MCP action before high-risk operations",
+      "Use REST fallback temporarily if MCP remains degraded",
+    ],
+    prevention: [
+      "Add MCP transport synthetic health checks",
+      "Run pre-release MCP handshake smoke tests",
+      "Keep MCP stdout isolation enabled in production",
+    ],
+  },
+  high_error_rate: {
+    scenario: "high_error_rate",
+    keywords: ["error", "errors", "5xx"],
+    symptoms: [
+      "Request error rate rises above normal baseline",
+      "Incident stream fills with repeated failures",
+      "Latency and timeout rates increase",
+    ],
+    diagnosis: [
+      "Review ops_health and ops_incidents output",
+      "Inspect PM2 logs for recurring stack traces",
+      "Identify failing subsystem (IBKR, Yahoo, DB, MCP)",
+      "Validate dependency reachability and limits",
+    ],
+    recovery: [
+      "Reduce load/retry pressure from clients",
+      "Restart market-bridge if failure state is persistent",
+      "Disable non-critical workflows amplifying errors",
+      "Restore full traffic only after metrics normalize",
+    ],
+    prevention: [
+      "Alert on error-rate and latency SLO breaches",
+      "Use retry backoff/circuit-breaker patterns",
+      "Complete RCA and add regression coverage for root causes",
+    ],
+  },
+  memory_leak: {
+    scenario: "memory_leak",
+    keywords: ["memory", "leak", "oom"],
+    symptoms: [
+      "Memory usage grows over time and does not recover",
+      "PM2 restarts due to memory pressure",
+      "Latency degradation before restarts/OOM",
+    ],
+    diagnosis: [
+      "Check pm2 status for memory trend",
+      "Review ops metrics and incidents for memory anomalies",
+      "Correlate growth with specific endpoints/workloads",
+      "Inspect logs for GC pressure or OOM signatures",
+    ],
+    recovery: [
+      "Restart market-bridge to reclaim memory",
+      "Temporarily limit high-volume endpoints/tasks",
+      "Flatten positions if prolonged instability creates risk",
+      "Capture diagnostics and patch leaking path",
+    ],
+    prevention: [
+      "Add memory trend alerting",
+      "Bound buffers/caches and large payload sizes",
+      "Run soak tests to catch leak regressions",
+    ],
+  },
+  tws_restart: {
+    scenario: "tws_restart",
+    keywords: ["tws", "restart", "session"],
+    symptoms: [
+      "Sudden IBKR disconnect during trading",
+      "Order/account calls fail after TWS reset",
+      "Reconnect attempts spike",
+    ],
+    diagnosis: [
+      "Confirm whether TWS/Gateway restarted",
+      "Check bridge reconnect status and disconnect reason",
+      "Validate account permissions and API settings post-login",
+      "Confirm system clock/time sync correctness",
+    ],
+    recovery: [
+      "Complete TWS login/unlock flow",
+      "Restart market-bridge if reconnect stalls",
+      "Validate account summary, positions, and quotes",
+      "Resume operations after stable IBKR connectivity",
+    ],
+    prevention: [
+      "Schedule restarts outside market hours",
+      "Document required TWS API settings",
+      "Alert on unexpected midday restarts",
+    ],
+  },
+  database_corruption: {
+    scenario: "database_corruption",
+    keywords: ["database", "db", "sqlite"],
+    symptoms: [
+      "SQLite errors for reads/writes or startup init",
+      "Persistent DB operation failures",
+      "Potential malformed database or I/O issues",
+    ],
+    diagnosis: [
+      "Inspect logs for exact SQLite error text",
+      "Check disk free space and filesystem health",
+      "Validate database file permissions/ownership",
+      "Run integrity checks on a maintenance copy",
+    ],
+    recovery: [
+      "Stop writes and preserve current DB artifacts",
+      "Restore from latest known-good backup when needed",
+      "Restart bridge and validate core read/write paths",
+      "Reconcile operational data after restore",
+    ],
+    prevention: [
+      "Maintain scheduled backups and restore drills",
+      "Avoid unsafe shutdowns; keep WAL mode enabled",
+      "Monitor disk I/O and space exhaustion",
+    ],
+  },
+};
 
 const actions: Record<string, ActionHandler> = {
   // ── System ──
@@ -386,8 +601,6 @@ const actions: Record<string, ActionHandler> = {
   },
   clear_inbox: async () => clearInbox(),
   inbox_stats: async () => getInboxStats(),
-  inbox_digest: async (p) => getInboxDigest(num(p, "hours", 24)),
-  inbox_prune: async (p) => pruneInbox(num(p, "days", 7)),
 
   // ── Trade Journal ──
   journal_read: async (p) => queryJournal({ symbol: str(p, "symbol") || undefined, strategy: str(p, "strategy") || undefined, limit: num(p, "limit", 100) }),
@@ -576,25 +789,6 @@ const actions: Record<string, ActionHandler> = {
     return getRecalibrationStatus();
   },
 
-  // ── Eval Analytics (parity with MCP) ──
-  eval_stats: async () => getEvalStats(),
-  eval_outcomes: async (p) => getEvalOutcomes({
-    limit: num(p, "limit", 500),
-    symbol: str(p, "symbol") || undefined,
-    days: p.days != null ? num(p, "days") : undefined,
-    tradesTakenOnly: p.all ? false : true,
-  }),
-  eval_reasoning: async (p) => {
-    const evalId = str(p, "evaluation_id") || str(p, "evalId");
-    if (!evalId) throw new Error("evaluation_id is required");
-    return getReasoningForEval(evalId);
-  },
-  daily_summary: async (p) => getDailySummaries({
-    date: str(p, "date") || undefined,
-    days: p.days != null ? num(p, "days") : undefined,
-  }),
-  weight_history: async (p) => getWeightHistory(num(p, "limit", 100)),
-
   // ── Multi-model orchestration ──
   multi_model_score: async (p) => {
     const parsed = MultiModelScoreParamsSchema.parse(p);
@@ -651,76 +845,34 @@ const actions: Record<string, ActionHandler> = {
     return { count: incidents.length, incidents };
   },
   ops_runbook: async (p) => {
-    const scenario = str(p, "scenario").toLowerCase();
-    const runbook: Record<string, { scenario: string; symptoms: string[]; diagnosis: string[]; recovery: string[]; prevention: string[] }> = {
-      crash: {
-        scenario: "Bridge process crash",
-        symptoms: ["pm2 restart count increases", "All tools fail simultaneously", "MCP sessions drop"],
-        diagnosis: ["pm2 status — check restart count and uptime", "pm2 logs market-bridge --lines 100 — look for fatal errors", "curl localhost:3000/health/ready — should return 503 briefly then 200"],
-        recovery: ["pm2 restart market-bridge", "If crash-looping: pm2 stop market-bridge, fix root cause, pm2 start market-bridge", "Check /health/deep after restart to verify all subsystems"],
-        prevention: ["Monitor incident_count in /health/deep", "Crash loop detection auto-delays IBKR reconnect on fast restart"],
-      },
-      disconnect: {
-        scenario: "IBKR disconnect",
-        symptoms: ["Tools return 'IBKR is not connected' errors", "ops_uptime shows ibkr_connected: false", "/health/deep shows ibkrConnected: false"],
-        diagnosis: ["Check TWS/Gateway is running", "Check TWS API Settings: Socket port matches IBKR_PORT, Active X checked", "curl localhost:3000/health/deep — check ibkrDisconnects count", "Look for error 326 (clientId collision) in pm2 logs"],
-        recovery: ["Usually auto-recovers via reconnect backoff (2s→30s cap)", "If stuck: pm2 restart market-bridge", "If clientId collision: ensure only one process per mode is running"],
-        prevention: ["3-strike heartbeat system auto-detects and recovers", "Exponential backoff with jitter prevents thundering herd"],
-      },
-      tunnel: {
-        scenario: "Cloudflare tunnel down",
-        symptoms: ["ChatGPT tools timeout", "curl localhost:3000/health works but https://api.klfh-dot-io.com/health does not"],
-        diagnosis: ["Check cloudflared service: Get-Service cloudflared (PowerShell)", "curl localhost:3000/health — if this works, tunnel is the issue", "cloudflared tunnel info — check tunnel status"],
-        recovery: ["Restart cloudflared: cloudflared service restart (needs admin)", "If persistent: cloudflared tunnel cleanup, then restart", "Nuclear: winget reinstall cloudflare.cloudflared"],
-        prevention: ["Keep cloudflared updated: winget upgrade cloudflare.cloudflared", "Tunnel health monitoring (planned: #332)"],
-      },
-      mcp: {
-        scenario: "MCP transport broken (Claude Desktop)",
-        symptoms: ["Claude Desktop tools all fail", "pm2 logs show no MCP-related activity", "Bridge otherwise healthy (REST works)"],
-        diagnosis: ["Check Claude Desktop Settings > MCP > market-data-bridge status", "pm2 logs market-bridge — look for stdio errors", "curl localhost:3000/health/ready — if 200, bridge is fine, MCP transport died"],
-        recovery: ["Restart Claude Desktop (stdio transport limitation)", "If bridge also crashed: pm2 restart market-bridge, then restart Claude Desktop", "Check Claude Desktop config points to correct command"],
-        prevention: ["Stdio transport cannot survive bridge restarts — this is a known limitation", "Use REST/HTTP MCP transport for more resilient connections"],
-      },
-      error: {
-        scenario: "High error rate",
-        symptoms: ["Intermittent failures across tools", "/health/deep shows high errorRate", "Some tools work, others fail"],
-        diagnosis: ["curl localhost:3000/health/deep — check requests.errorRate and requests.windowErrors", "pm2 logs market-bridge --lines 200 — look for patterns", "ops_incidents — check recent incidents for root cause"],
-        recovery: ["Identify which actions are failing from logs", "If IBKR-related: check TWS connection", "If DB-related: check disk space and SQLite integrity", "pm2 restart market-bridge as last resort"],
-        prevention: ["Monitor errorRate in /health/deep", "Webhook alerts fire when error rate > 20% (requires OPS_WEBHOOK_URL)"],
-      },
-      memory: {
-        scenario: "Memory leak / high memory",
-        symptoms: ["Gradual performance degradation", "/health/deep shows high rss (>400MB)", "Eventually crashes with OOM"],
-        diagnosis: ["curl localhost:3000/health/deep — check memoryMb.rss", "pm2 monit — watch memory over time", "node --inspect for heap snapshot if needed"],
-        recovery: ["pm2 restart market-bridge — immediate fix", "If recurring: identify leak source from heap snapshot"],
-        prevention: ["Monitor memoryMb in /health/deep regularly", "Set pm2 max_memory_restart in ecosystem config"],
-      },
-      tws: {
-        scenario: "TWS restart",
-        symptoms: ["All IBKR tools fail simultaneously", "Error 1100 in logs", "Auto-recovers after TWS comes back up"],
-        diagnosis: ["Check if TWS application is running", "pm2 logs — look for 'TWS lost connectivity (error 1100)'", "ops_incidents — look for ibkr_tws_restart type"],
-        recovery: ["Usually auto-recovers: bridge waits 10s then reconnects", "If TWS crashed: restart TWS, bridge will auto-reconnect", "If stuck: pm2 restart market-bridge"],
-        prevention: ["TWS auto-restart: configure in TWS Settings > Auto Restart", "Bridge now waits 10s on error 1100 before reconnecting"],
-      },
-      database: {
-        scenario: "Database corruption",
-        symptoms: ["DB write errors in logs", "Data inconsistencies (missing orders, duplicate entries)", "/health/deep shows db_writable: false"],
-        diagnosis: ["Check disk space: enough room for SQLite?", "Check file permissions on data/ directory", "Try: sqlite3 data/bridge.db 'PRAGMA integrity_check'"],
-        recovery: ["If integrity_check fails: restore from backup (data/bridge.db.bak)", "Run reconciliation: curl -X POST localhost:3000/agent -d '{\"action\":\"get_positions\"}' to re-sync", "Nuclear: delete data/bridge.db and restart (loses history)"],
-        prevention: ["Regular backups of data/bridge.db", "Monitor db_writable in /health/ready"],
-      },
+    const scenarioQuery = str(p, "scenario").trim().toLowerCase();
+    const entries = Object.values(OPS_RUNBOOK);
+
+    if (!scenarioQuery) {
+      return {
+        available_scenarios: entries.map((entry) => ({
+          scenario: entry.scenario,
+          keywords: entry.keywords,
+        })),
+      };
+    }
+
+    const matched = entries.find((entry) =>
+      entry.scenario === scenarioQuery
+      || entry.keywords.some((keyword) => keyword === scenarioQuery),
+    );
+
+    if (!matched) {
+      throw new Error(`Unknown runbook scenario '${scenarioQuery}'. Use ops_runbook with no scenario to list available scenarios.`);
+    }
+
+    return {
+      scenario: matched.scenario,
+      symptoms: matched.symptoms,
+      diagnosis: matched.diagnosis,
+      recovery: matched.recovery,
+      prevention: matched.prevention,
     };
-
-    if (!scenario) {
-      return { available_scenarios: Object.keys(runbook), hint: "Pass scenario='disconnect' (or crash, tunnel, mcp, error, memory, tws, database)" };
-    }
-
-    // Fuzzy match: find the best matching scenario
-    const match = Object.keys(runbook).find((k) => scenario.includes(k) || k.includes(scenario));
-    if (!match) {
-      return { error: `Unknown scenario '${scenario}'`, available_scenarios: Object.keys(runbook) };
-    }
-    return runbook[match];
   },
   ops_uptime: async () => {
     const connStatus = getConnectionStatus();
@@ -902,8 +1054,6 @@ export const actionsMeta: Record<string, ActionMeta> = {
   mark_inbox_read: { description: "Mark inbox items as read", params: ["id?", "ids?", "all?"] },
   clear_inbox: { description: "Clear all inbox items" },
   inbox_stats: { description: "Get inbox statistics (total, unread, breakdown by type)" },
-  inbox_digest: { description: "Get time-windowed digest of inbox events (fills, signals, drift alerts). Great for session start summary.", params: ["hours?"] },
-  inbox_prune: { description: "Prune inbox items older than N days from DB and memory", params: ["days?"] },
 
   // Trade Journal
   journal_read: { description: "Read trade journal entries", params: ["symbol?", "strategy?", "limit?"] },
@@ -971,11 +1121,6 @@ export const actionsMeta: Record<string, ActionMeta> = {
   auto_eval_toggle: { description: "Enable or disable auto-eval pipeline", params: ["enabled"] },
   auto_link_stats: { description: "Get evaluation-to-execution auto-link statistics and recent links" },
   recalibration_status: { description: "Get Bayesian recalibration status: outcomes since last batch, per-regime weights, state file" },
-  eval_stats: { description: "Get model evaluation statistics: total evaluations, average scores, win rate, model accuracy" },
-  eval_outcomes: { description: "Get evaluations joined with trade outcomes for calibration and analytics", params: ["limit?", "symbol?", "days?", "all?"] },
-  eval_reasoning: { description: "Get structured reasoning for an evaluation: per-model key drivers, risk factors, uncertainties", params: ["evaluation_id"] },
-  daily_summary: { description: "Get daily session summaries: P&L, win rate, avg R, best/worst R per day", params: ["date?", "days?"] },
-  weight_history: { description: "Get history of ensemble weight changes with timestamps and reasons", params: ["limit?"] },
 
   // Multi-model orchestration
   multi_model_score: { description: "Collect weighted scores from GPT, Gemini, and Claude providers", params: ["symbol", "features?"] },
@@ -988,8 +1133,8 @@ export const actionsMeta: Record<string, ActionMeta> = {
 
   // Ops / Monitoring
   ops_health: { description: "Full ops health dashboard: process metrics, IBKR availability SLA, request latency percentiles, error rates, incidents" },
-  ops_runbook: { description: "Get ops runbook procedure for a scenario (crash, disconnect, tunnel, mcp, error, memory, tws, database). Returns symptoms, diagnosis steps, recovery steps, prevention.", params: ["scenario?"] },
   ops_incidents: { description: "Get recent operational incidents (disconnects, errors, heartbeat timeouts)", params: ["limit?"] },
+  ops_runbook: { description: "Get operational runbook guidance by scenario keyword", params: ["scenario?"] },
   ops_uptime: { description: "Get uptime summary: process uptime, IBKR connection SLA, memory/CPU, error rate" },
 };
 
