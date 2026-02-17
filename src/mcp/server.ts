@@ -83,6 +83,10 @@ import { buildProfiles, scanSymbols, getPreAlertCandidates } from "../holly/pred
 import { extractRules, runBacktest, getStrategyBreakdown } from "../holly/backtester.js";
 import { importHollyTradesFromFile, getHollyTradeStats, queryHollyTrades } from "../holly/trade-importer.js";
 import { runExitAutopsy } from "../holly/exit-autopsy.js";
+import {
+  runFullOptimization, getOptimizationSummary, runPerStrategyOptimization,
+  getDefaultParamSets, runTrailingStopSimulation,
+} from "../holly/trailing-stop-optimizer.js";
 import { computeEnsembleWithWeights } from "../eval/ensemble/scorer.js";
 import { getWeights } from "../eval/ensemble/weights.js";
 import { tuneRiskParams } from "../eval/risk-tuning.js";
@@ -2425,6 +2429,73 @@ export function createMcpServer(): McpServer {
     async (params) => {
       const report = runExitAutopsy({ since: params.since, until: params.until });
       return { content: [{ type: "text", text: JSON.stringify(report, null, 2) }] };
+    }
+  );
+
+  // --- Tool: trailing_stop_optimize ---
+  server.tool(
+    "trailing_stop_optimize",
+    "Run all 19 trailing stop strategies on Holly historical trades. Simulates fixed-%, ATR-based, time-decay, MFE-escalation, and breakeven+trail exits against actual MFE/MAE data. Returns results sorted by P&L improvement.",
+    {
+      strategy: z.string().optional().describe("Filter by Holly strategy name"),
+      segment: z.string().optional().describe("Filter by Holly segment"),
+      since: z.string().optional().describe("Start date (ISO)"),
+      until: z.string().optional().describe("End date (ISO)"),
+    },
+    async (params) => {
+      const results = runFullOptimization({
+        strategy: params.strategy, segment: params.segment,
+        since: params.since, until: params.until,
+      });
+      return { content: [{ type: "text", text: JSON.stringify(results, null, 2) }] };
+    }
+  );
+
+  // --- Tool: trailing_stop_summary ---
+  server.tool(
+    "trailing_stop_summary",
+    "Compact comparison table of all trailing stop strategies showing original vs simulated P&L, win rate, Sharpe, and giveback reduction. Best for quick overview of which exit approach works best.",
+    {
+      strategy: z.string().optional().describe("Filter by Holly strategy name"),
+      segment: z.string().optional().describe("Filter by Holly segment"),
+      since: z.string().optional().describe("Start date (ISO)"),
+      until: z.string().optional().describe("End date (ISO)"),
+    },
+    async (params) => {
+      const summary = getOptimizationSummary({
+        strategy: params.strategy, segment: params.segment,
+        since: params.since, until: params.until,
+      });
+      return { content: [{ type: "text", text: JSON.stringify(summary, null, 2) }] };
+    }
+  );
+
+  // --- Tool: trailing_stop_per_strategy ---
+  server.tool(
+    "trailing_stop_per_strategy",
+    "Find the optimal trailing stop parameters for EACH Holly strategy independently. Returns the best trailing stop type and params per strategy with P&L improvement metrics.",
+    {
+      since: z.string().optional().describe("Start date (ISO)"),
+      until: z.string().optional().describe("End date (ISO)"),
+      min_trades: z.number().optional().default(20).describe("Minimum trades per strategy (default: 20)"),
+    },
+    async (params) => {
+      const results = runPerStrategyOptimization({
+        since: params.since, until: params.until,
+        minTrades: params.min_trades,
+      });
+      return { content: [{ type: "text", text: JSON.stringify(results, null, 2) }] };
+    }
+  );
+
+  // --- Tool: trailing_stop_params ---
+  server.tool(
+    "trailing_stop_params",
+    "List all 19 default trailing stop parameter sets that can be tested. Shows name, type, and specific parameters for each strategy.",
+    {},
+    async () => {
+      const params = getDefaultParamSets();
+      return { content: [{ type: "text", text: JSON.stringify(params, null, 2) }] };
     }
   );
 

@@ -169,6 +169,13 @@ Yahoo (always available): get_quote, get_historical_bars, get_financials, get_ea
 ### Holly Exit Autopsy
 - holly_exit_autopsy — { since?, until? } — full exit autopsy: strategy leaderboard (Sharpe, profit factor, expectancy), MFE/MAE giveback profiles, exit policy recommendations (early_peaker/late_grower/bleeder archetypes), time-of-day performance, segment comparison (Grail vs Neo)
 
+### Trailing Stop Optimizer
+- trailing_stop_optimize — { strategy?, segment?, since?, until? } — run all 19 trailing stop strategies (fixed-%, ATR, time-decay, MFE-escalation, breakeven+trail) on Holly trades. Returns P&L improvement, Sharpe delta, win rate change vs actual exits.
+- trailing_stop_summary — { strategy?, segment?, since?, until? } — compact comparison table: original vs simulated P&L, win rate, Sharpe, giveback reduction for all 19 strategies
+- trailing_stop_per_strategy — { since?, until?, min_trades? } — find optimal trailing stop for EACH Holly strategy independently. Best for discovering strategy-specific exit rules.
+- trailing_stop_simulate — { type, name?, trail_pct?, atr_mult?, ... strategy?, segment?, since?, until? } — test a single custom trailing stop with specific params. Types: fixed_pct, atr_multiple, time_decay, mfe_escalation, breakeven_trail
+- trailing_stop_params — no params — list all 19 default parameter sets
+
 ### Signals / Auto-Eval Pipeline
 - signal_feed — { symbol?, direction?, since?, limit? } — query evaluated signals from auto-eval. Each signal links a Holly alert to its ensemble evaluation. limit default 50.
 - signal_stats — no params — aggregate signal stats (total, tradeable, blocked by prefilter, by direction)

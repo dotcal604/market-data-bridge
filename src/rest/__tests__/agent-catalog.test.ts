@@ -113,6 +113,11 @@ describe("Action Catalog", () => {
         "subscribe_real_time_bars",
         "tradersync_import",
         "tradersync_stats",
+        "trailing_stop_optimize",
+        "trailing_stop_summary",
+        "trailing_stop_per_strategy",
+        "trailing_stop_simulate",
+        "trailing_stop_params",
         "tradersync_trades",
         "tune_risk_params",
         "walk_forward",
@@ -125,7 +130,7 @@ describe("Action Catalog", () => {
     });
 
     it("has exactly 96 actions", () => {
-      expect(Object.keys(actionsMeta)).toHaveLength(110);
+      expect(Object.keys(actionsMeta)).toHaveLength(115);
     });
 
     it("every action has a non-empty description", () => {
@@ -296,7 +301,7 @@ describe("Action Catalog", () => {
 
     it("returns an object with all action metadata", () => {
       const catalog = getActionCatalog();
-      expect(Object.keys(catalog)).toHaveLength(110);
+      expect(Object.keys(catalog)).toHaveLength(115);
       
       for (const [action, meta] of Object.entries(catalog)) {
         expect(meta).toHaveProperty("description");

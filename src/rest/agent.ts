@@ -70,6 +70,10 @@ import { buildProfiles, scanSymbols, getPreAlertCandidates } from "../holly/pred
 import { extractRules, runBacktest, getStrategyBreakdown } from "../holly/backtester.js";
 import { importHollyTrades, importHollyTradesFromFile, getHollyTradeStats, queryHollyTrades } from "../holly/trade-importer.js";
 import { runExitAutopsy } from "../holly/exit-autopsy.js";
+import {
+  runTrailingStopSimulation, runFullOptimization, runPerStrategyOptimization,
+  getOptimizationSummary, getDefaultParamSets,
+} from "../holly/trailing-stop-optimizer.js";
 import { queryHollyAlerts, getHollyAlertStats, getLatestHollySymbols, querySignals, getSignalStats } from "../db/database.js";
 
 const log = logger.child({ module: "agent" });
@@ -458,6 +462,47 @@ const actions: Record<string, ActionHandler> = {
     until: str(p, "until") || undefined,
   }),
 
+  // ── Trailing Stop Optimizer ──
+  trailing_stop_optimize: async (p) => runFullOptimization({
+    strategy: str(p, "strategy") || undefined,
+    segment: str(p, "segment") || undefined,
+    since: str(p, "since") || undefined,
+    until: str(p, "until") || undefined,
+  }),
+  trailing_stop_summary: async (p) => getOptimizationSummary({
+    strategy: str(p, "strategy") || undefined,
+    segment: str(p, "segment") || undefined,
+    since: str(p, "since") || undefined,
+    until: str(p, "until") || undefined,
+  }),
+  trailing_stop_per_strategy: async (p) => runPerStrategyOptimization({
+    since: str(p, "since") || undefined,
+    until: str(p, "until") || undefined,
+    minTrades: num(p, "min_trades", 20),
+  }),
+  trailing_stop_simulate: async (p) => {
+    const type = str(p, "type") as any;
+    if (!type) throw new Error("type is required (fixed_pct, atr_multiple, time_decay, mfe_escalation, breakeven_trail)");
+    return runTrailingStopSimulation({
+      name: str(p, "name") || type,
+      type,
+      trail_pct: num(p, "trail_pct", undefined as any) || undefined,
+      atr_mult: num(p, "atr_mult", undefined as any) || undefined,
+      initial_target_pct: num(p, "initial_target_pct", undefined as any) || undefined,
+      decay_per_min: num(p, "decay_per_min", undefined as any) || undefined,
+      mfe_trigger_pct: num(p, "mfe_trigger_pct", undefined as any) || undefined,
+      tight_trail_pct: num(p, "tight_trail_pct", undefined as any) || undefined,
+      be_trigger_r: num(p, "be_trigger_r", undefined as any) || undefined,
+      post_be_trail_pct: num(p, "post_be_trail_pct", undefined as any) || undefined,
+    }, {
+      strategy: str(p, "strategy") || undefined,
+      segment: str(p, "segment") || undefined,
+      since: str(p, "since") || undefined,
+      until: str(p, "until") || undefined,
+    });
+  },
+  trailing_stop_params: async () => getDefaultParamSets(),
+
   // ── Signals / Auto-Eval ──
   signal_feed: async (p) => {
     const signals = querySignals({ symbol: str(p, "symbol") || undefined, direction: str(p, "direction") || undefined, limit: num(p, "limit", 50), since: str(p, "since") || undefined });
@@ -656,6 +701,13 @@ export const actionsMeta: Record<string, ActionMeta> = {
 
   // Holly Exit Autopsy
   holly_exit_autopsy: { description: "Full exit autopsy report: strategy leaderboard, MFE/MAE profiles, exit policy recommendations, time-of-day analysis, segment comparison", params: ["since?", "until?"] },
+
+  // Trailing Stop Optimizer
+  trailing_stop_optimize: { description: "Run all 19 trailing stop strategies on Holly trades, sorted by P&L improvement. Simulates fixed-%, ATR, time-decay, MFE-escalation, breakeven+trail exits", params: ["strategy?", "segment?", "since?", "until?"] },
+  trailing_stop_summary: { description: "Compact comparison table of all trailing stop strategies: original vs simulated P&L, win rate, Sharpe, giveback reduction", params: ["strategy?", "segment?", "since?", "until?"] },
+  trailing_stop_per_strategy: { description: "Find the optimal trailing stop for EACH Holly strategy independently. Shows best trailing params per strategy", params: ["since?", "until?", "min_trades?"] },
+  trailing_stop_simulate: { description: "Simulate a single custom trailing stop strategy with specific parameters", params: ["type", "name?", "trail_pct?", "atr_mult?", "initial_target_pct?", "decay_per_min?", "mfe_trigger_pct?", "tight_trail_pct?", "be_trigger_r?", "post_be_trail_pct?", "strategy?", "segment?", "since?", "until?"] },
+  trailing_stop_params: { description: "List all 19 default trailing stop parameter sets that can be tested" },
 
   // Signals / Auto-Eval
   signal_feed: { description: "Query evaluated signals from auto-eval pipeline", params: ["symbol?", "direction?", "since?", "limit?"] },
