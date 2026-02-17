@@ -9,6 +9,11 @@ vi.mock("../../providers/status.js", () => ({
   getStatus: vi.fn(),
 }));
 
+vi.mock("../../providers/gemini.js", () => ({
+  analyzeMarket: vi.fn(),
+  scoreSetup: vi.fn(),
+}));
+
 vi.mock("../../providers/yahoo.js", () => ({
   getQuote: vi.fn(),
   getHistoricalBars: vi.fn(),
@@ -169,6 +174,7 @@ vi.mock("../../ibkr/subscriptions.js", () => ({
 
 import { handleAgentRequest } from "../agent.js";
 import { getStatus } from "../../providers/status.js";
+import { analyzeMarket, scoreSetup } from "../../providers/gemini.js";
 import { isConnected } from "../../ibkr/connection.js";
 
 interface MockResponse {
@@ -288,4 +294,57 @@ describe("handleAgentRequest", () => {
       }),
     );
   });
+
+  it("dispatches gemini_analyze and returns model output", async () => {
+    vi.mocked(analyzeMarket).mockResolvedValue("Bullish breadth with elevated volatility");
+
+    const req = createRequest("gemini_analyze", {
+      symbols: ["AAPL", "MSFT"],
+      context: { marketSession: "regular" },
+    });
+    const res = createMockResponse();
+
+    await handleAgentRequest(req, res as unknown as Response);
+
+    expect(analyzeMarket).toHaveBeenCalledWith(["AAPL", "MSFT"], { marketSession: "regular" });
+    expect(res.json).toHaveBeenCalledWith({
+      action: "gemini_analyze",
+      result: "Bullish breadth with elevated volatility",
+    });
+  });
+
+  it("dispatches gemini_score_setup and returns model output", async () => {
+    vi.mocked(scoreSetup).mockResolvedValue("Score 74/100: clean momentum continuation setup");
+
+    const req = createRequest("gemini_score_setup", {
+      features: { rvol: 1.9, spreadPct: 0.08 },
+      strategy: "ORB",
+    });
+    const res = createMockResponse();
+
+    await handleAgentRequest(req, res as unknown as Response);
+
+    expect(scoreSetup).toHaveBeenCalledWith({ rvol: 1.9, spreadPct: 0.08 }, "ORB");
+    expect(res.json).toHaveBeenCalledWith({
+      action: "gemini_score_setup",
+      result: "Score 74/100: clean momentum continuation setup",
+    });
+  });
+
+  it("dispatches gemini_status", async () => {
+    const req = createRequest("gemini_status", {});
+    const res = createMockResponse();
+
+    await handleAgentRequest(req, res as unknown as Response);
+
+    expect(res.json).toHaveBeenCalledWith({
+      action: "gemini_status",
+      result: expect.objectContaining({
+        enabled: expect.any(Boolean),
+        model: expect.any(String),
+        apiKeyConfigured: expect.any(Boolean),
+      }),
+    });
+  });
+
 });

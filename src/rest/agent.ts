@@ -5,6 +5,7 @@
  */
 import { Request, Response } from "express";
 import { getStatus } from "../providers/status.js";
+import { analyzeMarket, scoreSetup } from "../providers/gemini.js";
 import {
   getQuote, getHistoricalBars, getOptionsChain, getOptionQuote,
   getStockDetails, searchSymbols, getNews, getFinancials,
@@ -59,6 +60,7 @@ import {
 import { RISK_CONFIG_DEFAULTS, type RiskConfigParam } from "../db/schema.js";
 import { importTraderSyncCSV } from "../tradersync/importer.js";
 import { logger } from "../logging.js";
+import { config } from "../config.js";
 import {
   subscribeRealTimeBars, unsubscribeRealTimeBars, getRealTimeBars,
   subscribeAccountUpdates, unsubscribeAccountUpdates, getAccountSnapshot,
@@ -106,6 +108,19 @@ const actions: Record<string, ActionHandler> = {
   // ── System ──
   get_status: async () => getStatus(),
   get_gpt_instructions: async () => ({ instructions: getGptInstructions() }),
+  gemini_status: async () => ({
+    enabled: config.gemini.enabled,
+    model: config.gemini.model,
+    apiKeyConfigured: Boolean(config.gemini.apiKey),
+  }),
+  gemini_analyze: async (p) => analyzeMarket(
+    (p.symbols as string[] | undefined) ?? [],
+    (p.context as Record<string, unknown> | undefined) ?? {},
+  ),
+  gemini_score_setup: async (p) => scoreSetup(
+    (p.features as Record<string, unknown> | undefined) ?? {},
+    str(p, "strategy"),
+  ),
 
   // ── Market Data (Yahoo — always available) ──
   get_quote: async (p) => getQuote(str(p, "symbol")),
@@ -559,6 +574,9 @@ export const actionsMeta: Record<string, ActionMeta> = {
   // System
   get_status: { description: "Get system status, market session, and IBKR connection state" },
   get_gpt_instructions: { description: "Get GPT system instructions" },
+  gemini_status: { description: "Get Gemini provider status (enabled, model, API key configured)" },
+  gemini_analyze: { description: "Analyze market conditions for symbols using Gemini", params: ["symbols", "context?"] },
+  gemini_score_setup: { description: "Score a trade setup with Gemini", params: ["features", "strategy"] },
 
   // Market Data (Yahoo — always available)
   get_quote: { description: "Get real-time quote for a symbol", params: ["symbol"] },

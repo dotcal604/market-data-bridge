@@ -1,4 +1,10 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+
+vi.mock("../../providers/gemini.js", () => ({
+  analyzeMarket: vi.fn(),
+  scoreSetup: vi.fn(),
+}));
+
 import { getActionCatalog, actionsMeta } from "../agent.js";
 
 describe("Action Catalog", () => {
@@ -34,6 +40,9 @@ describe("Action Catalog", () => {
         "get_flatten_config",
         "get_fundamental_data",
         "get_gpt_instructions",
+        "gemini_analyze",
+        "gemini_score_setup",
+        "gemini_status",
         "get_head_timestamp",
         "get_histogram_data",
         "get_historical_bars",
@@ -129,8 +138,8 @@ describe("Action Catalog", () => {
       expect(catalogKeys).toEqual(expectedActions);
     });
 
-    it("has exactly 96 actions", () => {
-      expect(Object.keys(actionsMeta)).toHaveLength(115);
+    it("has exactly 118 actions", () => {
+      expect(Object.keys(actionsMeta)).toHaveLength(118);
     });
 
     it("every action has a non-empty description", () => {
@@ -301,7 +310,7 @@ describe("Action Catalog", () => {
 
     it("returns an object with all action metadata", () => {
       const catalog = getActionCatalog();
-      expect(Object.keys(catalog)).toHaveLength(115);
+      expect(Object.keys(catalog)).toHaveLength(118);
       
       for (const [action, meta] of Object.entries(catalog)) {
         expect(meta).toHaveProperty("description");

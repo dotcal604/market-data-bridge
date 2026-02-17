@@ -30,4 +30,9 @@ export const config = {
     dedupWindowMin: parseInt(process.env.AUTO_EVAL_DEDUP_WINDOW_MIN ?? "5", 10),
     maxConcurrent: parseInt(process.env.AUTO_EVAL_MAX_CONCURRENT ?? "3", 10),
   },
+  gemini: {
+    apiKey: process.env.GEMINI_API_KEY ?? "",
+    model: "gemini-2.5-pro",
+    enabled: (process.env.GEMINI_ENABLED ?? "true") !== "false",
+  },
 };
