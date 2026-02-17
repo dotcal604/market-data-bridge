@@ -13,6 +13,9 @@ import type { JournalEntry } from "@/lib/api/types";
 
 type DateRange = "7d" | "30d" | "90d" | "all";
 
+const REASONING_SNIPPET_LENGTH = 120;
+const MAX_DISPLAYED_TAGS = 3;
+
 function getOutcomeColor(outcomeTags: string[] | null): string {
   if (!outcomeTags || outcomeTags.length === 0) {
     return "text-muted-foreground";
@@ -84,8 +87,8 @@ function TimelineEntry({ entry, onClick }: TimelineEntryProps) {
   const outcomeBgColor = getOutcomeBgColor(outcomeTags);
   
   // Truncate reasoning for snippet
-  const reasoningSnippet = entry.reasoning.length > 120 
-    ? entry.reasoning.slice(0, 120) + "..." 
+  const reasoningSnippet = entry.reasoning.length > REASONING_SNIPPET_LENGTH 
+    ? entry.reasoning.slice(0, REASONING_SNIPPET_LENGTH) + "..." 
     : entry.reasoning;
   
   // Parse pre-trade tags
@@ -135,14 +138,14 @@ function TimelineEntry({ entry, onClick }: TimelineEntryProps) {
           {/* Pre-trade tags */}
           {preTradeTags.length > 0 && (
             <div className="flex flex-wrap gap-1">
-              {preTradeTags.slice(0, 3).map((tag, i) => (
+              {preTradeTags.slice(0, MAX_DISPLAYED_TAGS).map((tag, i) => (
                 <Badge key={i} variant="outline" className="text-[10px]">
                   {tag}
                 </Badge>
               ))}
-              {preTradeTags.length > 3 && (
+              {preTradeTags.length > MAX_DISPLAYED_TAGS && (
                 <span className="text-xs text-muted-foreground">
-                  +{preTradeTags.length - 3}
+                  +{preTradeTags.length - MAX_DISPLAYED_TAGS}
                 </span>
               )}
             </div>
