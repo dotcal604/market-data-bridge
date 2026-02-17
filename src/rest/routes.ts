@@ -548,6 +548,30 @@ router.get("/account/pnl", async (_req, res) => {
   }
 });
 
+// GET /api/account/pnl/intraday — Get today's account snapshots for equity curve
+// Must be defined BEFORE /:symbol to avoid Express matching "intraday" as a symbol param
+router.get("/account/pnl/intraday", (_req, res) => {
+  try {
+    const snapshots = queryAccountSnapshots(300) as Array<{ created_at: string; [k: string]: unknown }>;
+    
+    const now = new Date();
+    const et = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" }));
+    const todayET = `${et.getFullYear()}-${String(et.getMonth() + 1).padStart(2, '0')}-${String(et.getDate()).padStart(2, '0')}`;
+    
+    const todaySnapshots = snapshots.filter((s) => {
+      const snapshotDate = new Date(s.created_at);
+      const snapshotET = new Date(snapshotDate.toLocaleString("en-US", { timeZone: "America/New_York" }));
+      const snapshotDateStr = `${snapshotET.getFullYear()}-${String(snapshotET.getMonth() + 1).padStart(2, '0')}-${String(snapshotET.getDate()).padStart(2, '0')}`;
+      return snapshotDateStr === todayET;
+    });
+    
+    res.json({ snapshots: todaySnapshots, count: todaySnapshots.length });
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
 // GET /api/account/pnl/:symbol
 router.get("/account/pnl/:symbol", async (req, res) => {
   if (!isConnected()) {
@@ -568,31 +592,6 @@ router.get("/account/pnl/:symbol", async (req, res) => {
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Unknown error";
     res.status(500).json({ error: message });
-  }
-});
-
-// GET /api/account/pnl/intraday — Get today's account snapshots for equity curve
-router.get("/account/pnl/intraday", (_req, res) => {
-  try {
-    // Query recent snapshots (scheduler takes them every 5 min during market hours)
-    const snapshots = queryAccountSnapshots(300); // Max 300 = 25 hours worth
-    
-    // Filter to only today's snapshots using ET timezone comparison
-    // Note: This uses the same timezone conversion pattern as scheduler.ts and status.ts
-    const now = new Date();
-    const et = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" }));
-    const todayET = `${et.getFullYear()}-${String(et.getMonth() + 1).padStart(2, '0')}-${String(et.getDate()).padStart(2, '0')}`;
-    
-    const todaySnapshots = snapshots.filter((s: any) => {
-      const snapshotDate = new Date(s.created_at);
-      const snapshotET = new Date(snapshotDate.toLocaleString("en-US", { timeZone: "America/New_York" }));
-      const snapshotDateStr = `${snapshotET.getFullYear()}-${String(snapshotET.getMonth() + 1).padStart(2, '0')}-${String(snapshotET.getDate()).padStart(2, '0')}`;
-      return snapshotDateStr === todayET;
-    });
-    
-    res.json({ snapshots: todaySnapshots, count: todaySnapshots.length });
-  } catch (e: any) {
-    res.status(500).json({ error: e.message });
   }
 });
 
