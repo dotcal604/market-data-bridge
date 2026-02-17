@@ -25,7 +25,7 @@ export function RunEvalButton({ symbol, disabled, className }: RunEvalButtonProp
 
     try {
       const result = await evalClient.evaluate(symbol, "long");
-      router.push(`/evals/${result.evaluation_id}`);
+      router.push(`/evals/${result.id}`);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to run evaluation";
       setError(message);
