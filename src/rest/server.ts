@@ -145,7 +145,7 @@ function logSessionRecovery(): void {
   if (activeSessions.length > 0) {
     logRest.info(
       { count: activeSessions.length, sessions: activeSessions.map(s => s.id) },
-      "Session recovery: ${count} sessions were active before restart — clients will need to reconnect"
+      `Session recovery: ${activeSessions.length} sessions were active before restart — clients will need to reconnect`
     );
   }
 }
