@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { evalClient } from "../api/eval-client";
 
 export function useEvalHistory(limit = 50, symbol?: string) {
@@ -66,5 +66,37 @@ export function useModelAgreement() {
     queryKey: ["model-agreement"],
     queryFn: () => evalClient.getModelAgreement(),
     refetchInterval: 60_000,
+  });
+}
+
+export function useWeightHistory() {
+  return useQuery({
+    queryKey: ["weight-history"],
+    queryFn: () => evalClient.getWeightHistory(),
+  });
+}
+
+export function useUpdateWeights() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (weights: Record<string, number>) =>
+      evalClient.updateWeights(weights),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ensemble-weights"] });
+      qc.invalidateQueries({ queryKey: ["weight-history"] });
+    },
+  });
+}
+
+export function useSimulateWeights() {
+  return useMutation({
+    mutationFn: (params: {
+      claude: number;
+      gpt4o: number;
+      gemini: number;
+      k?: number;
+      days?: number;
+      symbol?: string;
+    }) => evalClient.simulateWeights(params),
   });
 }

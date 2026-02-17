@@ -1,22 +1,45 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { useEnsembleWeights } from "@/lib/hooks/use-evals";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ModelAvatar } from "@/components/shared/model-avatar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { WeightSliders } from "@/components/weights/weight-sliders";
+import { SimulateResults } from "@/components/weights/simulate-results";
+import { WeightHistory } from "@/components/weights/weight-history";
 
 export default function WeightsPage() {
   const { data, isLoading } = useEnsembleWeights();
+  const [sliderWeights, setSliderWeights] = useState<Record<string, number>>({
+    "gpt-4o": 0.33,
+    "claude-sonnet": 0.34,
+    "gemini-flash": 0.33,
+  });
+
+  // Sync slider state when server weights load
+  useEffect(() => {
+    if (data) {
+      const mapped: Record<string, number> = {};
+      for (const [key, value] of Object.entries(data)) {
+        mapped[key] = value;
+      }
+      if (Object.keys(mapped).length > 0) {
+        setSliderWeights((prev) => ({ ...prev, ...mapped }));
+      }
+    }
+  }, [data]);
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Ensemble Weights</h1>
         <p className="text-sm text-muted-foreground">
-          Current model weights used for ensemble scoring
+          Adjust model weights, simulate impact, and view history
         </p>
       </div>
 
+      {/* Current weights hero cards */}
       {isLoading ? (
         <div className="grid grid-cols-3 gap-4">
           {Array.from({ length: 3 }).map((_, i) => (
@@ -45,9 +68,6 @@ export default function WeightsPage() {
                       style={{ width: `${weight * 100}%` }}
                     />
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Raw weight: {weight.toFixed(4)}
-                  </p>
                 </div>
               </CardContent>
             </Card>
@@ -56,6 +76,15 @@ export default function WeightsPage() {
       ) : (
         <p className="text-sm text-muted-foreground">Failed to load weights</p>
       )}
+
+      {/* Sliders + Simulation side by side */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <WeightSliders weights={sliderWeights} onChange={setSliderWeights} />
+        <SimulateResults weights={sliderWeights} />
+      </div>
+
+      {/* History table */}
+      <WeightHistory />
     </div>
   );
 }

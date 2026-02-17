@@ -85,4 +85,46 @@ export const evalClient = {
       models: string[];
     }>(`${BASE}/model-agreement`);
   },
+
+  updateWeights(weights: Record<string, number>) {
+    return fetchJson<{ saved: boolean }>(`${BASE}/weights`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(weights),
+    });
+  },
+
+  getWeightHistory() {
+    return fetchJson<
+      Array<{
+        claude: number;
+        gpt4o: number;
+        gemini: number;
+        k: number;
+        sample_size: number;
+        updated_at: string;
+      }>
+    >(`${BASE}/weights/history`);
+  },
+
+  simulateWeights(params: {
+    claude: number;
+    gpt4o: number;
+    gemini: number;
+    k?: number;
+    days?: number;
+    symbol?: string;
+  }) {
+    return fetchJson<{
+      avg_score_delta: number;
+      trade_rate_delta: number;
+      accuracy_delta: number;
+      decisions_changed: number;
+      sample_size: number;
+    }>(`${BASE}/weights/simulate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(params),
+    });
+  },
 };
