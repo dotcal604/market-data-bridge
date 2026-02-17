@@ -3,12 +3,12 @@
 import "./suppress-stdout.js";
 
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { connect, disconnect, isConnected, scheduleReconnect } from "./ibkr/connection.js";
+import { connect, disconnect, isConnected, onReconnect, scheduleReconnect } from "./ibkr/connection.js";
 import { createMcpServer } from "./mcp/server.js";
 import { startRestServer } from "./rest/server.js";
 import { logger, pruneOldLogs } from "./logging.js";
 import { initCollabFromDb } from "./collab/store.js";
-import { attachPersistentOrderListeners } from "./ibkr/orders.js";
+import { attachPersistentOrderListeners, resetPersistentListenerGuard } from "./ibkr/orders.js";
 import { runReconciliation } from "./db/reconcile.js";
 import { closeDb } from "./db/database.js";
 import { startScheduler, stopScheduler } from "./scheduler.js";
@@ -72,6 +72,19 @@ async function main() {
 
       // Attach persistent DB listeners for order/execution events
       attachPersistentOrderListeners();
+
+      // Register reconnect hook: re-attach order listeners + reconcile DB
+      // This runs on every TWS reconnect (clientId collision, network blip, TWS restart)
+      onReconnect(() => {
+        resetPersistentListenerGuard();
+        attachPersistentOrderListeners();
+        logger.info("Re-attached persistent order listeners after reconnect");
+
+        // Re-run reconciliation to sync DB with IBKR after disconnect
+        runReconciliation().catch((e) => {
+          logger.error({ err: e }, "Post-reconnect reconciliation failed");
+        });
+      }, "order-listeners+reconciliation");
 
       // Run boot reconciliation (compare DB state vs IBKR state)
       runReconciliation().catch((e) => {

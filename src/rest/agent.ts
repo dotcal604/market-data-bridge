@@ -592,11 +592,30 @@ const actions: Record<string, ActionHandler> = {
 // ── Dispatcher ───────────────────────────────────────────────────
 
 export async function handleAgentRequest(req: Request, res: Response): Promise<void> {
-  const { action, params = {} } = req.body as { action?: string; params?: Record<string, unknown> };
+  const body = req.body as Record<string, unknown>;
+  const action = typeof body.action === "string" ? body.action : undefined;
 
-  if (!action || typeof action !== "string") {
+  if (!action) {
     res.status(400).json({ error: "Missing 'action' string. Call get_status to see available actions." });
     return;
+  }
+
+  // Accept params in multiple shapes for ChatGPT Actions compatibility:
+  //   1. { action, params: { ... } }        — canonical format
+  //   2. { action, arguments: { ... } }      — ChatGPT sometimes uses this
+  //   3. { action, input: { ... } }          — alternative variant
+  //   4. { action, key1: val1, key2: val2 }  — flat/inline params
+  let params: Record<string, unknown>;
+  if (body.params && typeof body.params === "object" && !Array.isArray(body.params)) {
+    params = body.params as Record<string, unknown>;
+  } else if (body.arguments && typeof body.arguments === "object" && !Array.isArray(body.arguments)) {
+    params = body.arguments as Record<string, unknown>;
+  } else if (body.input && typeof body.input === "object" && !Array.isArray(body.input)) {
+    params = body.input as Record<string, unknown>;
+  } else {
+    // Fallback: treat all keys except 'action' as inline params
+    const { action: _a, ...rest } = body;
+    params = rest;
   }
 
   const handler = actions[action];

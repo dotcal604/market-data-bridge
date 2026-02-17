@@ -16,6 +16,16 @@ import { logOrder, logExec } from "../../logging.js";
 
 let persistentListenersAttached = false;
 
+/**
+ * Reset the guard flag so `attachPersistentOrderListeners()` can re-bind
+ * to a fresh `ib` instance after a reconnect. Without this, listeners
+ * remain on the dead (destroyed) IBApi object and order/execution events
+ * are silently lost.
+ */
+export function resetPersistentListenerGuard(): void {
+  persistentListenersAttached = false;
+}
+
 export function attachPersistentOrderListeners() {
   if (persistentListenersAttached) return;
   persistentListenersAttached = true;

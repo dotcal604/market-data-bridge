@@ -112,7 +112,7 @@ export function initWebSocket(httpServer: HttpServer): void {
       ibkr_connected: true,
       timestamp: new Date().toISOString(),
     });
-  });
+  }, "ws/server");
 
   // ── Bind IBKR connection status listeners ──
   // These must be bound outside bindIBKR() as they need to work when disconnected

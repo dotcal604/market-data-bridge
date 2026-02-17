@@ -11,7 +11,7 @@ import { openApiAgentSpec } from "./openapi-agent.js";
 import { handleAgentRequest, getActionCatalog } from "./agent.js";
 import { config } from "../config.js";
 import { requestLogger, logRest } from "../logging.js";
-import { isConnected } from "../ibkr/connection.js";
+import { isConnected, getConnectionStatus } from "../ibkr/connection.js";
 import { isDbWritable } from "../db/database.js";
 import { createMcpServer } from "../mcp/server.js";
 import { initWebSocket } from "../ws/server.js";
@@ -183,10 +183,17 @@ export function createApp(): express.Express {
 
   // GET /health — detailed health check (unauthenticated)
   app.get("/health", (_req, res) => {
+    const connStatus = getConnectionStatus();
     const health = {
       status: "ok" as "ok" | "degraded",
       uptime_seconds: Math.floor((Date.now() - startTime) / 1000),
-      ibkr_connected: isConnected(),
+      ibkr_connected: connStatus.connected,
+      ibkr_uptime_seconds: connStatus.uptimeSinceConnect,
+      ibkr_total_disconnects: connStatus.totalDisconnects,
+      ibkr_reconnect_attempts: connStatus.reconnectAttempts,
+      ibkr_client_id: connStatus.clientId,
+      ibkr_mode: connStatus.mode,
+      ibkr_tws_version: connStatus.twsVersion,
       db_writable: isDbWritable(),
       rest_server: true,
       mcp_sessions: mcpSessions.size,
@@ -196,6 +203,11 @@ export function createApp(): express.Express {
       health.status = "degraded";
     }
     res.json(health);
+  });
+
+  // GET /health/connection — full connection event history (for debugging)
+  app.get("/health/connection", (_req, res) => {
+    res.json(getConnectionStatus());
   });
 
   // ── MCP Streamable HTTP endpoint (for ChatGPT MCP connector) ──

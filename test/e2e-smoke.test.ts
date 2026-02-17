@@ -8,6 +8,20 @@ import type { Server } from "http";
 // Mock IBKR connection
 vi.mock("../src/ibkr/connection.js", () => ({
   isConnected: vi.fn(() => false),
+  getConnectionStatus: vi.fn(() => ({
+    connected: false,
+    host: "127.0.0.1",
+    port: 7497,
+    clientId: 0,
+    mode: "paper",
+    twsVersion: null,
+    lastConnectedAt: null,
+    lastDisconnectedAt: null,
+    totalDisconnects: 0,
+    reconnectAttempts: 0,
+    uptimeSinceConnect: null,
+    recentEvents: [],
+  })),
   onReconnect: vi.fn(),
   connect: vi.fn(),
   disconnect: vi.fn(),

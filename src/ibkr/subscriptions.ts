@@ -490,7 +490,7 @@ export function resubscribeAll(): void {
 
 // ── Auto-register reconnect callback ────────────────────────────────────────
 
-onReconnect(resubscribeAll);
+onReconnect(resubscribeAll, "subscriptions");
 
 // ── Testing helpers ─────────────────────────────────────────────────────────
 

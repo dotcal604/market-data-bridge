@@ -10,6 +10,58 @@ const RECONNECT_BASE_MS = 5_000;     // start at 5s
 const RECONNECT_MAX_MS = 5 * 60_000; // cap at 5 minutes
 let twsVersion: number | null = null;
 
+// ── Connection metrics & history ─────────────────────────────────────
+interface ConnectionEvent {
+  type: "connected" | "disconnected" | "error_326" | "reconnect_attempt";
+  timestamp: string;
+  clientId?: number;
+  detail?: string;
+}
+
+const MAX_HISTORY = 50;
+const connectionHistory: ConnectionEvent[] = [];
+let totalDisconnects = 0;
+let lastConnectedAt: string | null = null;
+let lastDisconnectedAt: string | null = null;
+
+function pushEvent(evt: ConnectionEvent): void {
+  connectionHistory.push(evt);
+  if (connectionHistory.length > MAX_HISTORY) {
+    connectionHistory.splice(0, connectionHistory.length - MAX_HISTORY);
+  }
+}
+
+// ── Heartbeat / keepalive ────────────────────────────────────────────
+const HEARTBEAT_INTERVAL_MS = 60_000;  // ping TWS every 60s
+const HEARTBEAT_TIMEOUT_MS = 10_000;   // force reconnect if no reply in 10s
+let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+
+function startHeartbeat(): void {
+  if (heartbeatTimer) return;
+  heartbeatTimer = setInterval(() => {
+    if (!connected || !ib) return;
+    let responded = false;
+    const onTime = () => { responded = true; };
+    ib.on(EventName.currentTime, onTime);
+    ib.reqCurrentTime();
+    setTimeout(() => {
+      ib?.off(EventName.currentTime, onTime);
+      if (!responded && connected) {
+        console.error("[IBKR] Heartbeat timeout — TWS unresponsive, forcing reconnect");
+        pushEvent({ type: "disconnected", timestamp: new Date().toISOString(), detail: "heartbeat_timeout" });
+        totalDisconnects++;
+        lastDisconnectedAt = new Date().toISOString();
+        destroyIB();
+        scheduleReconnect(1000);
+      }
+    }, HEARTBEAT_TIMEOUT_MS);
+  }, HEARTBEAT_INTERVAL_MS);
+}
+
+function stopHeartbeat(): void {
+  if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+}
+
 /** Minimum TWS server version we expect. Below this we log a warning. */
 const MIN_TWS_VERSION = 163; // TWS 10.30 reports server version 163
 
@@ -39,11 +91,19 @@ function resolveClientId(): number {
 
 let currentClientId = resolveClientId();
 let clientIdRetries = 0;
-let onReconnectCallback: (() => void) | null = null;
 
-/** Register a callback to run after reconnection (used by subscriptions manager) */
-export function onReconnect(cb: () => void): void {
-  onReconnectCallback = cb;
+// ── Multi-callback reconnect hooks ───────────────────────────────────
+// Multiple subsystems (subscriptions, ws/server, order listeners) each
+// register a callback. Previously only a single callback was stored —
+// the last caller's `onReconnect(cb)` silently overwrote earlier ones.
+const onReconnectCallbacks: Array<{ name: string; cb: () => void }> = [];
+
+/** Register a callback to run after reconnection.
+ *  @param cb   function to call on reconnect
+ *  @param name optional label for logging (defaults to "anonymous")
+ */
+export function onReconnect(cb: () => void, name = "anonymous"): void {
+  onReconnectCallbacks.push({ name, cb });
 }
 
 export function getNextReqId(): number {
@@ -63,24 +123,32 @@ export function getIB(): IBApi {
       clientIdRetries = 0;
       reconnectAttempts = 0; // reset backoff on successful connect
       twsVersion = ib!.serverVersion ?? null;
+      lastConnectedAt = new Date().toISOString();
+      pushEvent({ type: "connected", timestamp: lastConnectedAt, clientId: currentClientId });
       console.error(`[IBKR] Connected to TWS/Gateway (clientId=${currentClientId}, mode=${accountMode()}, port=${config.ibkr.port}, serverVersion=${twsVersion})`);
       if (twsVersion !== null && twsVersion < MIN_TWS_VERSION) {
         console.error(`[IBKR] WARNING: TWS server version ${twsVersion} is below minimum ${MIN_TWS_VERSION} (TWS 10.30). Some features may not work correctly.`);
       }
-      if (onReconnectCallback) {
-        try { onReconnectCallback(); } catch (e: any) {
-          console.error(`[IBKR] Reconnect callback error: ${e.message}`);
+      // Run all registered reconnect callbacks
+      for (const { name, cb } of onReconnectCallbacks) {
+        try { cb(); } catch (e: any) {
+          console.error(`[IBKR] Reconnect callback "${name}" error: ${e.message}`);
         }
       }
       if (reconnectTimer) {
         clearTimeout(reconnectTimer);
         reconnectTimer = null;
       }
+      startHeartbeat();
     });
 
     ib.on(EventName.disconnected, () => {
       connected = false;
       twsVersion = null;
+      totalDisconnects++;
+      lastDisconnectedAt = new Date().toISOString();
+      pushEvent({ type: "disconnected", timestamp: lastDisconnectedAt });
+      stopHeartbeat();
       console.error("[IBKR] Disconnected from TWS/Gateway");
       scheduleReconnect();
     });
@@ -88,6 +156,7 @@ export function getIB(): IBApi {
     ib.on(EventName.error, (err: Error, code: ErrorCode, reqId: number) => {
       // Error 326 = clientId already in use
       if ((code as number) === 326) {
+        pushEvent({ type: "error_326", timestamp: new Date().toISOString(), clientId: currentClientId });
         console.error(`[IBKR] ClientId ${currentClientId} already in use`);
         if (clientIdRetries < config.ibkr.maxClientIdRetries) {
           clientIdRetries++;
@@ -128,6 +197,7 @@ export function scheduleReconnect(delayMs?: number): void {
   reconnectAttempts++;
   // Only log every 5th attempt after the first few to reduce spam
   const shouldLog = reconnectAttempts <= 3 || reconnectAttempts % 5 === 0;
+  pushEvent({ type: "reconnect_attempt", timestamp: new Date().toISOString(), clientId: currentClientId, detail: `attempt=${reconnectAttempts}, delay=${delay}ms` });
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
     if (shouldLog) {
@@ -174,6 +244,7 @@ export async function connect(): Promise<void> {
 }
 
 export function disconnect(): void {
+  stopHeartbeat();
   if (reconnectTimer) {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
@@ -209,5 +280,14 @@ export function getConnectionStatus() {
     clientId: currentClientId,
     mode: accountMode(),
     twsVersion,
+    // Connection resilience metrics
+    lastConnectedAt,
+    lastDisconnectedAt,
+    totalDisconnects,
+    reconnectAttempts,
+    uptimeSinceConnect: lastConnectedAt && connected
+      ? Math.floor((Date.now() - new Date(lastConnectedAt).getTime()) / 1000)
+      : null,
+    recentEvents: connectionHistory.slice(-10),
   };
 }
