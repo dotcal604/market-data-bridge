@@ -69,11 +69,14 @@ import {
   queryHollyAlerts,
   getHollyAlertStats,
   getLatestHollySymbols,
+  querySignals,
+  getSignalStats,
 } from "../db/database.js";
 import { computeDriftReport } from "../eval/drift.js";
 import { getRecentDriftAlerts } from "../eval/drift-alerts.js";
 import { importTraderSyncCSV } from "../tradersync/importer.js";
 import { importHollyAlerts } from "../holly/importer.js";
+import { isAutoEvalEnabled, setAutoEvalEnabled, getAutoEvalStatus } from "../holly/auto-eval.js";
 import { computeEnsembleWithWeights } from "../eval/ensemble/scorer.js";
 import { getWeights } from "../eval/ensemble/weights.js";
 import { tuneRiskParams } from "../eval/risk-tuning.js";
@@ -2209,6 +2212,61 @@ export function createMcpServer(): McpServer {
     async (params) => {
       const symbols = getLatestHollySymbols(params.limit);
       return { content: [{ type: "text", text: JSON.stringify({ count: symbols.length, symbols }, null, 2) }] };
+    }
+  );
+
+  // --- Tool: signal_feed ---
+  server.tool(
+    "signal_feed",
+    "Query evaluated signals from the auto-eval pipeline. Signals are generated when Holly alerts are auto-evaluated through the 3-model ensemble. Shows ensemble score, should_trade verdict, and links to the full evaluation.",
+    {
+      symbol: z.string().optional().describe("Filter by symbol"),
+      direction: z.string().optional().describe("Filter by direction (long/short)"),
+      since: z.string().optional().describe("ISO datetime — only signals after this time"),
+      limit: z.number().optional().default(50).describe("Max signals to return (default: 50)"),
+    },
+    async (params) => {
+      const signals = querySignals({
+        symbol: params.symbol, direction: params.direction,
+        limit: params.limit, since: params.since,
+      });
+      return { content: [{ type: "text", text: JSON.stringify({ count: signals.length, signals }, null, 2) }] };
+    }
+  );
+
+  // --- Tool: signal_stats ---
+  server.tool(
+    "signal_stats",
+    "Get aggregate statistics for auto-eval signals: total count, tradeable signals, blocked by prefilter, and breakdown by direction.",
+    {},
+    async () => {
+      const stats = getSignalStats();
+      return { content: [{ type: "text", text: JSON.stringify(stats, null, 2) }] };
+    }
+  );
+
+  // --- Tool: auto_eval_status ---
+  server.tool(
+    "auto_eval_status",
+    "Get the auto-eval pipeline status: whether it's enabled, how many evals are currently running, max concurrent limit, and dedup window.",
+    {},
+    async () => {
+      const status = getAutoEvalStatus();
+      return { content: [{ type: "text", text: JSON.stringify(status, null, 2) }] };
+    }
+  );
+
+  // --- Tool: auto_eval_toggle ---
+  server.tool(
+    "auto_eval_toggle",
+    "Enable or disable the auto-eval pipeline. When enabled, incoming Holly alerts are automatically evaluated through the 3-model ensemble.",
+    {
+      enabled: z.boolean().describe("Set to true to enable, false to disable"),
+    },
+    async (params) => {
+      setAutoEvalEnabled(params.enabled);
+      const status = getAutoEvalStatus();
+      return { content: [{ type: "text", text: JSON.stringify(status, null, 2) }] };
     }
   );
 

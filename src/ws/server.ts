@@ -17,10 +17,21 @@ import { getIB, isConnected, onReconnect } from "../ibkr/connection.js";
 import { logger } from "../logging.js";
 
 const logWs = logger.child({ subsystem: "ws" });
-const HEARTBEAT_INTERVAL_MS = 30_000;
-const VALID_CHANNELS = new Set(["positions", "orders", "account", "executions"]);
 
-type ChannelName = "positions" | "orders" | "account" | "executions";
+// Module-level broadcast reference (set by initWebSocket, callable externally)
+let _broadcast: ((channel: string, data: unknown) => void) | null = null;
+
+/**
+ * Broadcast data to all authenticated WebSocket clients subscribed to a channel.
+ * No-op if WebSocket server not initialized yet.
+ */
+export function wsBroadcast(channel: string, data: unknown): void {
+  if (_broadcast) _broadcast(channel, data);
+}
+const HEARTBEAT_INTERVAL_MS = 30_000;
+const VALID_CHANNELS = new Set(["positions", "orders", "account", "executions", "signals"]);
+
+type ChannelName = "positions" | "orders" | "account" | "executions" | "signals";
 
 interface AuthMessage { type: "auth"; apiKey: string }
 interface SubscribeMessage { type: "subscribe"; channel: string }
@@ -60,13 +71,16 @@ export function initWebSocket(httpServer: HttpServer): void {
   const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
   const subscriptions = new Map<WebSocket, Set<ChannelName>>();
 
-  const broadcast = (channel: ChannelName, data: unknown[]): void => {
+  const broadcast = (channel: string, data: unknown): void => {
     const payload = JSON.stringify({ channel, data });
     for (const [client, channels] of subscriptions.entries()) {
-      if (!channels.has(channel) || client.readyState !== WebSocket.OPEN) continue;
+      if (!channels.has(channel as ChannelName) || client.readyState !== WebSocket.OPEN) continue;
       client.send(payload);
     }
   };
+
+  // Expose broadcast to module-level wsBroadcast() export
+  _broadcast = broadcast;
 
   // ── Bind IBKR event listeners (only when connected) ──
   let ibkrBound = false;

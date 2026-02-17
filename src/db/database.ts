@@ -335,6 +335,25 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_holly_batch ON holly_alerts(import_batch);
 `);
 
+// ── Signals (auto-eval results from Holly alerts) ────────────────────────
+db.exec(`
+  CREATE TABLE IF NOT EXISTS signals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    holly_alert_id INTEGER REFERENCES holly_alerts(id),
+    evaluation_id TEXT,
+    symbol TEXT NOT NULL,
+    direction TEXT NOT NULL DEFAULT 'long',
+    strategy TEXT,
+    ensemble_score REAL,
+    should_trade INTEGER,
+    prefilter_passed INTEGER DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_signals_symbol ON signals(symbol);
+  CREATE INDEX IF NOT EXISTS idx_signals_created ON signals(created_at);
+  CREATE INDEX IF NOT EXISTS idx_signals_eval ON signals(evaluation_id);
+`);
+
 db.exec(RISK_CONFIG_SCHEMA_SQL);
 
 // ── Column Migrations (safe for existing DBs — silently ignored if column exists) ──
@@ -360,6 +379,9 @@ addColumnIfMissing("outcomes", "decision_type", "TEXT");
 addColumnIfMissing("outcomes", "confidence_rating", "INTEGER");
 addColumnIfMissing("outcomes", "rule_followed", "INTEGER");
 addColumnIfMissing("outcomes", "setup_type", "TEXT");
+
+// v5: Link evaluations to holly alerts for auto-eval tracking
+addColumnIfMissing("evaluations", "holly_alert_id", "INTEGER");
 
 // v4: risk config source label for older DBs that may have only param/value
 addColumnIfMissing("risk_config", "source", "TEXT NOT NULL DEFAULT 'manual'");
@@ -1397,6 +1419,76 @@ export function getLatestHollySymbols(limit = 20): string[] {
     SELECT DISTINCT symbol FROM holly_alerts ORDER BY alert_time DESC LIMIT ?
   `).all(limit) as Array<{ symbol: string }>;
   return rows.map((r) => r.symbol);
+}
+
+// ── Signals (auto-eval from Holly) ────────────────────────────────────────
+
+export interface SignalRow {
+  holly_alert_id: number | null;
+  evaluation_id: string | null;
+  symbol: string;
+  direction: string;
+  strategy: string | null;
+  ensemble_score: number | null;
+  should_trade: number | null;
+  prefilter_passed: number;
+}
+
+export function insertSignal(row: SignalRow): number {
+  const result = db.prepare(`
+    INSERT INTO signals (holly_alert_id, evaluation_id, symbol, direction, strategy, ensemble_score, should_trade, prefilter_passed)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    row.holly_alert_id, row.evaluation_id, row.symbol, row.direction,
+    row.strategy, row.ensemble_score, row.should_trade, row.prefilter_passed,
+  );
+  return result.lastInsertRowid as number;
+}
+
+export function querySignals(opts: {
+  symbol?: string;
+  direction?: string;
+  limit?: number;
+  since?: string;
+} = {}): Array<Record<string, unknown>> {
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+  if (opts.symbol) { conditions.push("symbol = ?"); params.push(opts.symbol.toUpperCase()); }
+  if (opts.direction) { conditions.push("direction = ?"); params.push(opts.direction); }
+  if (opts.since) { conditions.push("created_at >= ?"); params.push(opts.since); }
+  const where = conditions.length > 0 ? "WHERE " + conditions.join(" AND ") : "";
+  const limit = opts.limit ?? 50;
+  return db.prepare(`
+    SELECT * FROM signals ${where} ORDER BY created_at DESC LIMIT ?
+  `).all(...params, limit) as Array<Record<string, unknown>>;
+}
+
+export function getSignalStats(): Record<string, unknown> {
+  return db.prepare(`
+    SELECT
+      COUNT(*) as total_signals,
+      COUNT(DISTINCT symbol) as unique_symbols,
+      SUM(CASE WHEN should_trade = 1 THEN 1 ELSE 0 END) as trade_signals,
+      SUM(CASE WHEN should_trade = 0 THEN 1 ELSE 0 END) as no_trade_signals,
+      AVG(ensemble_score) as avg_score,
+      MIN(created_at) as first_signal,
+      MAX(created_at) as last_signal
+    FROM signals
+  `).get() as Record<string, unknown>;
+}
+
+export function hasRecentEvalForSymbol(symbol: string, withinMinutes: number): boolean {
+  const row = db.prepare(`
+    SELECT COUNT(*) as cnt FROM signals
+    WHERE symbol = ? AND created_at >= datetime('now', ?)
+  `).get(symbol.toUpperCase(), `-${withinMinutes} minutes`) as { cnt: number };
+  return row.cnt > 0;
+}
+
+export function getHollyAlertsByBatch(batchId: string): Array<Record<string, unknown>> {
+  return db.prepare(`
+    SELECT * FROM holly_alerts WHERE import_batch = ? ORDER BY id
+  `).all(batchId) as Array<Record<string, unknown>>;
 }
 
 // ── Drift Alerts ──────────────────────────────────────────────────────────

@@ -143,6 +143,12 @@ Yahoo (always available): get_quote, get_historical_bars, get_financials, get_ea
 - holly_stats — no params — aggregate stats (total alerts, unique symbols, strategies, date range)
 - holly_symbols — { limit? } — latest distinct symbols from Holly alerts (default 20). Use for ensemble scoring.
 
+### Signals / Auto-Eval Pipeline
+- signal_feed — { symbol?, direction?, since?, limit? } — query evaluated signals from auto-eval. Each signal links a Holly alert to its ensemble evaluation. limit default 50.
+- signal_stats — no params — aggregate signal stats (total, tradeable, blocked by prefilter, by direction)
+- auto_eval_status — no params — pipeline status: enabled/disabled, running eval count, max concurrent, dedup window
+- auto_eval_toggle — { enabled } — enable (true) or disable (false) auto-eval pipeline. When enabled, new Holly alerts are automatically evaluated through the 3-model ensemble.
+
 ### History
 - orders_history — { symbol?, strategy?, limit? } — limit default 100
 - executions_history — { symbol?, limit? } — limit default 100

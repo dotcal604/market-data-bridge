@@ -63,7 +63,8 @@ import {
   getScannerParameters, listSubscriptions,
 } from "../ibkr/subscriptions.js";
 import { importHollyAlerts } from "../holly/importer.js";
-import { queryHollyAlerts, getHollyAlertStats, getLatestHollySymbols } from "../db/database.js";
+import { isAutoEvalEnabled, setAutoEvalEnabled, getAutoEvalStatus } from "../holly/auto-eval.js";
+import { queryHollyAlerts, getHollyAlertStats, getLatestHollySymbols, querySignals, getSignalStats } from "../db/database.js";
 
 const log = logger.child({ module: "agent" });
 
@@ -356,6 +357,19 @@ const actions: Record<string, ActionHandler> = {
   holly_alerts: async (p) => { const alerts = queryHollyAlerts({ symbol: str(p, "symbol") || undefined, strategy: str(p, "strategy") || undefined, limit: num(p, "limit", 100), since: str(p, "since") || undefined }); return { count: alerts.length, alerts }; },
   holly_stats: async () => getHollyAlertStats(),
   holly_symbols: async (p) => { const symbols = getLatestHollySymbols(num(p, "limit", 20)); return { count: symbols.length, symbols }; },
+
+  // ── Signals / Auto-Eval ──
+  signal_feed: async (p) => {
+    const signals = querySignals({ symbol: str(p, "symbol") || undefined, direction: str(p, "direction") || undefined, limit: num(p, "limit", 50), since: str(p, "since") || undefined });
+    return { count: signals.length, signals };
+  },
+  signal_stats: async () => getSignalStats(),
+  auto_eval_status: async () => getAutoEvalStatus(),
+  auto_eval_toggle: async (p) => {
+    const enabled = bool(p, "enabled");
+    setAutoEvalEnabled(enabled);
+    return getAutoEvalStatus();
+  },
 };
 
 // ── Dispatcher ───────────────────────────────────────────────────
@@ -518,6 +532,12 @@ export const actionsMeta: Record<string, ActionMeta> = {
   holly_alerts: { description: "Query Holly AI alerts", params: ["symbol?", "strategy?", "since?", "limit?"] },
   holly_stats: { description: "Get Holly AI alert statistics" },
   holly_symbols: { description: "Get latest distinct symbols from Holly alerts", params: ["limit?"] },
+
+  // Signals / Auto-Eval
+  signal_feed: { description: "Query evaluated signals from auto-eval pipeline", params: ["symbol?", "direction?", "since?", "limit?"] },
+  signal_stats: { description: "Get signal statistics (total, tradeable, blocked)" },
+  auto_eval_status: { description: "Get auto-eval pipeline status (enabled, running, config)" },
+  auto_eval_toggle: { description: "Enable or disable auto-eval pipeline", params: ["enabled"] },
 };
 
 /**

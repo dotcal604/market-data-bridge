@@ -12,6 +12,8 @@
 import { statSync, readFileSync, existsSync } from "node:fs";
 import { config } from "../config.js";
 import { importHollyAlerts } from "./importer.js";
+import { processNewAlerts } from "./auto-eval.js";
+import { wsBroadcast } from "../ws/server.js";
 import { logger } from "../logging.js";
 
 const log = logger.child({ module: "holly-watcher" });
@@ -58,6 +60,7 @@ function poll(): void {
       const result = importHollyAlerts(csvContent);
       if (result.inserted > 0) {
         log.info({ inserted: result.inserted, skipped: result.skipped }, "Holly watcher: initial import");
+        triggerAutoEval(result);
       }
       lastSize = currentSize;
       return;
@@ -79,6 +82,7 @@ function poll(): void {
     const result = importHollyAlerts(csvContent);
     if (result.inserted > 0) {
       log.info({ inserted: result.inserted, skipped: result.skipped }, "Holly watcher: new alerts");
+      triggerAutoEval(result);
     }
     if (result.errors.length > 0) {
       log.warn({ errors: result.errors }, "Holly watcher: parse errors");
@@ -111,6 +115,20 @@ export function stopHollyWatcher(): void {
     timer = null;
     log.info("Holly watcher stopped");
   }
+}
+
+/**
+ * Fire-and-forget auto-eval on newly imported alerts.
+ * Runs async — doesn't block the poll loop.
+ */
+function triggerAutoEval(result: import("./importer.js").ImportResult): void {
+  processNewAlerts(result, (data) => wsBroadcast("signals", data))
+    .then((r) => {
+      if (r.evaluated > 0 || r.errors > 0) {
+        log.info({ evaluated: r.evaluated, skipped: r.skipped, errors: r.errors }, "Auto-eval batch done");
+      }
+    })
+    .catch((err) => log.error({ err }, "Auto-eval trigger failed"));
 }
 
 /** Reset internal state — for testing only */

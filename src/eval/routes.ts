@@ -837,7 +837,7 @@ evalRouter.get("/:id", (req, res) => {
 
 // --- Helper ---
 
-function extractFeatureCols(f: FeatureVector): Record<string, unknown> {
+export function extractFeatureCols(f: FeatureVector): Record<string, unknown> {
   return {
     last_price: f.last,
     rvol: f.rvol,

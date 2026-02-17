@@ -25,4 +25,9 @@ export const config = {
     calibrationThreshold: parseFloat(process.env.DRIFT_CALIBRATION_THRESHOLD ?? "0.15"),
     enabled: (process.env.DRIFT_ALERTS_ENABLED ?? "true") !== "false",
   },
+  autoEval: {
+    enabled: (process.env.AUTO_EVAL_ENABLED ?? "false") === "true",
+    dedupWindowMin: parseInt(process.env.AUTO_EVAL_DEDUP_WINDOW_MIN ?? "5", 10),
+    maxConcurrent: parseInt(process.env.AUTO_EVAL_MAX_CONCURRENT ?? "3", 10),
+  },
 };
