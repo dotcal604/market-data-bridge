@@ -4,7 +4,19 @@
 
 Due to tooling limitations, the performance page directory needs to be created manually.
 
-## Steps:
+## Quick Setup (Recommended):
+
+```bash
+chmod +x setup-performance-page.sh
+./setup-performance-page.sh
+```
+
+This script will:
+1. Create the `frontend/src/app/holly/performance` directory
+2. Move `HOLLY_PERFORMANCE_PAGE.tsx` to `frontend/src/app/holly/performance/page.tsx`
+3. Clean up temporary files
+
+## Manual Steps (Alternative):
 
 1. Create the directory:
 ```bash
@@ -18,16 +30,7 @@ mv HOLLY_PERFORMANCE_PAGE.tsx frontend/src/app/holly/performance/page.tsx
 
 3. Clean up:
 ```bash
-rm HOLLY_PERFORMANCE_SETUP.md
-```
-
-## Or Use Git:
-
-```bash
-# Create directory and move file in one go
-mkdir -p frontend/src/app/holly/performance && \
-mv HOLLY_PERFORMANCE_PAGE.tsx frontend/src/app/holly/performance/page.tsx && \
-rm HOLLY_PERFORMANCE_SETUP.md
+rm HOLLY_PERFORMANCE_SETUP.md setup-performance-page.sh
 ```
 
 ## What This Page Does:
