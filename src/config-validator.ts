@@ -24,6 +24,7 @@ export interface ValidationResult {
  * - ibkr.orderTimeoutMs is positive
  * - ibkr.executionTimeoutMs is positive and >= orderTimeoutMs
  * - ibkr.clientId is in valid range (0-32)
+ * - gemini.timeoutMs is positive
  * 
  * @param cfg - Configuration object from config.ts
  * @returns ValidationResult with arrays of error and warning messages
@@ -95,6 +96,11 @@ export function validateConfig(cfg: typeof config): ValidationResult {
   // Validate ibkr.clientId
   if (!Number.isInteger(cfg.ibkr.clientId) || cfg.ibkr.clientId < 0 || cfg.ibkr.clientId > 32) {
     errors.push(`ibkr.clientId must be between 0 and 32, got ${cfg.ibkr.clientId}`);
+  }
+
+  // Validate gemini.timeoutMs
+  if (!Number.isInteger(cfg.gemini.timeoutMs) || cfg.gemini.timeoutMs <= 0) {
+    errors.push(`gemini.timeoutMs must be positive, got ${cfg.gemini.timeoutMs}`);
   }
 
   return { errors, warnings };
