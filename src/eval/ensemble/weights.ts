@@ -36,8 +36,12 @@ function loadFromDisk(): void {
       updated_at: parsed.updated_at ?? DEFAULT_WEIGHTS.updated_at,
       sample_size: parsed.sample_size ?? 0,
       source: parsed.source ?? "file",
+      regime_overrides: parsed.regime_overrides,
     };
     logger.info(`[Weights] Loaded: claude=${currentWeights.claude} gpt4o=${currentWeights.gpt4o} gemini=${currentWeights.gemini} k=${currentWeights.k} (n=${currentWeights.sample_size})`);
+    if (currentWeights.regime_overrides) {
+      logger.info(`[Weights] Regime overrides loaded: ${Object.keys(currentWeights.regime_overrides).join(", ")}`);
+    }
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     logger.error(`[Weights] Failed to load weights.json: ${msg}`);
@@ -54,8 +58,34 @@ export function initWeights(): void {
   }
 }
 
-export function getWeights(): EnsembleWeights {
-  return { ...currentWeights };
+/**
+ * Get weights for ensemble scoring. If regime is provided and overrides exist,
+ * returns regime-specific weights. Otherwise returns default weights.
+ * @param regime - Volatility regime: "low", "normal", or "high"
+ */
+export function getWeights(regime?: string): EnsembleWeights {
+  const baseWeights = { ...currentWeights };
+  
+  // If regime is provided and overrides exist, apply them
+  if (regime && baseWeights.regime_overrides) {
+    const override = regime === "high" 
+      ? baseWeights.regime_overrides.high
+      : regime === "low"
+      ? baseWeights.regime_overrides.low
+      : null;
+    
+    if (override) {
+      return {
+        ...baseWeights,
+        claude: override.claude,
+        gpt4o: override.gpt4o,
+        gemini: override.gemini,
+        k: override.k,
+      };
+    }
+  }
+  
+  return baseWeights;
 }
 
 /**

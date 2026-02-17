@@ -69,10 +69,13 @@ function scoreEnsemble(
 
 /**
  * Compute ensemble score from compliant model evaluations.
- * Uses live weights from disk/memory.
+ * Uses live weights from disk/memory. If regime is provided,
+ * uses regime-specific weights if available.
+ * @param evaluations - Model evaluations to ensemble
+ * @param regime - Optional volatility regime for regime-conditioned weights
  */
-export function computeEnsemble(evaluations: ModelEvaluation[]): EnsembleScore {
-  const weights = getWeights();
+export function computeEnsemble(evaluations: ModelEvaluation[], regime?: string): EnsembleScore {
+  const weights = getWeights(regime);
   return scoreEnsemble(evaluations, weights);
 }
 
