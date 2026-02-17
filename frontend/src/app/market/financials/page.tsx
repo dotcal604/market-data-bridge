@@ -240,9 +240,11 @@ export default function FinancialsPage() {
                             </TableCell>
                           </TableRow>
                           <TableRow>
-                            <TableCell className="font-medium">Operating Cash Flow</TableCell>
+                            <TableCell className="font-medium">Return on Assets</TableCell>
                             <TableCell className="text-right font-mono">
-                              {formatCurrency(financials.operatingCashflow)}
+                              {financials.returnOnAssets != null
+                                ? formatPercent(financials.returnOnAssets)
+                                : "—"}
                             </TableCell>
                           </TableRow>
                         </TableBody>
@@ -291,10 +293,10 @@ export default function FinancialsPage() {
                             </TableCell>
                           </TableRow>
                           <TableRow>
-                            <TableCell className="font-medium">EBITDA Margin</TableCell>
+                            <TableCell className="font-medium">EBITDA</TableCell>
                             <TableCell className="text-right font-mono">
-                              {financials.ebitdaMargins != null
-                                ? formatPercent(financials.ebitdaMargins)
+                              {financials.ebitda != null
+                                ? formatCurrency(financials.ebitda)
                                 : "—"}
                             </TableCell>
                           </TableRow>
@@ -347,7 +349,7 @@ export default function FinancialsPage() {
               </Tabs>
 
               {/* Analyst Recommendations */}
-              {(financials.recommendationKey || financials.numberOfAnalystOpinions != null) && (
+              {(financials.recommendationKey || financials.numberOfAnalysts != null) && (
                 <Card>
                   <CardHeader>
                     <CardTitle>Analyst Recommendations</CardTitle>
@@ -371,11 +373,11 @@ export default function FinancialsPage() {
                             </TableCell>
                           </TableRow>
                         )}
-                        {financials.numberOfAnalystOpinions != null && (
+                        {financials.numberOfAnalysts != null && (
                           <TableRow>
                             <TableCell className="font-medium">Number of Analysts</TableCell>
                             <TableCell className="text-right font-mono">
-                              {financials.numberOfAnalystOpinions}
+                              {financials.numberOfAnalysts}
                             </TableCell>
                           </TableRow>
                         )}
