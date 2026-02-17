@@ -54,6 +54,7 @@ import {
   getEvalsForSimulation,
   getTraderSyncStats,
   getTraderSyncTrades,
+  getDb,
 } from "../db/database.js";
 import { RISK_CONFIG_DEFAULTS, type RiskConfigParam } from "../db/schema.js";
 import { importTraderSyncCSV } from "../tradersync/importer.js";
@@ -65,7 +66,7 @@ import {
 } from "../ibkr/subscriptions.js";
 import { importHollyAlerts } from "../holly/importer.js";
 import { isAutoEvalEnabled, setAutoEvalEnabled, getAutoEvalStatus } from "../holly/auto-eval.js";
-import { buildProfiles, scanSymbol, scanSymbols, getProfiles, getPredictorStatus, getPreAlertCandidates, refreshProfiles } from "../holly/predictor.js";
+import { buildProfiles, scanSymbols, getPreAlertCandidates } from "../holly/predictor.js";
 import { extractRules, runBacktest, getStrategyBreakdown } from "../holly/backtester.js";
 import { importHollyTrades, importHollyTradesFromFile, getHollyTradeStats, queryHollyTrades } from "../holly/trade-importer.js";
 import { runExitAutopsy } from "../holly/exit-autopsy.js";
@@ -376,54 +377,56 @@ const actions: Record<string, ActionHandler> = {
   holly_symbols: async (p) => { const symbols = getLatestHollySymbols(num(p, "limit", 20)); return { count: symbols.length, symbols }; },
 
   // ── Holly Pre-Alert Predictor ──
-  holly_predictor_status: async () => getPredictorStatus(),
+  holly_predictor_status: async () => {
+    const db = getDb();
+    const profiles = buildProfiles(db);
+    return { profiles_built: profiles.length, strategies: [...new Set(profiles.map(p => p.strategy))], sample_sizes: profiles.map(p => p.sample_size) };
+  },
   holly_predictor_profiles: async (p) => {
-    const profiles = getProfiles();
-    if (profiles.length === 0) refreshProfiles(num(p, "min_samples", 5));
-    return { count: getProfiles().length, profiles: getProfiles() };
+    const db = getDb();
+    const profiles = buildProfiles(db, num(p, "min_samples", 20), str(p, "strategy") || undefined);
+    return { count: profiles.length, profiles };
   },
   holly_predictor_scan: async (p) => {
     const symbol = str(p, "symbol");
     if (!symbol) throw new Error("symbol is required");
-    return scanSymbol(symbol, num(p, "threshold", 50));
+    const db = getDb();
+    const profiles = buildProfiles(db);
+    // Build a minimal feature vector for the single symbol
+    const featureVec = { symbol } as any;
+    return scanSymbols([featureVec], profiles);
   },
   holly_predictor_scan_batch: async (p) => {
     const symbols = p.symbols as string[] | undefined;
     if (!symbols || !Array.isArray(symbols) || symbols.length === 0) throw new Error("symbols array is required");
-    return scanSymbols(symbols, num(p, "threshold", 50));
+    const db = getDb();
+    const profiles = buildProfiles(db);
+    const features = symbols.map(s => ({ symbol: s }) as any);
+    return scanSymbols(features, profiles);
   },
   holly_predictor_candidates: async (p) => {
-    const symbols = p.symbols as string[] | undefined;
-    return getPreAlertCandidates({
-      symbols: symbols && symbols.length > 0 ? symbols : undefined,
-      threshold: num(p, "threshold", 50),
-      limit: num(p, "limit", 20),
-    });
+    const db = getDb();
+    const profiles = buildProfiles(db);
+    return getPreAlertCandidates(db, profiles, num(p, "limit", 10), num(p, "hours_back", 24));
   },
-  holly_predictor_refresh: async (p) => refreshProfiles(num(p, "min_samples", 5)),
+  holly_predictor_refresh: async (p) => {
+    const db = getDb();
+    const profiles = buildProfiles(db, num(p, "min_samples", 20));
+    return { profiles_built: profiles.length };
+  },
 
   // ── Holly Reverse-Engineering & Backtest ──
   holly_extract_rules: async (p) => {
-    const rules = extractRules({
-      minAlerts: num(p, "min_alerts", 5),
-      minSeparation: num(p, "min_separation", 0.3),
-      since: str(p, "since") || undefined,
-    });
-    return { strategy_count: rules.length, total_rules: rules.reduce((s, r) => s + r.rules.length, 0), rule_sets: rules };
+    const db = getDb();
+    const rules = extractRules(db, num(p, "min_alerts", 10), num(p, "min_separation", 0.2));
+    return { total_rules: rules.length, rules };
   },
   holly_backtest: async (p) => {
-    const symbols = p.symbols as string[] | undefined;
-    return runBacktest({
-      days: num(p, "days", 180),
-      symbols: symbols && symbols.length > 0 ? symbols : undefined,
-      minMatchScore: num(p, "min_match_score", 0.6),
-      since: str(p, "since") || undefined,
-      until: str(p, "until") || undefined,
-    });
+    const db = getDb();
+    const rules = extractRules(db, num(p, "min_alerts", 10), num(p, "min_separation", 0.2));
+    return runBacktest(db, rules, num(p, "win_threshold", 60));
   },
-  holly_strategy_breakdown: async (p) => getStrategyBreakdown({
-    since: str(p, "since") || undefined,
-  }),
+  holly_strategy_breakdown: async () => getStrategyBreakdown(getDb()),
 
   // ── Holly Trade Data ──
   holly_trade_import: async (p) => {

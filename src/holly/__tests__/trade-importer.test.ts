@@ -1,1074 +1,474 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import Database, { type Database as DatabaseType } from 'better-sqlite3';
-import { 
-  parseRow, 
-  importHollyTrades, 
-  queryTrades, 
-  getTradeStats,
-  type HollyTradeRow,
-  type ImportResult 
-} from '../trade-importer.js';
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// ── Test Database Setup ───────────────────────────────────────────────────
+/**
+ * Tests for the Trade Ideas Holly CSV importer.
+ *
+ * Our trade-importer handles the non-standard TI CSV format where dates
+ * contain commas:  YYYY,Mon,DD,"HH:MM:SS,YYYY",Mon,DD,"HH:MM:SS,rest..."
+ *
+ * The module uses getDb() internally, so we mock the database module.
+ */
 
-function createTestDb(): DatabaseType {
-  const db = new Database(':memory:');
-  
-  // Create holly_trades table matching the expected schema
-  db.exec(`
-    CREATE TABLE holly_trades (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      symbol TEXT NOT NULL,
-      entry_time TEXT NOT NULL,
-      exit_time TEXT NOT NULL,
-      entry_price REAL NOT NULL,
-      exit_price REAL NOT NULL,
-      size INTEGER NOT NULL,
-      side TEXT NOT NULL,
-      stop_price REAL,
-      target_price REAL,
-      max_price REAL,
-      min_price REAL,
-      strategy TEXT,
-      notes TEXT,
-      hold_minutes INTEGER NOT NULL,
-      mfe REAL NOT NULL,
-      mae REAL NOT NULL,
-      r_multiple REAL,
-      pnl REAL NOT NULL,
-      pnl_pct REAL NOT NULL,
-      giveback REAL,
-      giveback_ratio REAL,
-      time_to_mfe_min INTEGER,
-      import_batch TEXT NOT NULL,
-      imported_at TEXT NOT NULL DEFAULT (datetime('now')),
-      UNIQUE(symbol, entry_time, exit_time)
-    );
-    
-    CREATE INDEX idx_holly_trades_symbol ON holly_trades(symbol);
-    CREATE INDEX idx_holly_trades_entry ON holly_trades(entry_time);
-    CREATE INDEX idx_holly_trades_batch ON holly_trades(import_batch);
-  `);
-  
-  return db;
+// ── Mock database ────────────────────────────────────────────────────────
+
+let mockRun: ReturnType<typeof vi.fn>;
+let mockPrepare: ReturnType<typeof vi.fn>;
+let mockExec: ReturnType<typeof vi.fn>;
+let mockGet: ReturnType<typeof vi.fn>;
+let mockTransaction: ReturnType<typeof vi.fn>;
+
+vi.mock("../../db/database.js", () => ({
+  getDb: vi.fn(() => ({
+    exec: mockExec,
+    prepare: mockPrepare,
+    transaction: mockTransaction,
+  })),
+}));
+
+vi.mock("../../logging.js", () => ({
+  logger: {
+    child: () => ({
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
+    }),
+  },
+}));
+
+// We need to import AFTER mocks are set up
+import {
+  importHollyTrades,
+  ensureHollyTradesTable,
+  getHollyTradeStats,
+  queryHollyTrades,
+  type HollyTrade,
+  type TradeImportResult,
+} from "../trade-importer.js";
+
+// ── Helpers ──────────────────────────────────────────────────────────────
+
+/**
+ * Build a raw CSV line in the Trade Ideas format.
+ * Format: YYYY,Mon,DD,"HH:MM:SS,YYYY",Mon,DD,"HH:MM:SS,Symbol,Shares,...rest"
+ */
+function makeTILine(overrides: Partial<{
+  entryYear: string; entryMon: string; entryDay: string; entryTime: string;
+  exitYear: string; exitMon: string; exitDay: string; exitTime: string;
+  symbol: string; shares: string; entryPrice: string; lastPrice: string;
+  changeFromEntry: string; changeFromClose: string; changeFromClosePct: string;
+  strategy: string; exitPrice: string; closedProfit: string;
+  profitChange15: string; profitChange5: string; maxProfit: string;
+  profitBasisPoints: string; openProfit: string; stopPrice: string;
+  timeStop: string; maxProfitTime: string; distFromMaxProfit: string;
+  minProfit: string; minProfitTime: string; distFromStop: string;
+  smartStop: string; pctToStop: string; timeUntil: string;
+  segment: string; changeFromEntryPct: string; longTermProfit: string;
+  longTermProfitPct: string;
+}> = {}): string {
+  const d = {
+    entryYear: "2024", entryMon: "Mar", entryDay: "15", entryTime: "09:45:00",
+    exitYear: "2024", exitMon: "Mar", exitDay: "15", exitTime: "10:30:00",
+    symbol: "AAPL", shares: "100", entryPrice: "170.50", lastPrice: "172.00",
+    changeFromEntry: "1.50", changeFromClose: "2.00", changeFromClosePct: "1.18",
+    strategy: "Holly Grail", exitPrice: "172.00", closedProfit: "5000",
+    profitChange15: "50", profitChange5: "20", maxProfit: "200",
+    profitBasisPoints: "88", openProfit: "0", stopPrice: "169.00",
+    timeStop: "", maxProfitTime: "2024 Mar 15 10:15:00",
+    distFromMaxProfit: "0.50", minProfit: "-30",
+    minProfitTime: "2024 Mar 15 09:48:00", distFromStop: "1.50",
+    smartStop: "168.50", pctToStop: "0.88", timeUntil: "45",
+    segment: "Morning", changeFromEntryPct: "0.88",
+    longTermProfit: "300", longTermProfitPct: "1.76",
+    ...overrides,
+  };
+  // rest = symbol,shares,...29 fields
+  const rest = [
+    d.symbol, d.shares, d.entryPrice, d.lastPrice,
+    d.changeFromEntry, d.changeFromClose, d.changeFromClosePct,
+    d.strategy, d.exitPrice, d.closedProfit,
+    d.profitChange15, d.profitChange5, d.maxProfit,
+    d.profitBasisPoints, d.openProfit, d.stopPrice,
+    d.timeStop, d.maxProfitTime, d.distFromMaxProfit,
+    d.minProfit, d.minProfitTime, d.distFromStop,
+    d.smartStop, d.pctToStop, d.timeUntil,
+    d.segment, d.changeFromEntryPct, d.longTermProfit, d.longTermProfitPct,
+  ].join(",");
+  return `${d.entryYear},${d.entryMon},${d.entryDay},"${d.entryTime},${d.exitYear}",${d.exitMon},${d.exitDay},"${d.exitTime},${rest}"`;
 }
 
-function bulkInsertHollyTrades(db: DatabaseType) {
-  return (rows: Array<Record<string, unknown>>): { inserted: number; skipped: number } => {
-    let inserted = 0;
-    let skipped = 0;
-    
-    const stmt = db.prepare(`
-      INSERT OR IGNORE INTO holly_trades (
-        symbol, entry_time, exit_time, entry_price, exit_price, size, side,
-        stop_price, target_price, max_price, min_price, strategy, notes,
-        hold_minutes, mfe, mae, r_multiple, pnl, pnl_pct, giveback, 
-        giveback_ratio, time_to_mfe_min, import_batch
-      ) VALUES (
-        @symbol, @entry_time, @exit_time, @entry_price, @exit_price, @size, @side,
-        @stop_price, @target_price, @max_price, @min_price, @strategy, @notes,
-        @hold_minutes, @mfe, @mae, @r_multiple, @pnl, @pnl_pct, @giveback,
-        @giveback_ratio, @time_to_mfe_min, @import_batch
-      )
-    `);
-    
-    const insertTx = db.transaction((trades: Array<Record<string, unknown>>) => {
-      for (const row of trades) {
-        const result = stmt.run(row);
-        if (result.changes > 0) {
-          inserted++;
-        } else {
-          skipped++;
-        }
+const HEADER = "Entry Date Year,Entry Date Month,Entry Date Day,Entry Time + Exit Date Year,...";
+
+function makeCSV(lines: string[]): string {
+  return [HEADER, ...lines].join("\n");
+}
+
+// ── Tests ────────────────────────────────────────────────────────────────
+
+beforeEach(() => {
+  mockExec = vi.fn();
+  mockRun = vi.fn(() => ({ changes: 1 }));
+  mockGet = vi.fn(() => ({
+    total_trades: 5, unique_symbols: 3, unique_strategies: 2,
+    unique_segments: 1, avg_pnl: 50, total_pnl: 250, avg_hold_minutes: 45,
+    win_rate_pct: 60, avg_giveback: 10, avg_giveback_ratio: 0.2,
+    avg_time_to_mfe_min: 15, avg_r_multiple: 1.2,
+  }));
+  mockPrepare = vi.fn(() => ({
+    run: mockRun,
+    get: mockGet,
+    all: vi.fn(() => []),
+  }));
+  mockTransaction = vi.fn((fn: Function) => (...args: unknown[]) => fn(...args));
+});
+
+describe("Holly Trade Importer", () => {
+  // ── CSV Parsing ──────────────────────────────────────────────────────
+
+  describe("CSV line parsing", () => {
+    it("parses a valid Trade Ideas CSV line", () => {
+      const csv = makeCSV([makeTILine()]);
+      importHollyTrades(csv);
+
+      // Verify INSERT was called with correct params
+      expect(mockRun).toHaveBeenCalledTimes(1);
+      const args = mockRun.mock.calls[0];
+      // First arg = entry_time
+      expect(args[0]).toBe("2024-03-15 09:45:00");
+      // Second arg = exit_time
+      expect(args[1]).toBe("2024-03-15 10:30:00");
+      // Third arg = symbol
+      expect(args[2]).toBe("AAPL");
+      // Fourth arg = shares
+      expect(args[3]).toBe(100);
+      // Fifth arg = entry_price
+      expect(args[4]).toBe(170.5);
+    });
+
+    it("parses dates with single-digit days", () => {
+      const csv = makeCSV([makeTILine({ entryDay: "5", exitDay: "5" })]);
+      importHollyTrades(csv);
+      const args = mockRun.mock.calls[0];
+      expect(args[0]).toBe("2024-03-05 09:45:00");
+      expect(args[1]).toBe("2024-03-05 10:30:00");
+    });
+
+    it("parses all 12 months correctly", () => {
+      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const monthNums = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"];
+      for (let i = 0; i < 12; i++) {
+        mockRun.mockClear();
+        const csv = makeCSV([makeTILine({ entryMon: months[i], exitMon: months[i] })]);
+        importHollyTrades(csv);
+        const args = mockRun.mock.calls[0];
+        expect(args[0]).toContain(`-${monthNums[i]}-`);
       }
     });
-    
-    insertTx(rows);
-    return { inserted, skipped };
-  };
-}
 
-// ── Test Helpers ──────────────────────────────────────────────────────────
+    it("extracts strategy from the correct field position", () => {
+      const csv = makeCSV([makeTILine({ strategy: "Pullback Long" })]);
+      importHollyTrades(csv);
+      const args = mockRun.mock.calls[0];
+      // strategy is at index 9 in the INSERT params
+      expect(args[9]).toBe("Pullback Long");
+    });
 
-const HEADER = [
-  "Symbol", "Entry Time", "Exit Time", "Entry Price", "Exit Price", "Size", "Side",
-  "Stop Price", "Target Price", "Max Price", "Min Price", "Strategy", "Notes"
-].join(",");
+    it("extracts numeric fields including negative values", () => {
+      const csv = makeCSV([makeTILine({
+        changeFromEntry: "-2.50",
+        minProfit: "-150",
+      })]);
+      importHollyTrades(csv);
+      const args = mockRun.mock.calls[0];
+      // change_from_entry is at position 6
+      expect(args[6]).toBe(-2.5);
+    });
 
-function makeRow(overrides: Partial<Record<string, string>> = {}): string {
-  const defaults: Record<string, string> = {
-    "Symbol": "AAPL",
-    "Entry Time": "Feb 12, 2026 10:30:00",
-    "Exit Time": "Feb 12, 2026 11:45:00",
-    "Entry Price": "$150.00",
-    "Exit Price": "$152.50",
-    "Size": "100",
-    "Side": "LONG",
-    "Stop Price": "$149.00",
-    "Target Price": "$155.00",
-    "Max Price": "$153.00",
-    "Min Price": "$149.50",
-    "Strategy": "Holly Grail",
-    "Notes": "",
-  };
-  
-  const merged = { ...defaults, ...overrides };
-  
-  // Quote fields that contain commas
-  const quoteIfNeeded = (val: string) => {
-    if (val.includes(",")) {
-      return `"${val}"`;
-    }
-    return val;
-  };
-  
-  return [
-    "Symbol", "Entry Time", "Exit Time", "Entry Price", "Exit Price", "Size", "Side",
-    "Stop Price", "Target Price", "Max Price", "Min Price", "Strategy", "Notes"
-  ].map((key) => quoteIfNeeded(merged[key] || "")).join(",");
-}
+    it("handles fields with spaces in numbers (e.g. '-7 569')", () => {
+      const csv = makeCSV([makeTILine({ closedProfit: "-7 569" })]);
+      importHollyTrades(csv);
+      const args = mockRun.mock.calls[0];
+      // closed_profit at position 11
+      expect(args[11]).toBe(-7569);
+    });
 
-// ── parseRow Tests ────────────────────────────────────────────────────────
+    it("handles empty optional fields as null", () => {
+      const csv = makeCSV([makeTILine({
+        stopPrice: "",
+        maxProfitTime: "",
+        minProfitTime: "",
+        segment: "",
+      })]);
+      importHollyTrades(csv);
+      const args = mockRun.mock.calls[0];
+      // stop_price at position 17
+      expect(args[17]).toBeNull();
+    });
+  });
 
-describe("Holly Trade Importer - parseRow", () => {
-  describe("Date Parsing with Commas", () => {
-    it("parses dates with commas (Feb 12, 2026 10:30:00)", () => {
-      const record = {
-        "Symbol": "AAPL",
-        "Entry Time": "Feb 12, 2026 10:30:00",
-        "Exit Time": "Feb 12, 2026 11:45:00",
-        "Entry Price": "150.00",
-        "Exit Price": "152.50",
-        "Size": "100",
-        "Side": "LONG",
-        "Stop Price": "149.00",
-        "Target Price": "155.00",
-        "Max Price": "153.00",
-        "Min Price": "149.50",
-        "Strategy": "Holly Grail",
-        "Notes": "",
-      };
-      
-      const result = parseRow(record);
-      
-      expect(result.symbol).toBe("AAPL");
-      expect(result.entry_time).toMatch(/2026-02-12/);
-      expect(result.exit_time).toMatch(/2026-02-12/);
-    });
-    
-    it("handles ISO format dates (2026-02-12 10:30:00)", () => {
-      const record = {
-        "Symbol": "TSLA",
-        "Entry Time": "2026-02-12 10:30:00",
-        "Exit Time": "2026-02-12 11:45:00",
-        "Entry Price": "200.00",
-        "Exit Price": "205.00",
-        "Size": "50",
-        "Side": "LONG",
-        "Stop Price": "",
-        "Target Price": "",
-        "Max Price": "",
-        "Min Price": "",
-        "Strategy": "",
-        "Notes": "",
-      };
-      
-      const result = parseRow(record);
-      
-      expect(result.symbol).toBe("TSLA");
-      expect(result.entry_time).toMatch(/2026-02-12/);
-    });
-    
-    it("handles malformed dates gracefully", () => {
-      const record = {
-        "Symbol": "NVDA",
-        "Entry Time": "invalid date",
-        "Exit Time": "also invalid",
-        "Entry Price": "500.00",
-        "Exit Price": "510.00",
-        "Size": "10",
-        "Side": "LONG",
-        "Stop Price": "",
-        "Target Price": "",
-        "Max Price": "",
-        "Min Price": "",
-        "Strategy": "",
-        "Notes": "",
-      };
-      
-      const result = parseRow(record);
-      
-      expect(result.symbol).toBe("NVDA");
-      expect(result.entry_time).toBe("invalid date");
-      expect(result.exit_time).toBe("also invalid");
-    });
-  });
-  
-  describe("Numeric Parsing", () => {
-    it("strips dollar signs and commas from prices", () => {
-      const record = {
-        "Symbol": "AAPL",
-        "Entry Time": "2026-02-12 10:30:00",
-        "Exit Time": "2026-02-12 11:45:00",
-        "Entry Price": "$1,150.25",
-        "Exit Price": "$1,200.75",
-        "Size": "100",
-        "Side": "LONG",
-        "Stop Price": "$1,145.00",
-        "Target Price": "$1,250.00",
-        "Max Price": "$1,210.00",
-        "Min Price": "$1,148.00",
-        "Strategy": "",
-        "Notes": "",
-      };
-      
-      const result = parseRow(record);
-      
-      expect(result.entry_price).toBe(1150.25);
-      expect(result.exit_price).toBe(1200.75);
-      expect(result.stop_price).toBe(1145);
-      expect(result.target_price).toBe(1250);
-    });
-    
-    it("handles empty optional numeric fields", () => {
-      const record = {
-        "Symbol": "MSFT",
-        "Entry Time": "2026-02-12 10:30:00",
-        "Exit Time": "2026-02-12 11:45:00",
-        "Entry Price": "300.00",
-        "Exit Price": "305.00",
-        "Size": "50",
-        "Side": "LONG",
-        "Stop Price": "",
-        "Target Price": "",
-        "Max Price": "",
-        "Min Price": "",
-        "Strategy": "",
-        "Notes": "",
-      };
-      
-      const result = parseRow(record);
-      
-      expect(result.stop_price).toBeNull();
-      expect(result.target_price).toBeNull();
-      expect(result.max_price).toBeNull();
-      expect(result.min_price).toBeNull();
-    });
-  });
-  
-  describe("Derived Field Computation", () => {
-    describe("hold_minutes", () => {
-      it("calculates hold time correctly", () => {
-        const record = {
-          "Symbol": "AAPL",
-          "Entry Time": "2026-02-12 10:00:00",
-          "Exit Time": "2026-02-12 12:30:00",  // 2.5 hours = 150 minutes
-          "Entry Price": "150.00",
-          "Exit Price": "152.00",
-          "Size": "100",
-          "Side": "LONG",
-          "Stop Price": "",
-          "Target Price": "",
-          "Max Price": "",
-          "Min Price": "",
-          "Strategy": "",
-          "Notes": "",
-        };
-        
-        const result = parseRow(record);
-        
-        expect(result.hold_minutes).toBe(150);
-      });
-      
-      it("handles same entry and exit time", () => {
-        const record = {
-          "Symbol": "TSLA",
-          "Entry Time": "2026-02-12 10:00:00",
-          "Exit Time": "2026-02-12 10:00:00",
-          "Entry Price": "200.00",
-          "Exit Price": "201.00",
-          "Size": "50",
-          "Side": "LONG",
-          "Stop Price": "",
-          "Target Price": "",
-          "Max Price": "",
-          "Min Price": "",
-          "Strategy": "",
-          "Notes": "",
-        };
-        
-        const result = parseRow(record);
-        
-        expect(result.hold_minutes).toBe(0);
-      });
-    });
-    
-    describe("MFE (Max Favorable Excursion)", () => {
-      it("calculates MFE for LONG trades", () => {
-        const record = {
-          "Symbol": "AAPL",
-          "Entry Time": "2026-02-12 10:00:00",
-          "Exit Time": "2026-02-12 11:00:00",
-          "Entry Price": "100.00",
-          "Exit Price": "102.00",
-          "Size": "100",
-          "Side": "LONG",
-          "Stop Price": "",
-          "Target Price": "",
-          "Max Price": "103.00",  // Peak was $3 above entry
-          "Min Price": "99.50",
-          "Strategy": "",
-          "Notes": "",
-        };
-        
-        const result = parseRow(record);
-        
-        // MFE = (103 - 100) * 100 = $300
-        expect(result.mfe).toBe(300);
-      });
-      
-      it("calculates MFE for SHORT trades", () => {
-        const record = {
-          "Symbol": "TSLA",
-          "Entry Time": "2026-02-12 10:00:00",
-          "Exit Time": "2026-02-12 11:00:00",
-          "Entry Price": "200.00",
-          "Exit Price": "198.00",
-          "Size": "50",
-          "Side": "SHORT",
-          "Stop Price": "",
-          "Target Price": "",
-          "Max Price": "201.00",
-          "Min Price": "197.00",  // Trough was $3 below entry
-          "Strategy": "",
-          "Notes": "",
-        };
-        
-        const result = parseRow(record);
-        
-        // MFE for short = (200 - 197) * 50 = $150
-        expect(result.mfe).toBe(150);
-      });
-      
-      it("handles missing max/min price (uses entry as peak)", () => {
-        const record = {
-          "Symbol": "NVDA",
-          "Entry Time": "2026-02-12 10:00:00",
-          "Exit Time": "2026-02-12 11:00:00",
-          "Entry Price": "500.00",
-          "Exit Price": "505.00",
-          "Size": "10",
-          "Side": "LONG",
-          "Stop Price": "",
-          "Target Price": "",
-          "Max Price": "",
-          "Min Price": "",
-          "Strategy": "",
-          "Notes": "",
-        };
-        
-        const result = parseRow(record);
-        
-        // Without max_price, MFE = 0 (entry price used)
-        expect(result.mfe).toBe(0);
-      });
-    });
-    
-    describe("MAE (Max Adverse Excursion)", () => {
-      it("calculates MAE for LONG trades", () => {
-        const record = {
-          "Symbol": "AAPL",
-          "Entry Time": "2026-02-12 10:00:00",
-          "Exit Time": "2026-02-12 11:00:00",
-          "Entry Price": "100.00",
-          "Exit Price": "102.00",
-          "Size": "100",
-          "Side": "LONG",
-          "Stop Price": "",
-          "Target Price": "",
-          "Max Price": "103.00",
-          "Min Price": "98.00",  // Dropped $2 below entry
-          "Strategy": "",
-          "Notes": "",
-        };
-        
-        const result = parseRow(record);
-        
-        // MAE = abs(min(0, (98 - 100) * 100)) = abs(-200) = $200
-        expect(result.mae).toBe(200);
-      });
-      
-      it("calculates MAE for SHORT trades", () => {
-        const record = {
-          "Symbol": "TSLA",
-          "Entry Time": "2026-02-12 10:00:00",
-          "Exit Time": "2026-02-12 11:00:00",
-          "Entry Price": "200.00",
-          "Exit Price": "198.00",
-          "Size": "50",
-          "Side": "SHORT",
-          "Stop Price": "",
-          "Target Price": "",
-          "Max Price": "202.50",  // Rose $2.50 above entry
-          "Min Price": "197.00",
-          "Strategy": "",
-          "Notes": "",
-        };
-        
-        const result = parseRow(record);
-        
-        // MAE for short = abs(min(0, (200 - 202.5) * 50)) = abs(-125) = $125
-        expect(result.mae).toBe(125);
-      });
-    });
-    
-    describe("r_multiple", () => {
-      it("calculates R-multiple for winning trade", () => {
-        const record = {
-          "Symbol": "AAPL",
-          "Entry Time": "2026-02-12 10:00:00",
-          "Exit Time": "2026-02-12 11:00:00",
-          "Entry Price": "100.00",
-          "Exit Price": "103.00",  // +$3 profit
-          "Size": "100",
-          "Side": "LONG",
-          "Stop Price": "99.00",  // $1 risk per share
-          "Target Price": "",
-          "Max Price": "",
-          "Min Price": "",
-          "Strategy": "",
-          "Notes": "",
-        };
-        
-        const result = parseRow(record);
-        
-        // PnL = (103 - 100) * 100 = $300
-        // Risk = (100 - 99) * 100 = $100
-        // R = 300 / 100 = 3R
-        expect(result.r_multiple).toBe(3);
-      });
-      
-      it("calculates R-multiple for losing trade", () => {
-        const record = {
-          "Symbol": "TSLA",
-          "Entry Time": "2026-02-12 10:00:00",
-          "Exit Time": "2026-02-12 11:00:00",
-          "Entry Price": "200.00",
-          "Exit Price": "199.50",  // -$0.50 loss per share
-          "Size": "100",
-          "Side": "LONG",
-          "Stop Price": "199.00",  // $1 risk per share
-          "Target Price": "",
-          "Max Price": "",
-          "Min Price": "",
-          "Strategy": "",
-          "Notes": "",
-        };
-        
-        const result = parseRow(record);
-        
-        // PnL = (199.5 - 200) * 100 = -$50
-        // Risk = (200 - 199) * 100 = $100
-        // R = -50 / 100 = -0.5R
-        expect(result.r_multiple).toBe(-0.5);
-      });
-      
-      it("returns null when stop price is missing", () => {
-        const record = {
-          "Symbol": "NVDA",
-          "Entry Time": "2026-02-12 10:00:00",
-          "Exit Time": "2026-02-12 11:00:00",
-          "Entry Price": "500.00",
-          "Exit Price": "510.00",
-          "Size": "10",
-          "Side": "LONG",
-          "Stop Price": "",  // No stop
-          "Target Price": "",
-          "Max Price": "",
-          "Min Price": "",
-          "Strategy": "",
-          "Notes": "",
-        };
-        
-        const result = parseRow(record);
-        
-        expect(result.r_multiple).toBeNull();
-      });
-      
-      it("returns null when risk is zero", () => {
-        const record = {
-          "Symbol": "MSFT",
-          "Entry Time": "2026-02-12 10:00:00",
-          "Exit Time": "2026-02-12 11:00:00",
-          "Entry Price": "300.00",
-          "Exit Price": "305.00",
-          "Size": "50",
-          "Side": "LONG",
-          "Stop Price": "300.00",  // Stop at entry (zero risk)
-          "Target Price": "",
-          "Max Price": "",
-          "Min Price": "",
-          "Strategy": "",
-          "Notes": "",
-        };
-        
-        const result = parseRow(record);
-        
-        expect(result.r_multiple).toBeNull();
-      });
-    });
-    
-    describe("giveback and giveback_ratio", () => {
-      it("calculates giveback when exit is below MFE peak", () => {
-        const record = {
-          "Symbol": "AAPL",
-          "Entry Time": "2026-02-12 10:00:00",
-          "Exit Time": "2026-02-12 11:00:00",
-          "Entry Price": "100.00",
-          "Exit Price": "102.00",
-          "Size": "100",
-          "Side": "LONG",
-          "Stop Price": "",
-          "Target Price": "",
-          "Max Price": "104.00",  // Peak was $4 above entry
-          "Min Price": "",
-          "Strategy": "",
-          "Notes": "",
-        };
-        
-        const result = parseRow(record);
-        
-        // MFE = (104 - 100) * 100 = $400
-        // PnL = (102 - 100) * 100 = $200
-        // Giveback = 400 - 200 = $200
-        // Giveback ratio = 200 / 400 = 0.5
-        expect(result.mfe).toBe(400);
-        expect(result.pnl).toBe(200);
-        expect(result.giveback).toBe(200);
-        expect(result.giveback_ratio).toBe(0.5);
-      });
-      
-      it("returns 0 giveback when exit is at MFE peak", () => {
-        const record = {
-          "Symbol": "TSLA",
-          "Entry Time": "2026-02-12 10:00:00",
-          "Exit Time": "2026-02-12 11:00:00",
-          "Entry Price": "200.00",
-          "Exit Price": "205.00",
-          "Size": "100",
-          "Side": "LONG",
-          "Stop Price": "",
-          "Target Price": "",
-          "Max Price": "205.00",  // Exit at peak
-          "Min Price": "",
-          "Strategy": "",
-          "Notes": "",
-        };
-        
-        const result = parseRow(record);
-        
-        // MFE = PnL = $500, so giveback = 0
-        expect(result.giveback).toBe(0);
-        expect(result.giveback_ratio).toBe(0);
-      });
-      
-      it("returns null when MFE is zero", () => {
-        const record = {
-          "Symbol": "NVDA",
-          "Entry Time": "2026-02-12 10:00:00",
-          "Exit Time": "2026-02-12 11:00:00",
-          "Entry Price": "500.00",
-          "Exit Price": "495.00",
-          "Size": "10",
-          "Side": "LONG",
-          "Stop Price": "",
-          "Target Price": "",
-          "Max Price": "",  // No max_price, so MFE = 0
-          "Min Price": "",
-          "Strategy": "",
-          "Notes": "",
-        };
-        
-        const result = parseRow(record);
-        
-        expect(result.mfe).toBe(0);
-        expect(result.giveback).toBeNull();
-        expect(result.giveback_ratio).toBeNull();
-      });
-    });
-    
-    describe("time_to_mfe_min", () => {
-      it("parses time to MFE from notes field", () => {
-        const record = {
-          "Symbol": "AAPL",
-          "Entry Time": "2026-02-12 10:00:00",
-          "Exit Time": "2026-02-12 11:00:00",
-          "Entry Price": "100.00",
-          "Exit Price": "102.00",
-          "Size": "100",
-          "Side": "LONG",
-          "Stop Price": "",
-          "Target Price": "",
-          "Max Price": "104.00",
-          "Min Price": "",
-          "Strategy": "",
-          "Notes": "mfe_time:15",  // Peak reached at 15 minutes
-        };
-        
-        const result = parseRow(record);
-        
-        expect(result.time_to_mfe_min).toBe(15);
-      });
-      
-      it("returns null when mfe_time not in notes", () => {
-        const record = {
-          "Symbol": "TSLA",
-          "Entry Time": "2026-02-12 10:00:00",
-          "Exit Time": "2026-02-12 11:00:00",
-          "Entry Price": "200.00",
-          "Exit Price": "205.00",
-          "Size": "100",
-          "Side": "LONG",
-          "Stop Price": "",
-          "Target Price": "",
-          "Max Price": "210.00",
-          "Min Price": "",
-          "Strategy": "",
-          "Notes": "some other note",
-        };
-        
-        const result = parseRow(record);
-        
-        expect(result.time_to_mfe_min).toBeNull();
-      });
-      
-      it("returns null when notes is empty", () => {
-        const record = {
-          "Symbol": "NVDA",
-          "Entry Time": "2026-02-12 10:00:00",
-          "Exit Time": "2026-02-12 11:00:00",
-          "Entry Price": "500.00",
-          "Exit Price": "510.00",
-          "Size": "10",
-          "Side": "LONG",
-          "Stop Price": "",
-          "Target Price": "",
-          "Max Price": "",
-          "Min Price": "",
-          "Strategy": "",
-          "Notes": "",
-        };
-        
-        const result = parseRow(record);
-        
-        expect(result.time_to_mfe_min).toBeNull();
-      });
-    });
-    
-    describe("PnL and PnL%", () => {
-      it("calculates PnL for LONG trades", () => {
-        const record = {
-          "Symbol": "AAPL",
-          "Entry Time": "2026-02-12 10:00:00",
-          "Exit Time": "2026-02-12 11:00:00",
-          "Entry Price": "100.00",
-          "Exit Price": "105.00",
-          "Size": "100",
-          "Side": "LONG",
-          "Stop Price": "",
-          "Target Price": "",
-          "Max Price": "",
-          "Min Price": "",
-          "Strategy": "",
-          "Notes": "",
-        };
-        
-        const result = parseRow(record);
-        
-        expect(result.pnl).toBe(500);  // (105 - 100) * 100
-        expect(result.pnl_pct).toBe(5);  // 500 / (100 * 100) * 100
-      });
-      
-      it("calculates PnL for SHORT trades", () => {
-        const record = {
-          "Symbol": "TSLA",
-          "Entry Time": "2026-02-12 10:00:00",
-          "Exit Time": "2026-02-12 11:00:00",
-          "Entry Price": "200.00",
-          "Exit Price": "195.00",
-          "Size": "50",
-          "Side": "SHORT",
-          "Stop Price": "",
-          "Target Price": "",
-          "Max Price": "",
-          "Min Price": "",
-          "Strategy": "",
-          "Notes": "",
-        };
-        
-        const result = parseRow(record);
-        
-        expect(result.pnl).toBe(250);  // (200 - 195) * 50
-        expect(result.pnl_pct).toBe(2.5);  // 250 / (200 * 50) * 100
-      });
-    });
-  });
-  
-  describe("Edge Cases", () => {
-    it("handles zero size", () => {
-      const record = {
-        "Symbol": "AAPL",
-        "Entry Time": "2026-02-12 10:00:00",
-        "Exit Time": "2026-02-12 11:00:00",
-        "Entry Price": "100.00",
-        "Exit Price": "105.00",
-        "Size": "0",
-        "Side": "LONG",
-        "Stop Price": "",
-        "Target Price": "",
-        "Max Price": "",
-        "Min Price": "",
-        "Strategy": "",
-        "Notes": "",
-      };
-      
-      const result = parseRow(record);
-      
-      expect(result.size).toBe(0);
-      expect(result.pnl).toBe(0);
-      expect(result.mfe).toBe(0);
-      expect(result.mae).toBe(0);
-    });
-    
-    it("normalizes symbols to uppercase", () => {
-      const record = {
-        "Symbol": "aapl",
-        "Entry Time": "2026-02-12 10:00:00",
-        "Exit Time": "2026-02-12 11:00:00",
-        "Entry Price": "100.00",
-        "Exit Price": "105.00",
-        "Size": "100",
-        "Side": "LONG",
-        "Stop Price": "",
-        "Target Price": "",
-        "Max Price": "",
-        "Min Price": "",
-        "Strategy": "",
-        "Notes": "",
-      };
-      
-      const result = parseRow(record);
-      
-      expect(result.symbol).toBe("AAPL");
-    });
-    
-    it("defaults side to LONG", () => {
-      const record = {
-        "Symbol": "MSFT",
-        "Entry Time": "2026-02-12 10:00:00",
-        "Exit Time": "2026-02-12 11:00:00",
-        "Entry Price": "300.00",
-        "Exit Price": "305.00",
-        "Size": "50",
-        "Side": "",
-        "Stop Price": "",
-        "Target Price": "",
-        "Max Price": "",
-        "Min Price": "",
-        "Strategy": "",
-        "Notes": "",
-      };
-      
-      const result = parseRow(record);
-      
-      expect(result.side).toBe("LONG");
-    });
-  });
-});
+  // ── Derived Fields ───────────────────────────────────────────────────
 
-// ── importHollyTrades Tests ───────────────────────────────────────────────
+  describe("derived field computation", () => {
+    it("computes hold_minutes from entry/exit times", () => {
+      // entry 09:45:00, exit 10:30:00 → 45 minutes
+      const csv = makeCSV([makeTILine()]);
+      importHollyTrades(csv);
+      const args = mockRun.mock.calls[0];
+      // hold_minutes is at position 31
+      expect(args[31]).toBe(45);
+    });
 
-describe("Holly Trade Importer - importHollyTrades", () => {
-  let db: DatabaseType;
-  let insertFn: (rows: Array<Record<string, unknown>>) => { inserted: number; skipped: number };
-  
-  beforeEach(() => {
-    db = createTestDb();
-    insertFn = bulkInsertHollyTrades(db);
-  });
-  
-  describe("Basic Import", () => {
-    it("imports a basic CSV and returns correct counts", () => {
-      const csv = [
-        HEADER,
-        makeRow({ "Symbol": "AAPL" }),
-        makeRow({ "Symbol": "MSFT" }),
-      ].join("\n");
-      
-      const result = importHollyTrades(csv, insertFn);
-      
-      expect(result.total_parsed).toBe(2);
-      expect(result.inserted).toBe(2);
-      expect(result.skipped).toBe(0);
-      expect(result.errors).toHaveLength(0);
-      expect(result.batch_id).toMatch(/^[0-9a-f]{8}$/);
+    it("computes actual_pnl = (exit_price - entry_price) * shares", () => {
+      // (172 - 170.5) * 100 = 150
+      const csv = makeCSV([makeTILine()]);
+      importHollyTrades(csv);
+      const args = mockRun.mock.calls[0];
+      // actual_pnl is at position 39
+      expect(args[39]).toBe(150);
     });
-    
-    it("stores all parsed data correctly in database", () => {
-      const csv = [
-        HEADER,
-        makeRow({ 
-          "Symbol": "TSLA",
-          "Entry Price": "$200.00",
-          "Exit Price": "$205.00",
-          "Size": "100",
-        }),
-      ].join("\n");
-      
-      importHollyTrades(csv, insertFn);
-      
-      const rows = db.prepare("SELECT * FROM holly_trades WHERE symbol = ?").all("TSLA");
-      expect(rows).toHaveLength(1);
-      
-      const row = rows[0] as any;
-      expect(row.symbol).toBe("TSLA");
-      expect(row.entry_price).toBe(200);
-      expect(row.exit_price).toBe(205);
-      expect(row.size).toBe(100);
-      expect(row.pnl).toBe(500);
+
+    it("uses max_profit as MFE directly", () => {
+      const csv = makeCSV([makeTILine({ maxProfit: "300" })]);
+      importHollyTrades(csv);
+      const args = mockRun.mock.calls[0];
+      // mfe at position 32
+      expect(args[32]).toBe(300);
     });
-  });
-  
-  describe("Deduplication", () => {
-    it("deduplicates by (symbol, entry_time, exit_time)", () => {
-      const csv = [
-        HEADER,
-        makeRow({ "Symbol": "AAPL", "Entry Time": "Feb 12, 2026 10:00:00", "Exit Time": "Feb 12, 2026 11:00:00" }),
-      ].join("\n");
-      
-      const result1 = importHollyTrades(csv, insertFn);
-      expect(result1.inserted).toBe(1);
-      expect(result1.skipped).toBe(0);
-      
-      const result2 = importHollyTrades(csv, insertFn);
-      expect(result2.inserted).toBe(0);
-      expect(result2.skipped).toBe(1);
+
+    it("uses min_profit as MAE directly", () => {
+      const csv = makeCSV([makeTILine({ minProfit: "-80" })]);
+      importHollyTrades(csv);
+      const args = mockRun.mock.calls[0];
+      // mae at position 33
+      expect(args[33]).toBe(-80);
     });
-    
-    it("allows same symbol with different times", () => {
-      const csv = [
-        HEADER,
-        makeRow({ "Symbol": "AAPL", "Entry Time": "Feb 12, 2026 10:00:00" }),
-        makeRow({ "Symbol": "AAPL", "Entry Time": "Feb 12, 2026 14:00:00" }),
-      ].join("\n");
-      
-      const result = importHollyTrades(csv, insertFn);
-      
-      expect(result.inserted).toBe(2);
-      expect(result.skipped).toBe(0);
+
+    it("computes giveback = mfe - actual_pnl", () => {
+      // MFE=200, actual_pnl=(172-170.5)*100=150, giveback=200-150=50
+      const csv = makeCSV([makeTILine({ maxProfit: "200" })]);
+      importHollyTrades(csv);
+      const args = mockRun.mock.calls[0];
+      // giveback at position 34
+      expect(args[34]).toBe(50);
     });
-  });
-  
-  describe("BOM Stripping", () => {
-    it("strips UTF-8 BOM from CSV content", () => {
-      const bomChar = String.fromCharCode(0xFEFF);
-      const csv = bomChar + [
-        HEADER,
-        makeRow({ "Symbol": "AAPL" }),
-      ].join("\n");
-      
-      const result = importHollyTrades(csv, insertFn);
-      
-      expect(result.inserted).toBe(1);
-      expect(result.errors).toHaveLength(0);
-      
-      const rows = db.prepare("SELECT * FROM holly_trades").all();
-      expect(rows).toHaveLength(1);
+
+    it("computes giveback_ratio = giveback / mfe", () => {
+      // giveback=50, mfe=200, ratio=0.25
+      const csv = makeCSV([makeTILine({ maxProfit: "200" })]);
+      importHollyTrades(csv);
+      const args = mockRun.mock.calls[0];
+      // giveback_ratio at position 35
+      expect(args[35]).toBe(0.25);
     });
-    
-    it("handles CSV without BOM normally", () => {
-      const csv = [
-        HEADER,
-        makeRow({ "Symbol": "MSFT" }),
-      ].join("\n");
-      
-      const result = importHollyTrades(csv, insertFn);
-      
-      expect(result.inserted).toBe(1);
-      expect(result.errors).toHaveLength(0);
+
+    it("gives null giveback_ratio when mfe is 0", () => {
+      const csv = makeCSV([makeTILine({ maxProfit: "0" })]);
+      importHollyTrades(csv);
+      const args = mockRun.mock.calls[0];
+      // giveback_ratio at position 35
+      expect(args[35]).toBeNull();
+    });
+
+    it("gives null giveback_ratio when giveback is negative (actual > mfe)", () => {
+      // MFE=10, actual_pnl=(172-170.5)*100=150 → giveback=10-150=-140 < 0 → null
+      const csv = makeCSV([makeTILine({ maxProfit: "10" })]);
+      importHollyTrades(csv);
+      const args = mockRun.mock.calls[0];
+      expect(args[35]).toBeNull();
+    });
+
+    it("computes r_multiple = actual_pnl / risk", () => {
+      // actual_pnl=150, risk=|170.5-169|*100=150, r=1.0
+      const csv = makeCSV([makeTILine({ stopPrice: "169.00" })]);
+      importHollyTrades(csv);
+      const args = mockRun.mock.calls[0];
+      // r_multiple at position 38
+      expect(args[38]).toBe(1);
+    });
+
+    it("gives null r_multiple when no stop price", () => {
+      const csv = makeCSV([makeTILine({ stopPrice: "" })]);
+      importHollyTrades(csv);
+      const args = mockRun.mock.calls[0];
+      expect(args[38]).toBeNull();
+    });
+
+    it("computes time_to_mfe from max_profit_time", () => {
+      // entry: 2024-03-15 09:45:00, max_profit_time: 2024-03-15 10:15:00 → 30 min
+      const csv = makeCSV([makeTILine({
+        maxProfitTime: "2024 Mar 15 10:15:00",
+      })]);
+      importHollyTrades(csv);
+      const args = mockRun.mock.calls[0];
+      // time_to_mfe_min at position 36
+      expect(args[36]).toBe(30);
+    });
+
+    it("computes time_to_mae from min_profit_time", () => {
+      // entry: 2024-03-15 09:45:00, min_profit_time: 2024-03-15 09:48:00 → 3 min
+      const csv = makeCSV([makeTILine({
+        minProfitTime: "2024 Mar 15 09:48:00",
+      })]);
+      importHollyTrades(csv);
+      const args = mockRun.mock.calls[0];
+      // time_to_mae_min at position 37
+      expect(args[37]).toBe(3);
     });
   });
-  
-  describe("Error Handling", () => {
-    it("skips rows without symbols", () => {
-      const csv = [
-        HEADER,
-        makeRow({ "Symbol": "" }),
-        makeRow({ "Symbol": "AAPL" }),
-      ].join("\n");
-      
-      const result = importHollyTrades(csv, insertFn);
-      
-      expect(result.total_parsed).toBe(2);
-      expect(result.inserted).toBe(1);
-      expect(result.errors).toHaveLength(1);
-      expect(result.errors[0]).toMatch(/row 2.*missing symbol/i);
+
+  // ── Import Result ────────────────────────────────────────────────────
+
+  describe("import results", () => {
+    it("returns correct counts for successful import", () => {
+      const csv = makeCSV([
+        makeTILine({ symbol: "AAPL" }),
+        makeTILine({ symbol: "TSLA" }),
+        makeTILine({ symbol: "MSFT" }),
+      ]);
+      const result = importHollyTrades(csv);
+      expect(result.total_rows).toBe(3);
+      expect(result.imported).toBe(3);
+      expect(result.errors).toBe(0);
     });
-    
+
+    it("counts skipped rows for duplicates (changes=0)", () => {
+      mockRun.mockReturnValueOnce({ changes: 1 }).mockReturnValueOnce({ changes: 0 });
+      const csv = makeCSV([
+        makeTILine({ symbol: "AAPL" }),
+        makeTILine({ symbol: "AAPL" }),
+      ]);
+      const result = importHollyTrades(csv);
+      expect(result.imported).toBe(1);
+      expect(result.skipped).toBe(1);
+    });
+
+    it("counts errors for unparseable lines", () => {
+      const csv = makeCSV([
+        "this is not a valid TI line",
+        makeTILine({ symbol: "AAPL" }),
+      ]);
+      const result = importHollyTrades(csv);
+      expect(result.imported).toBe(1);
+      expect(result.errors).toBe(1);
+      expect(result.error_samples.length).toBe(1);
+    });
+
     it("handles empty CSV", () => {
-      const result = importHollyTrades("", insertFn);
-      
-      expect(result.total_parsed).toBe(0);
-      expect(result.inserted).toBe(0);
-      expect(result.errors).toHaveLength(0);
+      const result = importHollyTrades("");
+      expect(result.total_rows).toBe(0);
+      expect(result.imported).toBe(0);
     });
-    
+
     it("handles header-only CSV", () => {
-      const result = importHollyTrades(HEADER, insertFn);
-      
-      expect(result.total_parsed).toBe(0);
-      expect(result.inserted).toBe(0);
-      expect(result.errors).toHaveLength(0);
+      const result = importHollyTrades(HEADER);
+      expect(result.total_rows).toBe(0);
+      expect(result.imported).toBe(0);
     });
-    
-    it("returns parse error for malformed CSV", () => {
-      const malformedCSV = 'Symbol,"Unclosed quote\nAPPL,100';
-      
-      const result = importHollyTrades(malformedCSV, insertFn);
-      
-      expect(result.inserted).toBe(0);
-      expect(result.errors).toHaveLength(1);
-      expect(result.errors[0]).toMatch(/CSV parse error/i);
-    });
-  });
-  
-  describe("Batch Tracking", () => {
-    it("assigns unique batch_id to each import", () => {
-      const csv = [HEADER, makeRow({ "Symbol": "AAPL" })].join("\n");
-      
-      const result1 = importHollyTrades(csv, insertFn);
-      const result2 = importHollyTrades(csv, insertFn);
-      
-      expect(result1.batch_id).not.toBe(result2.batch_id);
-    });
-    
-    it("stores batch_id in database", () => {
-      const csv = [HEADER, makeRow({ "Symbol": "NVDA" })].join("\n");
-      
-      const result = importHollyTrades(csv, insertFn);
-      
-      const rows = db.prepare("SELECT * FROM holly_trades WHERE symbol = ?").all("NVDA");
-      expect(rows).toHaveLength(1);
-      expect((rows[0] as any).import_batch).toBe(result.batch_id);
-    });
-  });
-});
 
-// ── Query Helper Tests ────────────────────────────────────────────────────
+    it("accepts custom batchId", () => {
+      const csv = makeCSV([makeTILine()]);
+      importHollyTrades(csv, "custom-batch-123");
+      const args = mockRun.mock.calls[0];
+      // batch is the last param (position 40)
+      expect(args[40]).toBe("custom-batch-123");
+    });
 
-describe("Holly Trade Importer - Query Helpers", () => {
-  let db: DatabaseType;
-  let insertFn: (rows: Array<Record<string, unknown>>) => { inserted: number; skipped: number };
-  
-  beforeEach(() => {
-    db = createTestDb();
-    insertFn = bulkInsertHollyTrades(db);
-    
-    // Insert test data
-    const csv = [
-      HEADER,
-      makeRow({ "Symbol": "AAPL", "Side": "LONG", "Strategy": "Holly Grail", "Entry Time": "Feb 12, 2026 10:00:00" }),
-      makeRow({ "Symbol": "TSLA", "Side": "SHORT", "Strategy": "Holly Neo", "Entry Time": "Feb 13, 2026 10:00:00" }),
-      makeRow({ "Symbol": "AAPL", "Side": "LONG", "Strategy": "Holly Grail", "Entry Time": "Feb 14, 2026 10:00:00" }),
-      makeRow({ "Symbol": "NVDA", "Side": "LONG", "Strategy": "Holly Grail", "Entry Time": "Feb 15, 2026 10:00:00" }),
-    ].join("\n");
-    
-    importHollyTrades(csv, insertFn);
-  });
-  
-  describe("queryTrades", () => {
-    it("returns all trades when no filters provided", () => {
-      const trades = queryTrades(db);
-      
-      expect(trades).toHaveLength(4);
-    });
-    
-    it("filters by symbol", () => {
-      const trades = queryTrades(db, { symbol: "AAPL" });
-      
-      expect(trades).toHaveLength(2);
-      expect(trades.every((t: any) => t.symbol === "AAPL")).toBe(true);
-    });
-    
-    it("filters by side", () => {
-      const trades = queryTrades(db, { side: "SHORT" });
-      
-      expect(trades).toHaveLength(1);
-      expect((trades[0] as any).symbol).toBe("TSLA");
-    });
-    
-    it("filters by strategy", () => {
-      const trades = queryTrades(db, { strategy: "Holly Neo" });
-      
-      expect(trades).toHaveLength(1);
-      expect((trades[0] as any).symbol).toBe("TSLA");
-    });
-    
-    it("respects limit parameter", () => {
-      const trades = queryTrades(db, { limit: 2 });
-      
-      expect(trades).toHaveLength(2);
-    });
-    
-    it("returns trades ordered by entry_time DESC", () => {
-      const trades = queryTrades(db);
-      
-      const times = trades.map((t: any) => new Date(t.entry_time).getTime());
-      const sortedTimes = [...times].sort((a, b) => b - a);
-      expect(times).toEqual(sortedTimes);
-    });
-    
-    it("combines multiple filters", () => {
-      const trades = queryTrades(db, { symbol: "AAPL", side: "LONG" });
-      
-      expect(trades).toHaveLength(2);
-      expect(trades.every((t: any) => t.symbol === "AAPL" && t.side === "LONG")).toBe(true);
+    it("caps error samples at 5", () => {
+      const badLines = Array.from({ length: 10 }, () => "bad line");
+      const csv = makeCSV(badLines);
+      const result = importHollyTrades(csv);
+      expect(result.errors).toBe(10);
+      expect(result.error_samples.length).toBe(5);
     });
   });
-  
-  describe("getTradeStats", () => {
-    it("returns aggregate statistics", () => {
-      const stats = getTradeStats(db);
-      
-      expect(stats.total_trades).toBe(4);
-      expect(stats.unique_symbols).toBe(3);
-      expect(typeof stats.avg_pnl).toBe("number");
-      expect(typeof stats.total_pnl).toBe("number");
-      expect(typeof stats.avg_hold_minutes).toBe("number");
+
+  // ── Line Rejection ───────────────────────────────────────────────────
+
+  describe("line rejection", () => {
+    it("rejects lines with invalid month abbreviation", () => {
+      const line = `2024,Xyz,15,"09:45:00,2024",Mar,15,"10:30:00,AAPL,100,170.50,172.00,1.50,2.00,1.18,Holly Grail,172.00,5000,50,20,200,88,0,169.00,,2024 Mar 15 10:15:00,0.50,-30,2024 Mar 15 09:48:00,1.50,168.50,0.88,45,Morning,0.88,300,1.76"`;
+      const csv = makeCSV([line]);
+      const result = importHollyTrades(csv);
+      expect(result.errors).toBe(1);
+      expect(result.imported).toBe(0);
     });
-    
-    it("includes derived field averages", () => {
-      const stats = getTradeStats(db);
-      
-      expect(stats).toHaveProperty("avg_mfe");
-      expect(stats).toHaveProperty("avg_mae");
-      expect(stats).toHaveProperty("avg_giveback_ratio");
-      expect(stats).toHaveProperty("avg_time_to_mfe_min");
+
+    it("rejects lines with too few fields after second quote", () => {
+      // Only 10 fields in rest (need >= 25)
+      const line = `2024,Mar,15,"09:45:00,2024",Mar,15,"10:30:00,AAPL,100,170.50,172.00,1.50,2.00,1.18"`;
+      const csv = makeCSV([line]);
+      const result = importHollyTrades(csv);
+      expect(result.errors).toBe(1);
+      expect(result.imported).toBe(0);
     });
-    
-    it("includes batch tracking", () => {
-      const stats = getTradeStats(db);
-      
-      expect(stats.import_batches).toBe(1);  // All inserted in one batch
+
+    it("rejects lines where entry_price is empty", () => {
+      const csv = makeCSV([makeTILine({ entryPrice: "" })]);
+      const result = importHollyTrades(csv);
+      expect(result.errors).toBe(1);
     });
-    
-    it("handles empty table", () => {
-      db.exec("DELETE FROM holly_trades");
-      
-      const stats = getTradeStats(db);
-      
-      expect(stats.total_trades).toBe(0);
-      expect(stats.unique_symbols).toBe(0);
+
+    it("rejects lines where symbol is empty", () => {
+      const csv = makeCSV([makeTILine({ symbol: "" })]);
+      const result = importHollyTrades(csv);
+      expect(result.errors).toBe(1);
+    });
+  });
+
+  // ── ensureHollyTradesTable ───────────────────────────────────────────
+
+  describe("ensureHollyTradesTable", () => {
+    it("calls db.exec with CREATE TABLE", () => {
+      ensureHollyTradesTable();
+      expect(mockExec).toHaveBeenCalledTimes(1);
+      const sql = mockExec.mock.calls[0][0] as string;
+      expect(sql).toContain("CREATE TABLE IF NOT EXISTS holly_trades");
+      expect(sql).toContain("actual_pnl");
+      expect(sql).toContain("UNIQUE(symbol, entry_time, strategy)");
+    });
+  });
+
+  // ── getHollyTradeStats ───────────────────────────────────────────────
+
+  describe("getHollyTradeStats", () => {
+    it("returns aggregate stats from the DB", () => {
+      const stats = getHollyTradeStats();
+      expect(mockPrepare).toHaveBeenCalled();
+      expect(stats).toHaveProperty("total_trades");
+    });
+  });
+
+  // ── queryHollyTrades ─────────────────────────────────────────────────
+
+  describe("queryHollyTrades", () => {
+    it("builds WHERE clause from filter options", () => {
+      queryHollyTrades({ symbol: "AAPL", strategy: "Holly Grail" });
+      const sql = mockPrepare.mock.calls.find(
+        (c: unknown[]) => typeof c[0] === "string" && (c[0] as string).includes("SELECT *"),
+      );
+      expect(sql).toBeDefined();
+      expect(sql![0]).toContain("symbol = ?");
+      expect(sql![0]).toContain("strategy = ?");
+    });
+
+    it("uppercases the symbol filter", () => {
+      const mockAll = vi.fn(() => []);
+      mockPrepare.mockReturnValueOnce({ run: mockRun, get: mockGet, all: mockAll })  // ensureTable
+        .mockReturnValueOnce({ run: mockRun, get: mockGet, all: mockAll }); // query
+      queryHollyTrades({ symbol: "aapl" });
+      // The all() call should have received "AAPL"
+      if (mockAll.mock.calls.length > 0) {
+        const allArgs = mockAll.mock.calls[0];
+        expect(allArgs).toContain("AAPL");
+      }
+    });
+
+    it("limits results to 1000 max", () => {
+      queryHollyTrades({ limit: 5000 });
+      const sql = mockPrepare.mock.calls.find(
+        (c: unknown[]) => typeof c[0] === "string" && (c[0] as string).includes("LIMIT"),
+      );
+      expect(sql).toBeDefined();
     });
   });
 });

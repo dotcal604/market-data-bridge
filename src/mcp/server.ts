@@ -71,6 +71,7 @@ import {
   getLatestHollySymbols,
   querySignals,
   getSignalStats,
+  getDb,
 } from "../db/database.js";
 import { computeDriftReport } from "../eval/drift.js";
 import { getRecentDriftAlerts } from "../eval/drift-alerts.js";
@@ -78,7 +79,7 @@ import { computeEdgeReport, runWalkForward } from "../eval/edge-analytics.js";
 import { importTraderSyncCSV } from "../tradersync/importer.js";
 import { importHollyAlerts } from "../holly/importer.js";
 import { isAutoEvalEnabled, setAutoEvalEnabled, getAutoEvalStatus } from "../holly/auto-eval.js";
-import { scanSymbol, scanSymbols, getProfiles, getPredictorStatus, getPreAlertCandidates, refreshProfiles } from "../holly/predictor.js";
+import { buildProfiles, scanSymbols, getPreAlertCandidates } from "../holly/predictor.js";
 import { extractRules, runBacktest, getStrategyBreakdown } from "../holly/backtester.js";
 import { importHollyTradesFromFile, getHollyTradeStats, queryHollyTrades } from "../holly/trade-importer.js";
 import { runExitAutopsy } from "../holly/exit-autopsy.js";
@@ -2272,40 +2273,39 @@ export function createMcpServer(): McpServer {
     "Get Holly pre-alert predictor status: how many strategy profiles are built, what strategies, and total historical alert count used for learning.",
     {},
     async () => {
-      const status = getPredictorStatus();
-      return { content: [{ type: "text", text: JSON.stringify(status, null, 2) }] };
+      const db = getDb();
+      const profiles = buildProfiles(db);
+      return { content: [{ type: "text", text: JSON.stringify({ profiles_built: profiles.length, strategies: [...new Set(profiles.map(p => p.strategy))] }, null, 2) }] };
     }
   );
 
   // --- Tool: holly_predictor_scan ---
   server.tool(
     "holly_predictor_scan",
-    "Scan a single symbol against learned Holly strategy feature profiles. Returns match scores indicating how closely the symbol's current features match historical Holly alert conditions. Score 80+ means strong pre-alert match.",
+    "Scan a symbol against learned Holly feature profiles. Returns z-score match quality.",
     {
       symbol: z.string().describe("Symbol to scan (e.g. AAPL)"),
-      threshold: z.number().optional().default(50).describe("Minimum match score 0-100 (default: 50)"),
     },
     async (params) => {
-      const signals = await scanSymbol(params.symbol, params.threshold);
-      return { content: [{ type: "text", text: JSON.stringify(signals, null, 2) }] };
+      const db = getDb();
+      const profiles = buildProfiles(db);
+      const results = scanSymbols([{ symbol: params.symbol } as any], profiles);
+      return { content: [{ type: "text", text: JSON.stringify(results, null, 2) }] };
     }
   );
 
   // --- Tool: holly_predictor_candidates ---
   server.tool(
     "holly_predictor_candidates",
-    "Get top pre-alert candidates — symbols most likely to trigger Holly AI alerts soon based on feature profile matching. Scans recent Holly symbols or a custom watchlist.",
+    "Get top pre-alert candidates — symbols most likely to trigger Holly AI alerts soon.",
     {
-      symbols: z.array(z.string()).optional().describe("Custom symbol list to scan (default: recent Holly symbols)"),
-      threshold: z.number().optional().default(50).describe("Minimum match score 0-100 (default: 50)"),
-      limit: z.number().optional().default(20).describe("Max candidates to return (default: 20)"),
+      limit: z.number().optional().default(10).describe("Max candidates to return"),
+      hours_back: z.number().optional().default(24).describe("Look back N hours for unevaluated alerts"),
     },
     async (params) => {
-      const result = await getPreAlertCandidates({
-        symbols: params.symbols,
-        threshold: params.threshold,
-        limit: params.limit,
-      });
+      const db = getDb();
+      const profiles = buildProfiles(db);
+      const result = getPreAlertCandidates(db, profiles, params.limit, params.hours_back);
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     }
   );
@@ -2313,54 +2313,43 @@ export function createMcpServer(): McpServer {
   // --- Tool: holly_predictor_refresh ---
   server.tool(
     "holly_predictor_refresh",
-    "Force-rebuild Holly predictor profiles from the latest historical data. Call after importing new Holly alerts and running auto-eval.",
+    "Rebuild Holly predictor profiles from latest data.",
     {
-      min_samples: z.number().optional().default(5).describe("Minimum alerts per strategy to build a profile (default: 5)"),
+      min_samples: z.number().optional().default(20).describe("Minimum samples per strategy"),
     },
     async (params) => {
-      const result = refreshProfiles(params.min_samples);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      const db = getDb();
+      const profiles = buildProfiles(db, params.min_samples);
+      return { content: [{ type: "text", text: JSON.stringify({ profiles_built: profiles.length }, null, 2) }] };
     }
   );
 
   // --- Tool: holly_extract_rules ---
   server.tool(
     "holly_extract_rules",
-    "Reverse-engineer Holly alert trigger conditions. Compares feature distributions of Holly-triggered evaluations vs baseline to extract decision boundary thresholds per strategy. Each rule shows which features (e.g. RVOL, gap%, extension%) distinguish Holly alerts with effect size (Cohen's d).",
+    "Reverse-engineer Holly alert trigger conditions using Cohen's d effect size analysis.",
     {
-      min_alerts: z.number().optional().default(5).describe("Minimum alerts per strategy (default: 5)"),
-      min_separation: z.number().optional().default(0.3).describe("Minimum Cohen's d separation to include a rule (default: 0.3)"),
-      since: z.string().optional().describe("Only use alerts after this date (ISO format)"),
+      min_samples: z.number().optional().default(10).describe("Minimum alerts per strategy"),
+      min_cohens_d: z.number().optional().default(0.2).describe("Minimum Cohen's d separation"),
     },
     async (params) => {
-      const rules = extractRules({
-        minAlerts: params.min_alerts,
-        minSeparation: params.min_separation,
-        since: params.since,
-      });
-      return { content: [{ type: "text", text: JSON.stringify({ strategy_count: rules.length, total_rules: rules.reduce((s, r) => s + r.rules.length, 0), rule_sets: rules }, null, 2) }] };
+      const db = getDb();
+      const rules = extractRules(db, params.min_samples, params.min_cohens_d);
+      return { content: [{ type: "text", text: JSON.stringify({ total_rules: rules.length, rules }, null, 2) }] };
     }
   );
 
   // --- Tool: holly_backtest ---
   server.tool(
     "holly_backtest",
-    "Backtest extracted Holly rules across any symbol universe and timeframe. Applies reverse-engineered trigger rules to historical evaluations, measures precision (signal quality), win rate, Sharpe, P&L per strategy, and aggregate. The definitive test of whether Holly's patterns produce edge.",
+    "Backtest extracted Holly rules: precision, win rate, Sharpe, P&L.",
     {
-      days: z.number().optional().default(180).describe("Lookback period in days (default: 180)"),
-      symbols: z.array(z.string()).optional().describe("Restrict to specific symbols (default: all)"),
-      min_match_score: z.number().optional().default(0.6).describe("Min rule-match score 0-1 (default: 0.6)"),
-      since: z.string().optional().describe("Start date (ISO format)"),
-      until: z.string().optional().describe("End date (ISO format)"),
+      win_threshold: z.number().optional().default(60).describe("Min score to count as win prediction"),
     },
     async (params) => {
-      const report = runBacktest({
-        days: params.days,
-        symbols: params.symbols,
-        minMatchScore: params.min_match_score,
-        since: params.since,
-        until: params.until,
-      });
+      const db = getDb();
+      const rules = extractRules(db);
+      const report = runBacktest(db, rules, params.win_threshold);
       return { content: [{ type: "text", text: JSON.stringify(report, null, 2) }] };
     }
   );
@@ -2368,12 +2357,10 @@ export function createMcpServer(): McpServer {
   // --- Tool: holly_strategy_breakdown ---
   server.tool(
     "holly_strategy_breakdown",
-    "Quick breakdown of each Holly strategy: defining features, effect sizes, tradeable rate, and outcome P&L. Lighter than full backtest — shows which strategies are worth running.",
-    {
-      since: z.string().optional().describe("Only analyze alerts after this date"),
-    },
-    async (params) => {
-      const result = getStrategyBreakdown({ since: params.since });
+    "Quick breakdown of each Holly strategy: features, separation, outcome P&L.",
+    {},
+    async () => {
+      const result = getStrategyBreakdown(getDb());
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     }
   );
