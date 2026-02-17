@@ -9,10 +9,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // ── Mock database ────────────────────────────────────────────────────────
 
-let mockBulkInsert: ReturnType<typeof vi.fn>;
+let mockBulkInsert = vi.fn();
 
 vi.mock("../../db/database.js", () => ({
-  bulkInsertHollyAlerts: mockBulkInsert,
+  bulkInsertHollyAlerts: (...args: any[]) => mockBulkInsert(...args),
 }));
 
 vi.mock("../../logging.js", () => ({
@@ -36,8 +36,8 @@ function makeCSV(headers: string, rows: string[]): string {
 }
 
 beforeEach(() => {
-  mockBulkInsert = vi.fn(() => ({ inserted: 1, skipped: 0 }));
-  vi.mocked(mockBulkInsert);
+  mockBulkInsert.mockClear();
+  mockBulkInsert.mockReturnValue({ inserted: 1, skipped: 0 });
 });
 
 // ── Tests ────────────────────────────────────────────────────────────────
