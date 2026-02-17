@@ -9,27 +9,7 @@ async function fetchJSON<T>(url: string): Promise<T> {
   return res.json();
 }
 
-export interface OptionsChainData {
-  symbol: string;
-  expirations: string[];
-  strikes: number[];
-  calls: OptionContract[];
-  puts: OptionContract[];
-}
-
-export interface OptionContract {
-  contractSymbol: string;
-  strike: number;
-  expiration: string;
-  type: "C" | "P";
-  lastPrice: number | null;
-  bid: number | null;
-  ask: number | null;
-  volume: number | null;
-  openInterest: number | null;
-  impliedVolatility: number | null;
-  inTheMoney: boolean;
-}
+import type { OptionsChainData } from "./types";
 
 export const optionsClient = {
   async getOptionsChain(symbol: string, expiration?: string): Promise<OptionsChainData> {

@@ -23,6 +23,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { formatExpiration } from "@/lib/utils/formatters";
 import { cn } from "@/lib/utils";
 import type { OptionContract } from "@/lib/api/types";
 
@@ -277,7 +278,7 @@ export default function OptionsChainPage() {
                           : "bg-card border border-border text-foreground hover:bg-accent"
                       )}
                     >
-                      {exp.slice(0, 4)}-{exp.slice(4, 6)}-{exp.slice(6, 8)}
+                      {formatExpiration(exp)}
                     </button>
                   ))}
                 </div>
