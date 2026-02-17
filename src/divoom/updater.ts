@@ -12,7 +12,6 @@ import {
   type Position,
   type HollyAlert,
   type MarketStatus,
-  type RecentTrade,
 } from "./dashboard.js";
 import { config } from "../config.js";
 import { logger } from "../logging.js";
@@ -163,44 +162,20 @@ async function fetchMarketStatus(): Promise<MarketStatus> {
 }
 
 /**
- * Fetch the most recent trade
- */
-async function fetchRecentTrade(): Promise<RecentTrade | null> {
-  try {
-    const { queryExecutions } = await import("../db/database.js");
-    const execs = queryExecutions({ limit: 1 });
-    if (execs.length === 0) return null;
-
-    const exec = execs[0] as any;
-    return {
-      symbol: String(exec.symbol ?? ""),
-      quantity: Number(exec.quantity ?? 0),
-      price: Number(exec.price ?? 0),
-      side: String(exec.side ?? "") as "BUY" | "SELL",
-      timestamp: String(exec.timestamp ?? ""),
-    };
-  } catch (err) {
-    log.error({ err }, "Failed to fetch recent trade");
-    return null;
-  }
-}
-
-/**
  * Update the display with latest data
  */
 async function updateDisplay(): Promise<void> {
   if (!display) return;
 
   try {
-    const [pnlData, positions, hollyAlert, marketStatus, recentTrade] = await Promise.all([
+    const [pnlData, positions, hollyAlert, marketStatus] = await Promise.all([
       fetchPnLData(),
       fetchPositions(),
       fetchLatestHollyAlert(),
       fetchMarketStatus(),
-      fetchRecentTrade(),
     ]);
 
-    const dashboardData = buildDashboard(pnlData, positions, hollyAlert, marketStatus, recentTrade);
+    const dashboardData = buildDashboard(pnlData, positions, hollyAlert, marketStatus);
     await display.sendDashboard(dashboardData);
     
     log.debug("Display updated successfully");
