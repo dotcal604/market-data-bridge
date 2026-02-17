@@ -48,7 +48,7 @@ interface OpenApiOperation {
   security?: Array<Record<string, string[]>>;
 }
 
-interface OpenApiSpec {
+export interface OpenApiSpec {
   openapi: string;
   info: {
     title: string;

@@ -28,6 +28,7 @@ describe("validateConfig", () => {
         calibrationThreshold: 0.15,
         enabled: true,
       },
+      autoEval: { enabled: false, dedupWindowMin: 5, maxConcurrent: 3 },
     };
 
     const result = validateConfig(validConfig);
@@ -41,6 +42,7 @@ describe("validateConfig", () => {
       rest: { port: 0, apiKey: "secure-api-key-16+" },
       holly: { watchPath: "", pollIntervalMs: 5000 },
       drift: { accuracyThreshold: 0.55, calibrationThreshold: 0.15, enabled: true },
+      autoEval: { enabled: false, dedupWindowMin: 5, maxConcurrent: 3 },
     };
 
     const result = validateConfig(config);
@@ -53,6 +55,7 @@ describe("validateConfig", () => {
       rest: { port: 65536, apiKey: "secure-api-key-16+" },
       holly: { watchPath: "", pollIntervalMs: 5000 },
       drift: { accuracyThreshold: 0.55, calibrationThreshold: 0.15, enabled: true },
+      autoEval: { enabled: false, dedupWindowMin: 5, maxConcurrent: 3 },
     };
 
     const result = validateConfig(config);
@@ -65,6 +68,7 @@ describe("validateConfig", () => {
       rest: { port: 3000, apiKey: "secure-api-key-16+" },
       holly: { watchPath: "", pollIntervalMs: 5000 },
       drift: { accuracyThreshold: 0.55, calibrationThreshold: 0.15, enabled: true },
+      autoEval: { enabled: false, dedupWindowMin: 5, maxConcurrent: 3 },
     };
 
     const result = validateConfig(config);
@@ -77,6 +81,7 @@ describe("validateConfig", () => {
       rest: { port: 3000, apiKey: "short" },
       holly: { watchPath: "", pollIntervalMs: 5000 },
       drift: { accuracyThreshold: 0.55, calibrationThreshold: 0.15, enabled: true },
+      autoEval: { enabled: false, dedupWindowMin: 5, maxConcurrent: 3 },
     };
 
     const result = validateConfig(config);
@@ -90,6 +95,7 @@ describe("validateConfig", () => {
       rest: { port: 3000, apiKey: "secure-api-key-16+" },
       holly: { watchPath: "/nonexistent/path/to/holly.csv", pollIntervalMs: 5000 },
       drift: { accuracyThreshold: 0.55, calibrationThreshold: 0.15, enabled: true },
+      autoEval: { enabled: false, dedupWindowMin: 5, maxConcurrent: 3 },
     };
 
     const result = validateConfig(config);
@@ -107,6 +113,7 @@ describe("validateConfig", () => {
         rest: { port: 3000, apiKey: "secure-api-key-16+" },
         holly: { watchPath: tempDir, pollIntervalMs: 5000 },
         drift: { accuracyThreshold: 0.55, calibrationThreshold: 0.15, enabled: true },
+        autoEval: { enabled: false, dedupWindowMin: 5, maxConcurrent: 3 },
       };
 
       const result = validateConfig(config);
@@ -124,6 +131,7 @@ describe("validateConfig", () => {
       rest: { port: 3000, apiKey: "secure-api-key-16+" },
       holly: { watchPath: "", pollIntervalMs: 5000 },
       drift: { accuracyThreshold: 1.5, calibrationThreshold: 0.15, enabled: true },
+      autoEval: { enabled: false, dedupWindowMin: 5, maxConcurrent: 3 },
     };
 
     const result = validateConfig(config);
@@ -136,6 +144,7 @@ describe("validateConfig", () => {
       rest: { port: 3000, apiKey: "secure-api-key-16+" },
       holly: { watchPath: "", pollIntervalMs: 5000 },
       drift: { accuracyThreshold: 0.55, calibrationThreshold: -0.1, enabled: true },
+      autoEval: { enabled: false, dedupWindowMin: 5, maxConcurrent: 3 },
     };
 
     const result = validateConfig(config);
@@ -148,6 +157,7 @@ describe("validateConfig", () => {
       rest: { port: 3000, apiKey: "secure-api-key-16+" },
       holly: { watchPath: "", pollIntervalMs: 5000 },
       drift: { accuracyThreshold: 0.55, calibrationThreshold: 0.15, enabled: true },
+      autoEval: { enabled: false, dedupWindowMin: 5, maxConcurrent: 3 },
     };
 
     const result = validateConfig(config);
@@ -160,6 +170,7 @@ describe("validateConfig", () => {
       rest: { port: 3000, apiKey: "" },
       holly: { watchPath: "", pollIntervalMs: 5000 },
       drift: { accuracyThreshold: 0.55, calibrationThreshold: 0.15, enabled: true },
+      autoEval: { enabled: false, dedupWindowMin: 5, maxConcurrent: 3 },
     };
 
     const result = validateConfig(config);
@@ -174,6 +185,7 @@ describe("validateConfig", () => {
       rest: { port: -5, apiKey: "short" },
       holly: { watchPath: "/fake/path", pollIntervalMs: 5000 },
       drift: { accuracyThreshold: 2.0, calibrationThreshold: -0.5, enabled: true },
+      autoEval: { enabled: false, dedupWindowMin: 5, maxConcurrent: 3 },
     };
 
     const result = validateConfig(config);
@@ -197,6 +209,7 @@ describe("validateConfig", () => {
       rest: { port: 1, apiKey: "secure-api-key-16+" },
       holly: { watchPath: "", pollIntervalMs: 5000 },
       drift: { accuracyThreshold: 0.55, calibrationThreshold: 0.15, enabled: true },
+      autoEval: { enabled: false, dedupWindowMin: 5, maxConcurrent: 3 },
     };
     expect(validateConfig(validLowPort).errors).toEqual([]);
 
@@ -205,6 +218,7 @@ describe("validateConfig", () => {
       rest: { port: 65535, apiKey: "secure-api-key-16+" },
       holly: { watchPath: "", pollIntervalMs: 5000 },
       drift: { accuracyThreshold: 0.55, calibrationThreshold: 0.15, enabled: true },
+      autoEval: { enabled: false, dedupWindowMin: 5, maxConcurrent: 3 },
     };
     expect(validateConfig(validHighPort).errors).toEqual([]);
   });
@@ -215,6 +229,7 @@ describe("validateConfig", () => {
       rest: { port: 3000, apiKey: "secure-api-key-16+" },
       holly: { watchPath: "", pollIntervalMs: 5000 },
       drift: { accuracyThreshold: 0.0, calibrationThreshold: 0.0, enabled: true },
+      autoEval: { enabled: false, dedupWindowMin: 5, maxConcurrent: 3 },
     };
     expect(validateConfig(validZeroThreshold).errors).toEqual([]);
 
@@ -223,6 +238,7 @@ describe("validateConfig", () => {
       rest: { port: 3000, apiKey: "secure-api-key-16+" },
       holly: { watchPath: "", pollIntervalMs: 5000 },
       drift: { accuracyThreshold: 1.0, calibrationThreshold: 1.0, enabled: true },
+      autoEval: { enabled: false, dedupWindowMin: 5, maxConcurrent: 3 },
     };
     expect(validateConfig(validMaxThreshold).errors).toEqual([]);
   });
