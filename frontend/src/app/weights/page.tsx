@@ -9,7 +9,7 @@ import { ModelAvatar } from "@/components/shared/model-avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { WeightSliders } from "@/components/weights/weight-sliders";
 import { SimulateResults } from "@/components/weights/simulate-results";
-import { WeightHistory } from "@/components/weights/weight-history";
+import { WeightHistoryChart } from "@/components/weights/weight-history-chart";
 import { ArrowRight } from "lucide-react";
 
 export default function WeightsPage() {
@@ -94,8 +94,8 @@ export default function WeightsPage() {
         <SimulateResults weights={sliderWeights} />
       </div>
 
-      {/* History table */}
-      <WeightHistory />
+      {/* History chart */}
+      <WeightHistoryChart days={90} />
     </div>
   );
 }

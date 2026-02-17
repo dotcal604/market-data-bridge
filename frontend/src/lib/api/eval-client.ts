@@ -94,17 +94,30 @@ export const evalClient = {
     });
   },
 
-  getWeightHistory() {
-    return fetchJson<
-      Array<{
-        claude: number;
-        gpt4o: number;
-        gemini: number;
-        k: number;
-        sample_size: number;
-        updated_at: string;
-      }>
-    >(`${BASE}/weights/history`);
+  getWeightHistory(days?: number) {
+    const params = new URLSearchParams();
+    if (days) {
+      // Calculate limit based on expected frequency (weekly updates → ~13 records per 90 days)
+      const limit = Math.ceil((days / 90) * 20);
+      params.set("limit", String(limit));
+    }
+    const query = params.toString();
+    return fetchJson<{
+      count: number;
+      history: Array<{
+        id: number;
+        weights: {
+          claude: number;
+          gpt4o: number;
+          gemini: number;
+          k: number;
+          source?: string;
+        };
+        sample_size: number | null;
+        reason: string | null;
+        created_at: string;
+      }>;
+    }>(`${BASE}/weights/history${query ? `?${query}` : ""}`);
   },
 
   simulateWeights(params: {
