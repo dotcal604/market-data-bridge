@@ -110,7 +110,12 @@ export class ReadModelStore {
 
   /**
    * Updates the position for a symbol based on an execution.
-   * Calculates new weighted average price.
+   * Handles position netting with realized P&L calculation.
+   * Supports four cases:
+   * 1. Adding to existing position (same side)
+   * 2. Closing existing position (opposite side, partial or full)
+   * 3. Flipping from long to short
+   * 4. Flipping from short to long
    */
   private updatePosition(symbol: string, side: OrderSide, shares: number, price: number) {
     let position = this.positions.get(symbol);
@@ -121,25 +126,59 @@ export class ReadModelStore {
 
     if (side === 'BUY') {
       if (position.qty >= 0) {
-        // Adding to long position
+        // Case 1: Adding to long position
         const totalValue = (position.qty * position.avgPrice) + (shares * price);
         position.qty += shares;
         position.avgPrice = totalValue / position.qty;
       } else {
-        // Closing short position
-        // Implementation simplified for brevity; covering logic is complex
-        // For Phase 1, we assume simple netting
-        position.qty += shares; 
+        // Case 2 & 4: Closing short position or flipping to long
+        const closingQty = Math.min(shares, Math.abs(position.qty));
+        const remainingQty = shares - closingQty;
+        
+        // Calculate realized P&L on closed portion (for shorts: avgPrice - exitPrice)
+        const pnl = closingQty * (position.avgPrice - price);
+        position.realizedPnl += pnl;
+        
+        // Update quantity
+        position.qty += shares;
+        
+        // If position crossed zero, set new avgPrice for the new long position
+        if (position.qty > 0) {
+          // Flipped to long
+          position.avgPrice = price;
+        } else if (position.qty === 0) {
+          // Fully closed, reset avgPrice
+          position.avgPrice = 0;
+        }
+        // else: still short, keep existing avgPrice
       }
     } else { // SELL
       if (position.qty <= 0) {
-        // Adding to short position
+        // Case 1: Adding to short position
         const totalValue = (Math.abs(position.qty) * position.avgPrice) + (shares * price);
         position.qty -= shares;
         position.avgPrice = totalValue / Math.abs(position.qty);
       } else {
-        // Closing long position
+        // Case 2 & 3: Closing long position or flipping to short
+        const closingQty = Math.min(shares, position.qty);
+        const remainingQty = shares - closingQty;
+        
+        // Calculate realized P&L on closed portion (for longs: exitPrice - avgPrice)
+        const pnl = closingQty * (price - position.avgPrice);
+        position.realizedPnl += pnl;
+        
+        // Update quantity
         position.qty -= shares;
+        
+        // If position crossed zero, set new avgPrice for the new short position
+        if (position.qty < 0) {
+          // Flipped to short
+          position.avgPrice = price;
+        } else if (position.qty === 0) {
+          // Fully closed, reset avgPrice
+          position.avgPrice = 0;
+        }
+        // else: still long, keep existing avgPrice
       }
     }
   }
