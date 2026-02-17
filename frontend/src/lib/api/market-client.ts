@@ -80,6 +80,7 @@ export interface Financials {
   ebitdaMargins: number | null;
   operatingMargins: number | null;
   profitMargins: number | null;
+  debtToEquity: number | null;
 }
 
 export interface BarData {
