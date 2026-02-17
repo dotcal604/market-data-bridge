@@ -77,6 +77,7 @@ import {
 import { queryHollyAlerts, getHollyAlertStats, getLatestHollySymbols, querySignals, getSignalStats } from "../db/database.js";
 import { z } from "zod";
 import { orchestrator, getConsensusVerdict, formatDisagreements, ProviderScoresSchema } from "../orchestrator.js";
+import { applyTrailingStopToOrder, trailingStopRecommendation } from "../holly/trailing-stop-executor.js";
 
 const log = logger.child({ module: "agent" });
 
@@ -489,6 +490,7 @@ const actions: Record<string, ActionHandler> = {
     until: str(p, "until") || undefined,
     minTrades: num(p, "min_trades", 20),
   }),
+  trailing_stop_recommend: async (p) => trailingStopRecommendation(str(p, "symbol"), str(p, "strategy") || undefined),
   trailing_stop_simulate: async (p) => {
     const type = str(p, "type") as any;
     if (!type) throw new Error("type is required (fixed_pct, atr_multiple, time_decay, mfe_escalation, breakeven_trail)");
@@ -730,6 +732,7 @@ export const actionsMeta: Record<string, ActionMeta> = {
   trailing_stop_optimize: { description: "Run all 19 trailing stop strategies on Holly trades, sorted by P&L improvement. Simulates fixed-%, ATR, time-decay, MFE-escalation, breakeven+trail exits", params: ["strategy?", "segment?", "since?", "until?"] },
   trailing_stop_summary: { description: "Compact comparison table of all trailing stop strategies: original vs simulated P&L, win rate, Sharpe, giveback reduction", params: ["strategy?", "segment?", "since?", "until?"] },
   trailing_stop_per_strategy: { description: "Find the optimal trailing stop for EACH Holly strategy independently. Shows best trailing params per strategy", params: ["since?", "until?", "min_trades?"] },
+  trailing_stop_recommend: { description: "Get the best trailing stop recommendation for a symbol/strategy", params: ["symbol", "strategy?"] },
   trailing_stop_simulate: { description: "Simulate a single custom trailing stop strategy with specific parameters", params: ["type", "name?", "trail_pct?", "atr_mult?", "initial_target_pct?", "decay_per_min?", "mfe_trigger_pct?", "tight_trail_pct?", "be_trigger_r?", "post_be_trail_pct?", "strategy?", "segment?", "since?", "until?"] },
   trailing_stop_params: { description: "List all 19 default trailing stop parameter sets that can be tested" },
 

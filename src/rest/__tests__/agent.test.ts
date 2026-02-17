@@ -167,9 +167,15 @@ vi.mock("../../ibkr/subscriptions.js", () => ({
   listSubscriptions: vi.fn(() => []),
 }));
 
+vi.mock("../../holly/trailing-stop-executor.js", () => ({
+  applyTrailingStopToOrder: vi.fn(async () => ({ applied: false })),
+  trailingStopRecommendation: vi.fn(),
+}));
+
 import { handleAgentRequest } from "../agent.js";
 import { getStatus } from "../../providers/status.js";
 import { isConnected } from "../../ibkr/connection.js";
+import { trailingStopRecommendation } from "../../holly/trailing-stop-executor.js";
 
 interface MockResponse {
   status: ReturnType<typeof vi.fn>;
@@ -254,6 +260,31 @@ describe("handleAgentRequest", () => {
     expect(res.json).toHaveBeenCalledWith({
       action: "get_status",
       result: statusPayload,
+    });
+  });
+
+  it("dispatches trailing_stop_recommend action", async () => {
+    vi.mocked(trailingStopRecommendation).mockReturnValue({
+      symbol: "AAPL",
+      strategy: "Holly Neo",
+      source: "table",
+      params: { name: "neo", type: "fixed_pct", trail_pct: 0.02 },
+    });
+
+    const req = createRequest("trailing_stop_recommend", { symbol: "AAPL" });
+    const res = createMockResponse();
+
+    await handleAgentRequest(req, res as unknown as Response);
+
+    expect(trailingStopRecommendation).toHaveBeenCalledWith("AAPL", undefined);
+    expect(res.json).toHaveBeenCalledWith({
+      action: "trailing_stop_recommend",
+      result: {
+        symbol: "AAPL",
+        strategy: "Holly Neo",
+        source: "table",
+        params: { name: "neo", type: "fixed_pct", trail_pct: 0.02 },
+      },
     });
   });
 

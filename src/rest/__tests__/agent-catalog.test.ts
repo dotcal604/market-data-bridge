@@ -120,6 +120,7 @@ describe("Action Catalog", () => {
         "trailing_stop_optimize",
         "trailing_stop_summary",
         "trailing_stop_per_strategy",
+        "trailing_stop_recommend",
         "trailing_stop_simulate",
         "trailing_stop_params",
         "tradersync_trades",

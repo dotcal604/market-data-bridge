@@ -173,6 +173,7 @@ Yahoo (always available): get_quote, get_historical_bars, get_financials, get_ea
 - trailing_stop_optimize — { strategy?, segment?, since?, until? } — run all 19 trailing stop strategies (fixed-%, ATR, time-decay, MFE-escalation, breakeven+trail) on Holly trades. Returns P&L improvement, Sharpe delta, win rate change vs actual exits.
 - trailing_stop_summary — { strategy?, segment?, since?, until? } — compact comparison table: original vs simulated P&L, win rate, Sharpe, giveback reduction for all 19 strategies
 - trailing_stop_per_strategy — { since?, until?, min_trades? } — find optimal trailing stop for EACH Holly strategy independently. Best for discovering strategy-specific exit rules.
+- trailing_stop_recommend — { symbol, strategy? } — get the best trailing-stop parameters for a symbol/strategy (uses stored per-strategy optimizer output when available)
 - trailing_stop_simulate — { type, name?, trail_pct?, atr_mult?, ... strategy?, segment?, since?, until? } — test a single custom trailing stop with specific params. Types: fixed_pct, atr_multiple, time_decay, mfe_escalation, breakeven_trail
 - trailing_stop_params — no params — list all 19 default parameter sets
 
