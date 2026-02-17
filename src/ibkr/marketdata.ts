@@ -385,7 +385,7 @@ export async function getMarketDepth(
       side: number,
       price: number,
       size: number,
-      isSmartDepth: boolean,
+      isSmartDepth?: boolean,
     ) => {
       if (id !== reqId) return;
 
@@ -411,12 +411,12 @@ export async function getMarketDepth(
     const cleanup = () => {
       clearTimeout(timeout);
       ib.off(EventName.updateMktDepth, onUpdateMktDepth);
-      ib.off(EventName.updateMktDepthL2, onUpdateMktDepthL2);
+      (ib as any).off(EventName.updateMktDepthL2, onUpdateMktDepthL2);
       ib.off(EventName.error, onError);
     };
 
     ib.on(EventName.updateMktDepth, onUpdateMktDepth);
-    ib.on(EventName.updateMktDepthL2, onUpdateMktDepthL2);
+    (ib as any).on(EventName.updateMktDepthL2, onUpdateMktDepthL2);
     ib.on(EventName.error, onError);
 
     log.info({ reqId, symbol, numRows }, "Requesting IBKR market depth (Level 2)");
