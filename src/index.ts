@@ -61,26 +61,32 @@ async function main() {
   // Prune old log files (keep 30 days)
   pruneOldLogs();
 
-  // IBKR connection is optional — only needed for account data (positions, PnL).
-  // Market data comes from Yahoo Finance and works without IBKR.
-  try {
-    await connect();
-    logger.info("IBKR connected — account data available");
+  // IBKR connection is only needed for REST/both modes.
+  // MCP-only processes proxy through the REST bridge and must NOT connect
+  // to TWS — doing so creates clientId collisions and phantom connections
+  // that churn in TWS's API Connections panel.
+  if (mode !== "mcp") {
+    try {
+      await connect();
+      logger.info("IBKR connected — account data available");
 
-    // Attach persistent DB listeners for order/execution events
-    attachPersistentOrderListeners();
+      // Attach persistent DB listeners for order/execution events
+      attachPersistentOrderListeners();
 
-    // Run boot reconciliation (compare DB state vs IBKR state)
-    runReconciliation().catch((e) => {
-      logger.error({ err: e }, "Boot reconciliation failed");
-    });
+      // Run boot reconciliation (compare DB state vs IBKR state)
+      runReconciliation().catch((e) => {
+        logger.error({ err: e }, "Boot reconciliation failed");
+      });
 
-    // Start periodic snapshots (account + positions every 5 min during market hours)
-    startScheduler();
-  } catch (e: any) {
-    logger.warn({ err: e.message }, "IBKR not available — market data still works via Yahoo");
-    logger.info("Will keep retrying IBKR connection in background...");
-    scheduleReconnect();
+      // Start periodic snapshots (account + positions every 5 min during market hours)
+      startScheduler();
+    } catch (e: any) {
+      logger.warn({ err: e.message }, "IBKR not available — market data still works via Yahoo");
+      logger.info("Will keep retrying IBKR connection in background...");
+      scheduleReconnect();
+    }
+  } else {
+    logger.info("MCP-only mode — skipping IBKR connection (REST bridge handles it)");
   }
 
   // Start Holly AI alert file watcher (polls Trade Ideas CSV export)
