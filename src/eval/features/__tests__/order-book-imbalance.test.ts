@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { OrderBookFeatures, type OrderBookState } from "../order-book-imbalance.js";
+import {
+  OrderBookFeatures,
+  type OrderBookState,
+  marketDepthToOrderBook,
+  computeOrderBookFeatures,
+} from "../order-book-imbalance.js";
 
 describe("OrderBookFeatures.calculateOBI", () => {
   it("should return 0 when bids array is empty", () => {
@@ -410,5 +415,137 @@ describe("OrderBookFeatures.calculateVPIN", () => {
     // VPIN = 7400 / 12600 ≈ 0.587
     const result = OrderBookFeatures.calculateVPIN(buyVolume, sellVolume);
     expect(result).toBeCloseTo(0.587, 3);
+  });
+});
+
+describe("marketDepthToOrderBook", () => {
+  it("should convert market depth snapshot to order book state", () => {
+    const snapshot = {
+      symbol: "AAPL",
+      bids: [
+        { price: 150.50, size: 1000 },
+        { price: 150.49, size: 800 },
+      ],
+      asks: [
+        { price: 150.51, size: 500 },
+        { price: 150.52, size: 600 },
+      ],
+      timestamp: 1234567890,
+    };
+
+    const book = marketDepthToOrderBook(snapshot);
+
+    expect(book.symbol).toBe("AAPL");
+    expect(book.bids).toEqual([
+      [150.50, 1000],
+      [150.49, 800],
+    ]);
+    expect(book.asks).toEqual([
+      [150.51, 500],
+      [150.52, 600],
+    ]);
+    expect(book.timestamp).toBe(1234567890);
+  });
+
+  it("should handle empty bids and asks", () => {
+    const snapshot = {
+      symbol: "TSLA",
+      bids: [],
+      asks: [],
+      timestamp: Date.now(),
+    };
+
+    const book = marketDepthToOrderBook(snapshot);
+
+    expect(book.symbol).toBe("TSLA");
+    expect(book.bids).toEqual([]);
+    expect(book.asks).toEqual([]);
+  });
+
+  it("should ignore marketMaker field when converting", () => {
+    const snapshot = {
+      symbol: "NVDA",
+      bids: [{ price: 500.00, size: 100, marketMaker: "ARCA" }],
+      asks: [{ price: 500.10, size: 200, marketMaker: "NSDQ" }],
+      timestamp: Date.now(),
+    };
+
+    const book = marketDepthToOrderBook(snapshot);
+
+    // Market maker info is discarded, only price and size are kept
+    expect(book.bids).toEqual([[500.00, 100]]);
+    expect(book.asks).toEqual([[500.10, 200]]);
+  });
+});
+
+describe("computeOrderBookFeatures", () => {
+  it("should compute both OBI and WOBI from book state", () => {
+    const book: OrderBookState = {
+      symbol: "AAPL",
+      bids: [
+        [100, 1000],
+        [99, 800],
+        [98, 600],
+      ],
+      asks: [
+        [101, 500],
+        [102, 600],
+        [103, 700],
+      ],
+      timestamp: Date.now(),
+    };
+
+    const features = computeOrderBookFeatures(book, 3);
+
+    expect(features.obi).toBeCloseTo(0.333, 3);
+    expect(features.wobi).toBeGreaterThan(0);
+  });
+
+  it("should use default depth of 5", () => {
+    const book: OrderBookState = {
+      symbol: "AAPL",
+      bids: [
+        [100, 1000],
+        [99, 800],
+      ],
+      asks: [
+        [101, 500],
+        [102, 600],
+      ],
+      timestamp: Date.now(),
+    };
+
+    const features = computeOrderBookFeatures(book);
+
+    expect(features.obi).toBeCloseTo(0.333, 3);
+    expect(features.wobi).toBeGreaterThan(0);
+  });
+
+  it("should handle empty order book", () => {
+    const book: OrderBookState = {
+      symbol: "AAPL",
+      bids: [],
+      asks: [],
+      timestamp: Date.now(),
+    };
+
+    const features = computeOrderBookFeatures(book);
+
+    expect(features.obi).toBe(0);
+    expect(features.wobi).toBe(0);
+  });
+
+  it("should handle balanced book", () => {
+    const book: OrderBookState = {
+      symbol: "AAPL",
+      bids: [[100, 1000]],
+      asks: [[101, 1000]],
+      timestamp: Date.now(),
+    };
+
+    const features = computeOrderBookFeatures(book);
+
+    expect(features.obi).toBe(0);
+    expect(features.wobi).toBeCloseTo(0, 5);
   });
 });
