@@ -548,7 +548,13 @@ const stmts = {
     WHERE symbol = ? AND timestamp >= ? AND prefilter_passed = 1
     ORDER BY timestamp DESC
   `),
-  getExecutionsByCorrelation: db.prepare(`SELECT * FROM executions WHERE correlation_id = ?`),
+  getUnlinkedExecutions: db.prepare(`
+    SELECT e.* FROM executions e
+    LEFT JOIN eval_execution_links l ON e.exec_id = l.exec_id
+    WHERE l.id IS NULL AND datetime(e.timestamp) >= datetime(?)
+    ORDER BY e.timestamp DESC
+  `),
+  getExecutionsByCorrelation: db.prepare(`SELECT * FROM executions WHERE correlation_id = ? ORDER BY timestamp ASC`),
   getAutoLinkStats: db.prepare(`
     SELECT
       COUNT(*) as total,
@@ -989,6 +995,10 @@ export function getRecentEvalsForSymbol(symbol: string, since: string): Array<Re
   return stmts.getRecentEvalsForSymbol.all(symbol, since) as Array<Record<string, unknown>>;
 }
 
+export function getUnlinkedExecutions(since: string): Array<Record<string, unknown>> {
+  return stmts.getUnlinkedExecutions.all(since) as Array<Record<string, unknown>>;
+}
+
 export function getExecutionsByCorrelation(correlationId: string): Array<Record<string, unknown>> {
   return stmts.getExecutionsByCorrelation.all(correlationId) as Array<Record<string, unknown>>;
 }
@@ -1000,7 +1010,6 @@ export function getExecutionByExecId(execId: string): Record<string, unknown> | 
 export function getAutoLinkStats(): Record<string, unknown> {
   const linkStats = stmts.getAutoLinkStats.get() as any ?? { total: 0, explicit_links: 0, heuristic_links: 0, avg_confidence: null };
 
-  // Count how many linked evals have recorded outcomes
   const outcomeCount = db.prepare(`
     SELECT COUNT(DISTINCT eel.evaluation_id) as count
     FROM eval_execution_links eel
@@ -1016,6 +1025,7 @@ export function getAutoLinkStats(): Record<string, unknown> {
 export function getRecentLinks(limit: number = 20): Array<Record<string, unknown>> {
   return stmts.getRecentLinks.all(limit) as Array<Record<string, unknown>>;
 }
+
 
 // ── Eval Outcomes (evals joined with outcomes for analytics) ──────────────
 
