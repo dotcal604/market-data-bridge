@@ -5,8 +5,32 @@ let ib: IBApi | null = null;
 let connected = false;
 let nextReqId = 1;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-// Randomize clientId to avoid collisions when Desktop spawns multiple MCP processes
-let currentClientId = config.ibkr.clientId + Math.floor(Math.random() * 100);
+
+/**
+ * Deterministic clientId based on transport mode to prevent collisions.
+ *
+ * TWS allows one connection per clientId. When Claude Desktop (MCP/stdio)
+ * and Claude Code (REST) both start from the same codebase, they must use
+ * different IDs. Using Math.random() was flaky — collisions still happened.
+ *
+ * Strategy: use the process's --mode flag to pick a deterministic base,
+ * then allow a small retry window on error 326.
+ *
+ *   MCP-only  → base 0  (Desktop's stdio process)
+ *   REST-only → base 1  (Claude Code's dev server)
+ *   both      → base 2  (npm run dev — single process)
+ *
+ * IBKR_CLIENT_ID env var shifts the base (e.g., 10 → MCP=10, REST=11, both=12).
+ */
+function resolveClientId(): number {
+  const base = config.ibkr.clientId; // from IBKR_CLIENT_ID env var
+  const modeIdx = process.argv.indexOf("--mode");
+  const mode = modeIdx !== -1 ? process.argv[modeIdx + 1]?.toLowerCase() : "both";
+  const offset = mode === "mcp" ? 0 : mode === "rest" ? 1 : 2;
+  return base + offset;
+}
+
+let currentClientId = resolveClientId();
 let clientIdRetries = 0;
 let onReconnectCallback: (() => void) | null = null;
 
@@ -54,7 +78,7 @@ export function getIB(): IBApi {
         console.error(`[IBKR] ClientId ${currentClientId} already in use`);
         if (clientIdRetries < config.ibkr.maxClientIdRetries) {
           clientIdRetries++;
-          currentClientId++;
+          currentClientId += 3; // step by 3 to avoid landing on another mode's ID
           console.error(`[IBKR] Trying clientId ${currentClientId} (attempt ${clientIdRetries}/${config.ibkr.maxClientIdRetries})`);
           destroyIB();
           scheduleReconnect(1000);
