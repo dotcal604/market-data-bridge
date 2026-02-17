@@ -137,6 +137,11 @@ const actions: Record<string, ActionHandler> = {
   get_ibkr_quote: async (p) => { requireIBKR(); return getIBKRQuote({ symbol: str(p, "symbol"), secType: str(p, "secType", "STK"), exchange: str(p, "exchange", "SMART"), currency: str(p, "currency", "USD") }); },
   get_historical_ticks: async (p) => { requireIBKR(); return getHistoricalTicks(str(p, "symbol"), str(p, "startTime"), str(p, "endTime", ""), str(p, "type", "TRADES") as "TRADES" | "BID_ASK" | "MIDPOINT", num(p, "count", 1000)); },
   get_contract_details: async (p) => { requireIBKR(); return getContractDetails({ symbol: str(p, "symbol"), secType: str(p, "secType", "STK"), currency: str(p, "currency", "USD"), exchange: str(p, "exchange", "SMART") }); },
+  get_orderbook_features: async (p) => {
+    requireIBKR();
+    const { computeOrderBookFeatures } = await import("../eval/features/orderbook-live.js");
+    return computeOrderBookFeatures(str(p, "symbol"), num(p, "depth", 10));
+  },
 
   // ── IBKR News ──
   get_news_providers: async () => { requireIBKR(); return reqNewsProviders(); },
@@ -639,6 +644,7 @@ export const actionsMeta: Record<string, ActionMeta> = {
   get_ibkr_quote: { description: "Get IBKR real-time quote", params: ["symbol", "secType?", "exchange?", "currency?"], requiresIBKR: true },
   get_historical_ticks: { description: "Get historical tick data", params: ["symbol", "startTime", "endTime?", "type?", "count?"], requiresIBKR: true },
   get_contract_details: { description: "Get contract details from IBKR", params: ["symbol", "secType?", "currency?", "exchange?"], requiresIBKR: true },
+  get_orderbook_features: { description: "Get order book imbalance features from Level 2 data", params: ["symbol", "depth?"], requiresIBKR: true },
 
   // IBKR News
   get_news_providers: { description: "Get list of IBKR news providers", requiresIBKR: true },

@@ -53,6 +53,7 @@ describe("Action Catalog", () => {
         "get_open_orders",
         "get_option_quote",
         "get_options_chain",
+        "get_orderbook_features",
         "get_pnl",
         "get_pnl_single",
         "get_positions",
