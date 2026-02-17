@@ -72,8 +72,10 @@ export function EquityCurve() {
     };
   });
 
-  // Calculate high-water mark (maximum P&L achieved)
-  const highWaterMark = Math.max(...chartData.map((d) => d.cumulativePnL), 0);
+  // Calculate high-water mark (maximum P&L achieved during the session)
+  // Only show if there's at least one positive value
+  const maxPnL = Math.max(...chartData.map((d) => d.cumulativePnL));
+  const highWaterMark = maxPnL > 0 ? maxPnL : null;
   
   // Determine if overall P&L is positive or negative
   const currentPnL = chartData.length > 0 ? chartData[chartData.length - 1].cumulativePnL : 0;
@@ -91,7 +93,7 @@ export function EquityCurve() {
               {formatCurrency(currentPnL)}
             </span>
           </span>
-          {highWaterMark > 0 && (
+          {highWaterMark && (
             <span className="text-muted-foreground">
               High: <span className="font-mono font-semibold text-emerald-400">
                 {formatCurrency(highWaterMark)}
@@ -127,7 +129,7 @@ export function EquityCurve() {
             labelFormatter={(label) => `Time: ${label}`}
             formatter={(value) => [formatCurrency(Number(value ?? 0)), "P&L"]}
           />
-          {highWaterMark > 0 && (
+          {highWaterMark && (
             <ReferenceLine
               y={highWaterMark}
               stroke="#10b981"

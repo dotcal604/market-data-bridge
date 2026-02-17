@@ -574,19 +574,20 @@ router.get("/account/pnl/:symbol", async (req, res) => {
 // GET /api/account/pnl/intraday — Get today's account snapshots for equity curve
 router.get("/account/pnl/intraday", (_req, res) => {
   try {
-    // Get all snapshots from today (market day in ET)
-    const now = new Date();
-    const et = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" }));
-    const today = et.toISOString().split("T")[0]; // YYYY-MM-DD in ET
-    
     // Query recent snapshots (scheduler takes them every 5 min during market hours)
     const snapshots = queryAccountSnapshots(300); // Max 300 = 25 hours worth
     
-    // Filter to only today's snapshots
+    // Filter to only today's snapshots using ET timezone comparison
+    // Note: This uses the same timezone conversion pattern as scheduler.ts and status.ts
+    const now = new Date();
+    const et = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" }));
+    const todayET = `${et.getFullYear()}-${String(et.getMonth() + 1).padStart(2, '0')}-${String(et.getDate()).padStart(2, '0')}`;
+    
     const todaySnapshots = snapshots.filter((s: any) => {
       const snapshotDate = new Date(s.created_at);
       const snapshotET = new Date(snapshotDate.toLocaleString("en-US", { timeZone: "America/New_York" }));
-      return snapshotET.toISOString().split("T")[0] === today;
+      const snapshotDateStr = `${snapshotET.getFullYear()}-${String(snapshotET.getMonth() + 1).padStart(2, '0')}-${String(snapshotET.getDate()).padStart(2, '0')}`;
+      return snapshotDateStr === todayET;
     });
     
     res.json({ snapshots: todaySnapshots, count: todaySnapshots.length });
