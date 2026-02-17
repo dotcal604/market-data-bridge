@@ -75,6 +75,7 @@ import {
   getOptimizationSummary, getDefaultParamSets,
 } from "../holly/trailing-stop-optimizer.js";
 import { queryHollyAlerts, getHollyAlertStats, getLatestHollySymbols, querySignals, getSignalStats, getAutoLinkStats, getRecentLinks } from "../db/database.js";
+import { onOutcomeRecorded, getRecalibrationStatus } from "../eval/ensemble/recalibration-hook.js";
 import { z } from "zod";
 import { orchestrator, getConsensusVerdict, formatDisagreements, ProviderScoresSchema } from "../orchestrator.js";
 import { applyTrailingStopToOrder, trailingStopRecommendation } from "../holly/trailing-stop-executor.js";
@@ -246,6 +247,10 @@ const actions: Record<string, ActionHandler> = {
       exit_reason: str(p, "exit_reason") || null,
       notes: str(p, "notes") || null,
     });
+
+    // Trigger Bayesian weight recalibration
+    const rMul = typeof p.r_multiple === "number" ? p.r_multiple : null;
+    onOutcomeRecorded(evaluation_id, rMul, bool(p, "trade_taken"));
 
     return { success: true, evaluation_id };
   },
@@ -531,6 +536,9 @@ const actions: Record<string, ActionHandler> = {
     const recent = getRecentLinks(20);
     return { stats, recent };
   },
+  recalibration_status: async () => {
+    return getRecalibrationStatus();
+  },
 
   // ── Multi-model orchestration ──
   multi_model_score: async (p) => {
@@ -782,6 +790,7 @@ export const actionsMeta: Record<string, ActionMeta> = {
   auto_eval_status: { description: "Get auto-eval pipeline status (enabled, running, config)" },
   auto_eval_toggle: { description: "Enable or disable auto-eval pipeline", params: ["enabled"] },
   auto_link_stats: { description: "Get evaluation-to-execution auto-link statistics and recent links" },
+  recalibration_status: { description: "Get Bayesian recalibration status: outcomes since last batch, per-regime weights, state file" },
 
   // Multi-model orchestration
   multi_model_score: { description: "Collect weighted scores from GPT, Gemini, and Claude providers", params: ["symbol", "features?"] },

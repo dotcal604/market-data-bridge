@@ -98,7 +98,7 @@ function configureFrontendStaticHosting(app: express.Express): void {
   }
 
   app.use(express.static(frontendOutDir, { index: false }));
-  app.get(/^\/(?!api|mcp|health|openapi\.json|openapi-agent\.json).*/, (_req, res) => {
+  app.get(/^\/(?!api|mcp|health|\.well-known|openapi\.json|openapi-agent\.json).*/, (_req, res) => {
     res.sendFile(path.join(frontendOutDir, "index.html"));
   });
 
@@ -151,6 +151,28 @@ export function createApp(): express.Express {
 
   // Serve OpenAPI agent spec (unauthenticated)
   app.get("/openapi-agent.json", (_req, res) => { res.json(openApiAgentSpec); });
+
+  // ChatGPT JIT plugin discovery — /.well-known endpoints
+  app.get("/.well-known/ai-plugin.json", (_req, res) => {
+    res.json({
+      schema_version: "v1",
+      name_for_human: "Market Data Bridge",
+      name_for_model: "market_data_bridge",
+      description_for_human: "IBKR market data, quotes, orders, and AI ensemble trade evaluations.",
+      description_for_model: "Access real-time market data, stock quotes, options chains, place orders, and run 3-model ensemble trade evaluations via IBKR. Call getGptInstructions first to see all available actions.",
+      auth: { type: "none" },
+      api: {
+        type: "openapi",
+        url: "https://api.klfh-dot-io.com/openapi-agent.json",
+      },
+      logo_url: "https://api.klfh-dot-io.com/favicon.ico",
+      contact_email: "support@klfh-dot-io.com",
+      legal_info_url: "https://klfh-dot-io.com",
+    });
+  });
+  app.get("/.well-known/openapi.json", (_req, res) => {
+    res.json(openApiAgentSpec);
+  });
 
   // Health check (unauthenticated)
   app.get("/", (_req, res) => {

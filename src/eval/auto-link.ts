@@ -22,6 +22,7 @@ import {
   getLinksForEval,
   getExecutionByExecId,
 } from "../db/database.js";
+import { onOutcomeRecorded } from "./ensemble/recalibration-hook.js";
 
 const log = logger.child({ subsystem: "auto-link" });
 
@@ -294,6 +295,9 @@ function checkAndRecordOutcome(correlationId: string, realizedPnl: number): void
       exit_reason: "auto_detected",
       recorded_at: new Date().toISOString(),
     });
+
+    // Trigger Bayesian weight recalibration
+    onOutcomeRecorded(evalId, rMultiple, true);
 
     log.info(
       { evalId, symbol: evaluation.symbol, direction, entryPrice, exitPrice, rMultiple, realizedPnl },

@@ -100,6 +100,7 @@ describe("Action Catalog", () => {
         "place_bracket_order",
         "place_order",
         "portfolio_exposure",
+        "recalibration_status",
         "record_outcome",
         "run_screener",
         "run_screener_with_quotes",

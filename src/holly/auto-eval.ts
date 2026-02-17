@@ -14,6 +14,7 @@ import { runPrefilters } from "../eval/guardrails/prefilter.js";
 import { evaluateAllModels } from "../eval/models/runner.js";
 import { computeEnsemble } from "../eval/ensemble/scorer.js";
 import { runGuardrails } from "../eval/guardrails/behavioral.js";
+import { computeDriftReport } from "../eval/drift.js";
 import { getWeights } from "../eval/ensemble/weights.js";
 import { extractFeatureCols } from "../eval/routes.js";
 import { extractStructuredReasoning } from "../eval/reasoning/extractor.js";
@@ -197,7 +198,7 @@ async function runSingleEval(
   const ensemble = computeEnsemble(evaluations);
 
   // Step 5: Guardrails
-  const guardrail = runGuardrails(ensemble, getRecentOutcomes);
+  const guardrail = runGuardrails(ensemble, getRecentOutcomes, () => computeDriftReport());
 
   const totalLatency = Date.now() - totalStart;
 

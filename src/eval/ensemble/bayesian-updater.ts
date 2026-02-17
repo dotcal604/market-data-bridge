@@ -136,7 +136,7 @@ export class BayesianUpdater {
       const entries = JSON.parse(json);
       this.priors = new Map(entries);
     } catch (e) {
-      console.error('Failed to hydrate Bayesian priors:', e);
+      // Priors will remain at defaults if hydration fails
       this.initializePriors();
     }
   }

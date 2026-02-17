@@ -47,6 +47,15 @@ export interface RollingMetrics {
   equity_curve: number;         // cumulative R
 }
 
+export interface BootstrapCI {
+  metric: string;
+  observed: number;
+  ci_lower: number;     // 2.5th percentile
+  ci_upper: number;     // 97.5th percentile
+  significant: boolean; // CI doesn't cross zero (for metrics where zero = no edge)
+  n_resamples: number;
+}
+
 export interface EdgeReport {
   rolling_metrics: RollingMetrics[];
   current: {
@@ -62,6 +71,7 @@ export interface EdgeReport {
   };
   walk_forward: WalkForwardResult | null;
   feature_attribution: FeatureAttribution[];
+  bootstrap_ci: BootstrapCI[] | null;
 }
 
 export interface FeatureAttribution {
@@ -297,6 +307,129 @@ function computeCurrentStats(rows: OutcomeRow[]) {
     expectancy: round3(expectancy),
     edge_score: Math.min(100, edgeScore),
   };
+}
+
+// ── Bootstrap Confidence Intervals ───────────────────────────────────────
+
+/**
+ * Seeded pseudo-random for reproducible bootstraps (Mulberry32).
+ */
+function mulberry32(seed: number): () => number {
+  return () => {
+    seed |= 0;
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * Bootstrap confidence intervals for key edge metrics.
+ * Resamples R-multiples with replacement N times, computes metrics on each
+ * resample, then reports 2.5th / 97.5th percentile bounds.
+ *
+ * Pure function — deterministic with seed.
+ */
+export function computeBootstrapCI(
+  rMultiples: number[],
+  nResamples: number = 1000,
+  seed: number = 42,
+): BootstrapCI[] {
+  if (rMultiples.length < 10) return [];
+
+  const rng = mulberry32(seed);
+  const n = rMultiples.length;
+
+  const winRates: number[] = [];
+  const avgRs: number[] = [];
+  const expectancies: number[] = [];
+  const sharpes: number[] = [];
+
+  for (let i = 0; i < nResamples; i++) {
+    // Resample with replacement
+    const sample: number[] = [];
+    for (let j = 0; j < n; j++) {
+      sample.push(rMultiples[Math.floor(rng() * n)]);
+    }
+
+    const wins = sample.filter((r) => r > 0);
+    const losses = sample.filter((r) => r <= 0);
+    const wr = wins.length / sample.length;
+    const avgR = sample.reduce((s, r) => s + r, 0) / sample.length;
+
+    const avgWin = wins.length > 0 ? wins.reduce((s, r) => s + r, 0) / wins.length : 0;
+    const avgLoss = losses.length > 0 ? Math.abs(losses.reduce((s, r) => s + r, 0) / losses.length) : 0;
+    const exp = (wr * avgWin) - ((1 - wr) * avgLoss);
+
+    const variance = sample.reduce((s, r) => s + (r - avgR) ** 2, 0) / sample.length;
+    const stdDev = Math.sqrt(variance);
+    const sharpe = stdDev > 0 ? (avgR / stdDev) * Math.sqrt(252) : 0;
+
+    winRates.push(wr);
+    avgRs.push(avgR);
+    expectancies.push(exp);
+    sharpes.push(sharpe);
+  }
+
+  const percentile = (arr: number[], p: number): number => {
+    const sorted = [...arr].sort((a, b) => a - b);
+    const idx = Math.floor(sorted.length * p);
+    return sorted[Math.min(idx, sorted.length - 1)];
+  };
+
+  const observed = {
+    win_rate: rMultiples.filter((r) => r > 0).length / rMultiples.length,
+    avg_r: rMultiples.reduce((s, r) => s + r, 0) / rMultiples.length,
+    expectancy: (() => {
+      const wins = rMultiples.filter((r) => r > 0);
+      const losses = rMultiples.filter((r) => r <= 0);
+      const wr = wins.length / rMultiples.length;
+      const avgWin = wins.length > 0 ? wins.reduce((s, r) => s + r, 0) / wins.length : 0;
+      const avgLoss = losses.length > 0 ? Math.abs(losses.reduce((s, r) => s + r, 0) / losses.length) : 0;
+      return (wr * avgWin) - ((1 - wr) * avgLoss);
+    })(),
+    sharpe: (() => {
+      const mean = rMultiples.reduce((s, r) => s + r, 0) / rMultiples.length;
+      const variance = rMultiples.reduce((s, r) => s + (r - mean) ** 2, 0) / rMultiples.length;
+      return Math.sqrt(variance) > 0 ? (mean / Math.sqrt(variance)) * Math.sqrt(252) : 0;
+    })(),
+  };
+
+  return [
+    {
+      metric: "win_rate",
+      observed: round3(observed.win_rate),
+      ci_lower: round3(percentile(winRates, 0.025)),
+      ci_upper: round3(percentile(winRates, 0.975)),
+      significant: percentile(winRates, 0.025) > 0.5, // edge = better than coin flip
+      n_resamples: nResamples,
+    },
+    {
+      metric: "avg_r",
+      observed: round3(observed.avg_r),
+      ci_lower: round3(percentile(avgRs, 0.025)),
+      ci_upper: round3(percentile(avgRs, 0.975)),
+      significant: percentile(avgRs, 0.025) > 0,
+      n_resamples: nResamples,
+    },
+    {
+      metric: "expectancy",
+      observed: round3(observed.expectancy),
+      ci_lower: round3(percentile(expectancies, 0.025)),
+      ci_upper: round3(percentile(expectancies, 0.975)),
+      significant: percentile(expectancies, 0.025) > 0,
+      n_resamples: nResamples,
+    },
+    {
+      metric: "sharpe",
+      observed: round2(observed.sharpe),
+      ci_lower: round2(percentile(sharpes, 0.025)),
+      ci_upper: round2(percentile(sharpes, 0.975)),
+      significant: percentile(sharpes, 0.025) > 0,
+      n_resamples: nResamples,
+    },
+  ];
 }
 
 // ── Walk-Forward Validation ──────────────────────────────────────────────
@@ -621,10 +754,16 @@ export function computeEdgeReport(opts: {
     walkForward = runWalkForward({ days });
   }
 
+  // Bootstrap CI: requires at least 10 outcomes
+  const bootstrapCI = rows.length >= 10
+    ? computeBootstrapCI(rows.map((r) => r.r_multiple))
+    : null;
+
   return {
     rolling_metrics: rollingMetrics,
     current,
     walk_forward: walkForward,
     feature_attribution: featureAttribution,
+    bootstrap_ci: bootstrapCI,
   };
 }

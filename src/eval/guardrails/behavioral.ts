@@ -1,5 +1,6 @@
 import type { EnsembleScore } from "../ensemble/types.js";
 import { evalConfig } from "../config.js";
+import type { DriftReport } from "../drift.js";
 
 export interface GuardrailResult {
   allowed: boolean;
@@ -7,15 +8,18 @@ export interface GuardrailResult {
   trading_window_ok: boolean;
   consecutive_losses: number;
   model_disagreement_level: "none" | "mild" | "severe";
+  regime_shift_detected: boolean;
 }
 
 /**
  * Post-ensemble behavioral guardrails.
  * getRecentOutcomesFn is injected to avoid circular dependency with DB.
+ * getDriftReportFn is injected to check for regime shifts.
  */
 export function runGuardrails(
   ensemble: EnsembleScore,
   getRecentOutcomesFn?: (limit: number) => Array<Record<string, unknown>>,
+  getDriftReportFn?: () => DriftReport | null,
 ): GuardrailResult {
   const flags: string[] = [];
 
@@ -69,7 +73,23 @@ export function runGuardrails(
     flags.push("No majority consensus to trade");
   }
 
-  const allowed = tradingWindowOk && consecutiveLosses < evalConfig.maxConsecutiveLosses;
+  // 4. Regime shift check
+  let regimeShiftDetected = false;
+  if (getDriftReportFn) {
+    try {
+      const drift = getDriftReportFn();
+      if (drift?.regime_shift_detected) {
+        regimeShiftDetected = true;
+        flags.push("Regime shift detected — model accuracy degrading, consider pausing");
+      }
+    } catch {
+      // Drift computation may fail if insufficient data
+    }
+  }
+
+  const allowed = tradingWindowOk
+    && consecutiveLosses < evalConfig.maxConsecutiveLosses
+    && !regimeShiftDetected;
 
   return {
     allowed,
@@ -77,6 +97,7 @@ export function runGuardrails(
     trading_window_ok: tradingWindowOk,
     consecutive_losses: consecutiveLosses,
     model_disagreement_level: disagreementLevel,
+    regime_shift_detected: regimeShiftDetected,
   };
 }
 

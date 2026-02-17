@@ -13,6 +13,7 @@ import { runReconciliation } from "./db/reconcile.js";
 import { closeDb } from "./db/database.js";
 import { startScheduler, stopScheduler } from "./scheduler.js";
 import { initWeights } from "./eval/ensemble/weights.js";
+import { initRecalibration } from "./eval/ensemble/recalibration-hook.js";
 import { unsubscribeAll } from "./ibkr/subscriptions.js";
 import { startHollyWatcher, stopHollyWatcher } from "./holly/watcher.js";
 import { startDivoomUpdater, stopDivoomUpdater } from "./divoom/updater.js";
@@ -53,6 +54,9 @@ async function main() {
 
   // Initialize eval ensemble weights (loads from data/weights.json + hot-reload)
   initWeights();
+
+  // Initialize Bayesian recalibration (loads priors from disk)
+  initRecalibration();
 
   // Prune old log files (keep 30 days)
   pruneOldLogs();

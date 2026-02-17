@@ -126,7 +126,7 @@ evalRouter.post("/evaluate", async (req, res) => {
     const ensemble = computeEnsemble(evaluations, features.volatility_regime);
 
     // Step 5: Run guardrails (inject DB function to avoid circular dep)
-    const guardrail = runGuardrails(ensemble, getRecentOutcomes);
+    const guardrail = runGuardrails(ensemble, getRecentOutcomes, () => computeDriftReport());
 
     const totalLatency = Date.now() - totalStart;
 
