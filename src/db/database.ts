@@ -7,10 +7,15 @@ import { evalReasoningSchemaSql } from "./schema.js";
 import { RISK_CONFIG_DEFAULTS, RISK_CONFIG_SCHEMA_SQL, type RiskConfigParam } from "./schema.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dataDir = path.join(__dirname, "../../data");
-if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+const defaultDataDir = path.join(__dirname, "../../data");
+if (!fs.existsSync(defaultDataDir)) fs.mkdirSync(defaultDataDir, { recursive: true });
 
-const dbPath = path.join(dataDir, "bridge.db");
+// DB_PATH env var allows parallel instances (e.g., paper vs live) to use separate databases
+const dbPath = process.env.DB_PATH
+  ? path.resolve(process.env.DB_PATH)
+  : path.join(defaultDataDir, "bridge.db");
+const dbDir = path.dirname(dbPath);
+if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
 const db: DatabaseType = new Database(dbPath);
 
 export function getDb(): DatabaseType {
