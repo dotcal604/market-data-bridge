@@ -166,8 +166,16 @@ Alternatively, change `REST_PORT` in `.env` to an unused port.
 | Item | Detail |
 |---|---|
 | **Symptom** | ChatGPT returns "could not connect" or "request timed out" when using actions |
-| **Root Cause** | ngrok tunnel not running, URL changed, or server URL in GPT schema doesn't match |
-| **Resolution** | 1. Verify ngrok is running: `curl https://YOUR-URL/api/status`. 2. If the URL changed, update the GPT's action schema with the new URL. 3. Verify the REST server is running: `curl http://localhost:3000/api/status`. |
+| **Root Cause** | Cloudflare tunnel not running, tunnel crashed, or server URL in GPT schema doesn't match |
+| **Resolution** | 1. Verify tunnel is running: `curl https://api.klfh-dot-io.com/health`. 2. Check tunnel status: `sc query cloudflared` (Windows) or `systemctl status cloudflared` (Linux). 3. Restart tunnel if needed: `sc start cloudflared` or `systemctl restart cloudflared`. 4. Verify the REST server is running: `curl http://localhost:3000/api/status`. 5. Check tunnel health in `/health/deep` endpoint for auto-restart status. |
+
+#### Cloudflare Tunnel Down or Degraded
+
+| Item | Detail |
+|---|---|
+| **Symptom** | External connectivity lost but local server responds; ChatGPT gets timeouts |
+| **Root Cause** | cloudflared service crashed, network issues, or tunnel configuration invalid |
+| **Resolution** | 1. Check tunnel metrics: `curl http://localhost:3000/health/deep` — look for `tunnelConnected` and `tunnelConsecutiveFailures`. 2. Restart tunnel service: Windows: `sc stop cloudflared && sc start cloudflared`; Linux: `systemctl restart cloudflared`. 3. Check cloudflared logs: Windows Event Viewer or `journalctl -u cloudflared -n 50` (Linux). 4. If auto-restart failed 3 times, check incident log in `/api/agent` with action `ops_incidents`. 5. Verify tunnel URL in `.env` matches public URL. |
 
 #### CORS Errors in Browser
 
@@ -235,18 +243,26 @@ Common error codes emitted by TWS through the API:
 
 1. Launch TWS or IB Gateway and log in
 2. Wait for TWS to fully initialize (data farms connected)
-3. Start the bridge:
+3. Verify Cloudflare tunnel is running:
+   ```bash
+   # Windows
+   sc query cloudflared
+   # Linux
+   systemctl status cloudflared
+   ```
+   If not running, start it: `sc start cloudflared` (Windows) or `systemctl start cloudflared` (Linux)
+4. Start the bridge:
    ```bash
    cd market-data-bridge
    node build/index.js --mode rest   # or --mode mcp, or no flag for both
    ```
-4. Verify: `curl http://localhost:3000/api/status`
-5. (If ChatGPT) Start ngrok: `ngrok http 3000`
+5. Verify local: `curl http://localhost:3000/api/status`
+6. Verify tunnel: `curl https://api.klfh-dot-io.com/health`
 
 ### 4.2 Shutdown Procedure
 
-1. Stop ngrok (Ctrl+C in ngrok terminal)
-2. Stop the bridge (Ctrl+C in bridge terminal, or kill the process)
+1. Stop the bridge (Ctrl+C in bridge terminal, or kill the process)
+2. Optionally stop cloudflared: `sc stop cloudflared` (Windows) or `systemctl stop cloudflared` (Linux)
 3. Optionally close TWS
 
 The bridge handles SIGINT/SIGTERM gracefully — it disconnects from TWS before exiting.
@@ -269,7 +285,173 @@ npm run build
 node build/index.js --mode rest
 ```
 
-### 4.5 Changing TWS Port
+### 4.5 Cloudflare Tunnel Operations
+
+#### Tunnel Setup (One-Time)
+
+1. **Install cloudflared:**
+   - Windows: `winget install cloudflare.cloudflared`
+   - Linux: Download from https://github.com/cloudflare/cloudflared/releases
+   - macOS: `brew install cloudflared`
+
+2. **Authenticate:**
+   ```bash
+   cloudflared tunnel login
+   ```
+   This opens a browser to authenticate with Cloudflare and creates a certificate.
+
+3. **Create tunnel:**
+   ```bash
+   cloudflared tunnel create market-data-bridge
+   ```
+   Note the tunnel ID from the output.
+
+4. **Configure tunnel:**
+   Create `~/.cloudflared/config.yml` (Windows: `%USERPROFILE%\.cloudflared\config.yml`):
+   ```yaml
+   tunnel: <TUNNEL_ID>
+   credentials-file: /path/to/.cloudflared/<TUNNEL_ID>.json
+   
+   ingress:
+     - hostname: api.klfh-dot-io.com
+       service: http://localhost:3000
+     - service: http_status:404
+   ```
+
+5. **Add DNS record:**
+   ```bash
+   cloudflared tunnel route dns market-data-bridge api.klfh-dot-io.com
+   ```
+
+6. **Install as service:**
+   - Windows: `cloudflared service install`
+   - Linux: `sudo cloudflared service install`
+
+7. **Start service:**
+   - Windows: `sc start cloudflared`
+   - Linux: `sudo systemctl start cloudflared && sudo systemctl enable cloudflared`
+
+#### Tunnel Health Check
+
+```bash
+# Check if tunnel is up (external)
+curl https://api.klfh-dot-io.com/health
+
+# Check tunnel status (local)
+curl http://localhost:3000/health/deep | jq '.tunnelConnected, .tunnelUptimePercent'
+
+# Check service status
+# Windows
+sc query cloudflared
+
+# Linux
+systemctl status cloudflared
+```
+
+#### Restart Tunnel
+
+```bash
+# Windows
+sc stop cloudflared
+sc start cloudflared
+
+# Linux
+sudo systemctl restart cloudflared
+
+# Verify restart worked
+curl https://api.klfh-dot-io.com/health
+```
+
+#### Update cloudflared
+
+**IMPORTANT:** Update regularly for security patches and stability improvements.
+
+```bash
+# Windows (recommended: use winget)
+winget upgrade cloudflare.cloudflared
+
+# Or manually download and replace
+# 1. Download latest from https://github.com/cloudflare/cloudflared/releases
+# 2. Stop service: sc stop cloudflared
+# 3. Replace cloudflared.exe
+# 4. Start service: sc start cloudflared
+
+# Linux
+wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+sudo systemctl stop cloudflared
+sudo mv cloudflared-linux-amd64 /usr/local/bin/cloudflared
+sudo chmod +x /usr/local/bin/cloudflared
+sudo systemctl start cloudflared
+
+# Verify version
+cloudflared version
+```
+
+#### Tunnel Monitoring
+
+The bridge automatically monitors tunnel health every 5 minutes:
+- Probes `https://api.klfh-dot-io.com/health`
+- Tracks uptime % separately from process uptime
+- Records latency for each probe
+- Auto-restarts after 3 consecutive failures
+- Records failures as incidents
+
+**View tunnel metrics:**
+```bash
+# Full metrics
+curl http://localhost:3000/health/deep | jq '.tunnelUptimePercent, .tunnelLastProbeLatencyMs, .tunnelConsecutiveFailures'
+
+# Via agent API
+curl -X POST http://localhost:3000/api/agent \
+  -H "X-API-Key: $REST_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"action": "ops_uptime"}'
+```
+
+**Incident history:**
+```bash
+curl -X POST http://localhost:3000/api/agent \
+  -H "X-API-Key: $REST_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"action": "ops_incidents", "params": {"limit": 20}}'
+```
+
+#### Known Failure Modes
+
+| Scenario | Detection | Auto-Recovery | Manual Recovery |
+|---|---|---|---|
+| cloudflared crash | 3 failed probes in 15 min | Service restart attempted | `sc start cloudflared` |
+| Network partition | Probe timeout | Restart after threshold | Check network, restart if needed |
+| Certificate expiry | HTTP 401/403 from tunnel | None | Re-run `cloudflared tunnel login` |
+| DNS misconfiguration | Probe DNS error | None | Check DNS records in Cloudflare dashboard |
+| Port conflict (3000) | Bridge won't start | None | Kill process on port 3000, restart bridge |
+| Cloudflare outage | Probe timeouts | None (external issue) | Wait for Cloudflare, or use direct connection |
+
+#### Troubleshooting Tunnel Issues
+
+1. **Tunnel shows as "connected" but probes fail:**
+   - Check if bridge is listening: `netstat -ano | findstr :3000`
+   - Check if tunnel is routing correctly: `cloudflared tunnel info market-data-bridge`
+   - Check ingress config in `~/.cloudflared/config.yml`
+
+2. **Auto-restart not working:**
+   - Check service manager is accessible: `sc query cloudflared` (Windows) or `systemctl list-units` (Linux)
+   - Check bridge logs for restart attempt messages
+   - Verify bridge has permission to run `sc` or `systemctl` commands
+
+3. **Tunnel frequently disconnects:**
+   - Update cloudflared to latest version
+   - Check for network stability issues
+   - Increase tunnel probe interval (default: 5 min) via `TUNNEL_CHECK_MS` env var
+   - Check cloudflared logs for errors: `journalctl -u cloudflared -n 100` (Linux)
+
+4. **High tunnel latency (>500ms):**
+   - Normal baseline: 50-150ms for healthy tunnel
+   - Check local network latency: `ping 1.1.1.1`
+   - Check Cloudflare status: https://www.cloudflarestatus.com/
+   - Consider using a closer Cloudflare datacenter (check tunnel routing)
+
+### 4.6 Changing TWS Port
 
 1. Edit `.env` and update `IBKR_PORT`
 2. Restart the bridge (no rebuild needed — config is loaded at runtime)
@@ -308,9 +490,9 @@ tail -f bridge.log
 
 | Limitation | Impact | Workaround |
 |---|---|---|
-| No persistent URL (ngrok free) | ChatGPT GPT needs URL update on each ngrok restart | Use ngrok paid tier or Cloudflare Tunnel |
-| No REST authentication | Anyone with network access to port 3000 can query account data | Only expose via authenticated tunnel; keep on localhost otherwise |
+| No REST authentication | Anyone with network access to port 3000 can query account data | Only expose via authenticated tunnel; keep on localhost otherwise; use API key via `REST_API_KEY` env var |
 | Single account | Bridge reads the first account returned by TWS | For multi-account, would need code modification |
 | WebSocket is dashboard-only | Real-time bars stream to the Next.js UI; MCP/REST use snapshots | Subscribe to real-time bars via API for streaming data |
 | TWS rate limits | ~50 simultaneous mktdata, ~60 historical / 10 min | Space out requests; reduce bar count for historical |
 | Paper account delayed data | 15–20 minute delay on quotes | Use live account for real-time, or accept delay for testing |
+| Tunnel auto-restart privilege | Windows service restart may require admin | Run cloudflared service with admin privileges, or restart manually |
