@@ -39,10 +39,22 @@ async function takeSnapshots() {
       getPositions(),
     ]);
 
+    // Get P&L data - wrap in try/catch since it might fail independently
+    let pnlData = null;
+    try {
+      const { getPnL } = await import("./ibkr/account.js");
+      pnlData = await getPnL();
+    } catch (e: any) {
+      log.warn({ err: e }, "Failed to fetch P&L for snapshot");
+    }
+
     insertAccountSnapshot({
       net_liquidation: summary.netLiquidation ?? undefined,
       total_cash_value: summary.totalCashValue ?? undefined,
       buying_power: summary.buyingPower ?? undefined,
+      daily_pnl: pnlData?.dailyPnL ?? undefined,
+      unrealized_pnl: pnlData?.unrealizedPnL ?? undefined,
+      realized_pnl: pnlData?.realizedPnL ?? undefined,
     });
 
     insertPositionSnapshot(
@@ -51,7 +63,7 @@ async function takeSnapshots() {
     );
 
     log.info(
-      { netLiq: summary.netLiquidation, positions: positions.length },
+      { netLiq: summary.netLiquidation, positions: positions.length, dailyPnL: pnlData?.dailyPnL },
       "Periodic snapshot recorded",
     );
   } catch (e: any) {

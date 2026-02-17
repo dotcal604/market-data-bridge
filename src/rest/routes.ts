@@ -62,6 +62,7 @@ import {
   updateJournalEntry,
   getJournalById,
   upsertRiskConfig,
+  queryAccountSnapshots,
 } from "../db/database.js";
 
 function qs(val: unknown, fallback: string): string {
@@ -544,6 +545,30 @@ router.get("/account/pnl", async (_req, res) => {
     res.json(pnl);
   } catch (e: any) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/account/pnl/intraday — Get today's account snapshots for equity curve
+// Must be defined BEFORE /:symbol to avoid Express matching "intraday" as a symbol param
+router.get("/account/pnl/intraday", (_req, res) => {
+  try {
+    const snapshots = queryAccountSnapshots(300) as Array<{ created_at: string; [k: string]: unknown }>;
+    
+    const now = new Date();
+    const et = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" }));
+    const todayET = `${et.getFullYear()}-${String(et.getMonth() + 1).padStart(2, '0')}-${String(et.getDate()).padStart(2, '0')}`;
+    
+    const todaySnapshots = snapshots.filter((s) => {
+      const snapshotDate = new Date(s.created_at);
+      const snapshotET = new Date(snapshotDate.toLocaleString("en-US", { timeZone: "America/New_York" }));
+      const snapshotDateStr = `${snapshotET.getFullYear()}-${String(snapshotET.getMonth() + 1).padStart(2, '0')}-${String(snapshotET.getDate()).padStart(2, '0')}`;
+      return snapshotDateStr === todayET;
+    });
+    
+    res.json({ snapshots: todaySnapshots, count: todaySnapshots.length });
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "Unknown error";
+    res.status(500).json({ error: message });
   }
 });
 
