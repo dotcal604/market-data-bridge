@@ -7,7 +7,7 @@ describe("Action Catalog", () => {
       // Get all action keys from the catalog
       const catalogKeys = Object.keys(actionsMeta).sort();
       
-      // Expected actions based on the actions object (98 total)
+      // Expected actions based on the actions object (101 total)
       const expectedActions = [
         "auto_eval_status",
         "auto_eval_toggle",
@@ -99,6 +99,9 @@ describe("Action Catalog", () => {
         "modify_order",
         "multi_model_consensus",
         "multi_model_score",
+        "ops_health",
+        "ops_incidents",
+        "ops_uptime",
         "orders_history",
         "place_advanced_bracket",
         "place_bracket_order",
@@ -143,9 +146,9 @@ describe("Action Catalog", () => {
       expect(catalogKeys).toEqual(expectedActions);
     });
 
-    it("has at least 100 actions and count matches catalog keys", () => {
+    it("has at least 101 actions and count matches catalog keys", () => {
       const count = Object.keys(actionsMeta).length;
-      expect(count).toBeGreaterThanOrEqual(100);
+      expect(count).toBeGreaterThanOrEqual(101);
       // Dynamic — no hardcoded count that breaks on every new action
     });
 

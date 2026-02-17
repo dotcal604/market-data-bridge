@@ -80,6 +80,8 @@ import { onOutcomeRecorded, getRecalibrationStatus } from "../eval/ensemble/reca
 import { z } from "zod";
 import { orchestrator, getConsensusVerdict, formatDisagreements, ProviderScoresSchema } from "../orchestrator.js";
 import { applyTrailingStopToOrder, trailingStopRecommendation } from "../holly/trailing-stop-executor.js";
+import { getMetrics, getRecentIncidents, getLastIncident } from "../ops/metrics.js";
+import { getConnectionStatus } from "../ibkr/connection.js";
 
 const log = logger.child({ module: "agent" });
 
@@ -614,6 +616,32 @@ const actions: Record<string, ActionHandler> = {
     await display.setBrightness(brightness);
     return { success: true, brightness };
   },
+
+  // ── Ops / Monitoring ──
+  ops_health: async () => getMetrics(),
+  ops_incidents: async (p) => {
+    const limit = num(p, "limit", 20);
+    const incidents = getRecentIncidents(limit);
+    return { count: incidents.length, incidents };
+  },
+  ops_uptime: async () => {
+    const connStatus = getConnectionStatus();
+    const metrics = getMetrics();
+    return {
+      process_uptime_seconds: metrics.uptimeSeconds,
+      started_at: metrics.startedAt,
+      ibkr_uptime_percent: metrics.ibkrUptimePercent,
+      ibkr_connected: metrics.ibkrConnected,
+      ibkr_current_streak_seconds: metrics.ibkrCurrentStreakSeconds,
+      ibkr_total_disconnects: connStatus.totalDisconnects,
+      ibkr_reconnect_attempts: connStatus.reconnectAttempts,
+      memory_mb: metrics.memoryMb,
+      cpu_percent: metrics.cpuPercent,
+      request_error_rate: metrics.requests.errorRate,
+      incident_count: metrics.incidentCount,
+      last_incident: metrics.lastIncident,
+    };
+  },
 };
 
 // ── Dispatcher ───────────────────────────────────────────────────
@@ -852,6 +880,11 @@ export const actionsMeta: Record<string, ActionMeta> = {
   divoom_status: { description: "Check Divoom Times Gate display connection and get device info" },
   divoom_send_text: { description: "Send text to Divoom Times Gate display", params: ["text", "color?", "x?", "y?", "font?", "scrollSpeed?"] },
   divoom_set_brightness: { description: "Set Divoom Times Gate display brightness (0-100)", params: ["brightness"] },
+
+  // Ops / Monitoring
+  ops_health: { description: "Full ops health dashboard: process metrics, IBKR availability SLA, request latency percentiles, error rates, incidents" },
+  ops_incidents: { description: "Get recent operational incidents (disconnects, errors, heartbeat timeouts)", params: ["limit?"] },
+  ops_uptime: { description: "Get uptime summary: process uptime, IBKR connection SLA, memory/CPU, error rate" },
 };
 
 /**

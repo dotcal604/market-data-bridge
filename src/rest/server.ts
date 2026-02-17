@@ -15,6 +15,8 @@ import { isConnected, getConnectionStatus } from "../ibkr/connection.js";
 import { isDbWritable } from "../db/database.js";
 import { createMcpServer } from "../mcp/server.js";
 import { initWebSocket } from "../ws/server.js";
+import { getMetrics, getRecentIncidents } from "../ops/metrics.js";
+import { isReady } from "../ops/readiness.js";
 
 function apiKeyAuth(req: Request, res: Response, next: NextFunction): void {
   const key = config.rest.apiKey;
@@ -208,6 +210,39 @@ export function createApp(): express.Express {
   // GET /health/connection — full connection event history (for debugging)
   app.get("/health/connection", (_req, res) => {
     res.json(getConnectionStatus());
+  });
+
+  // GET /health/deep — full ops metrics dashboard (for monitoring)
+  app.get("/health/deep", (_req, res) => {
+    const metrics = getMetrics();
+    const recentIncidents = getRecentIncidents(10);
+    res.json({
+      ...metrics,
+      recentIncidents,
+      mcp_sessions: mcpSessions.size,
+      db_writable: isDbWritable(),
+    });
+  });
+
+  // GET /health/ready — readiness probe (returns 503 until fully initialized)
+  // Use this for pm2 wait_ready, load balancers, and deploy scripts
+  app.get("/health/ready", (_req, res) => {
+    const ready = isReady();
+    const connStatus = getConnectionStatus();
+    const dbOk = isDbWritable();
+    const status = {
+      ready,
+      db_writable: dbOk,
+      ibkr_connected: connStatus.connected,
+      rest_server: true,
+      mcp_sessions: mcpSessions.size,
+      timestamp: new Date().toISOString(),
+    };
+    if (!ready) {
+      res.status(503).json(status);
+    } else {
+      res.json(status);
+    }
   });
 
   // ── MCP Streamable HTTP endpoint (for ChatGPT MCP connector) ──

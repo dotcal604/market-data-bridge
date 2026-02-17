@@ -1,5 +1,6 @@
 import { IBApi, EventName, ErrorCode, isNonFatalError } from "@stoqey/ib";
 import { config } from "../config.js";
+import { recordIncident } from "../ops/metrics.js";
 
 let ib: IBApi | null = null;
 let connected = false;
@@ -51,6 +52,7 @@ function startHeartbeat(): void {
         pushEvent({ type: "disconnected", timestamp: new Date().toISOString(), detail: "heartbeat_timeout" });
         totalDisconnects++;
         lastDisconnectedAt = new Date().toISOString();
+        recordIncident("ibkr_heartbeat_timeout", "critical", `TWS unresponsive after ${HEARTBEAT_TIMEOUT_MS}ms — forcing reconnect (clientId=${currentClientId})`);
         destroyIB();
         scheduleReconnect(1000);
       }
@@ -150,6 +152,7 @@ export function getIB(): IBApi {
       pushEvent({ type: "disconnected", timestamp: lastDisconnectedAt });
       stopHeartbeat();
       console.error("[IBKR] Disconnected from TWS/Gateway");
+      recordIncident("ibkr_disconnect", "warning", `Disconnected (total=${totalDisconnects}, clientId=${currentClientId})`);
       scheduleReconnect();
     });
 

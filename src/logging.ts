@@ -62,6 +62,13 @@ export function requestLogger(req: Request, res: Response, next: NextFunction) {
   const start = Date.now();
   res.on("finish", () => {
     const duration = Date.now() - start;
+
+    // Feed ops metrics collector (lazy import to avoid circular deps)
+    try {
+      const { recordRequest } = require("./ops/metrics.js");
+      recordRequest(req.path, res.statusCode, duration);
+    } catch { /* metrics module may not be loaded yet during startup */ }
+
     logRest.info(
       {
         method: req.method,

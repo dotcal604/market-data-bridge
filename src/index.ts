@@ -20,6 +20,8 @@ import { startHollyWatcher, stopHollyWatcher } from "./holly/watcher.js";
 import { startDivoomUpdater, stopDivoomUpdater } from "./divoom/updater.js";
 import { config } from "./config.js";
 import { validateConfig } from "./config-validator.js";
+import { recordIncident, incrementUnhandledRejections, stopMetrics } from "./ops/metrics.js";
+import { setReady } from "./ops/readiness.js";
 
 type Mode = "mcp" | "rest" | "both";
 
@@ -127,12 +129,18 @@ async function main() {
     logger.info("MCP server running on stdio");
   }
 
+  // ── Bridge fully initialized — accept connections ──
+  setReady(true);
+  logger.info({ mode }, "Bridge fully initialized — accepting connections");
+
   // Graceful shutdown
   const shutdown = async () => {
     logger.info("Shutting down...");
+    setReady(false);
     stopHollyWatcher();
     await stopDivoomUpdater();
     stopScheduler();
+    stopMetrics();
     unsubscribeAll();
     disconnect();
     closeDb();
@@ -149,9 +157,13 @@ async function main() {
   let unhandledCount = 0;
   process.on("unhandledRejection", (reason) => {
     unhandledCount++;
+    incrementUnhandledRejections();
+    const detail = reason instanceof Error ? reason.message : String(reason);
+    recordIncident("unhandled_rejection", "warning", `#${unhandledCount}: ${detail.slice(0, 200)}`);
     logger.error({ reason, unhandledCount }, "Unhandled promise rejection (swallowed — keeping server alive)");
     // If we get 50+ unhandled rejections, something is truly broken — restart
     if (unhandledCount >= 50) {
+      recordIncident("unhandled_rejection_flood", "critical", `${unhandledCount} unhandled rejections — shutting down`);
       logger.fatal({ unhandledCount }, "Too many unhandled rejections — shutting down");
       shutdown().catch((e) => logger.error({ err: e }, "Shutdown error"));
     }
@@ -160,6 +172,7 @@ async function main() {
   // Catch uncaught sync exceptions — these are more serious but we still
   // try to keep alive unless it's clearly fatal (OOM, stack overflow, etc.)
   process.on("uncaughtException", (err) => {
+    recordIncident("uncaught_exception", "critical", err.message?.slice(0, 200) ?? "unknown");
     logger.fatal({ err }, "Uncaught exception (keeping server alive — may be degraded)");
     // Only shut down for truly unrecoverable errors
     if (err.message?.includes("out of memory") || err.message?.includes("Maximum call stack")) {
