@@ -16,21 +16,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useHistoricalBars } from "@/lib/hooks/use-market";
 import type { BarData } from "@/lib/api/market-client";
+import { TimeframeSelector, type Timeframe } from "./TimeframeSelector";
 
 interface PriceChartProps {
   symbol: string | null;
 }
 
-type Period = "1D" | "5D" | "1M" | "3M" | "6M" | "1Y" | "YTD";
-
-const PERIOD_CONFIG: Record<Period, { period: string; interval: string }> = {
+const PERIOD_CONFIG: Record<Timeframe, { period: string; interval: string }> = {
   "1D": { period: "1d", interval: "5m" },
   "5D": { period: "5d", interval: "15m" },
   "1M": { period: "1mo", interval: "1d" },
   "3M": { period: "3mo", interval: "1d" },
-  "6M": { period: "6mo", interval: "1d" },
   "1Y": { period: "1y", interval: "1d" },
-  "YTD": { period: "ytd", interval: "1d" },
 };
 
 interface CustomTooltipProps {
@@ -85,7 +82,7 @@ function formatVolume(vol: number): string {
 }
 
 export function PriceChart({ symbol }: PriceChartProps) {
-  const [selectedPeriod, setSelectedPeriod] = useState<Period>("3M");
+  const [selectedPeriod, setSelectedPeriod] = useState<Timeframe>("3M");
   const config = PERIOD_CONFIG[selectedPeriod];
 
   const { data, isLoading, error } = useHistoricalBars(
@@ -178,21 +175,10 @@ export function PriceChart({ symbol }: PriceChartProps) {
               </span>
             </p>
           </div>
-          <div className="flex gap-2">
-            {(Object.keys(PERIOD_CONFIG) as Period[]).map((period) => (
-              <button
-                key={period}
-                onClick={() => setSelectedPeriod(period)}
-                className={`rounded px-3 py-1 text-sm font-medium transition-colors ${
-                  selectedPeriod === period
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-muted-foreground hover:bg-muted/80"
-                }`}
-              >
-                {period}
-              </button>
-            ))}
-          </div>
+          <TimeframeSelector
+            selected={selectedPeriod}
+            onChange={setSelectedPeriod}
+          />
         </div>
       </CardHeader>
       <CardContent>
