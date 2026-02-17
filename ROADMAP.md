@@ -61,6 +61,7 @@ These directly increase or measure trading edge. **Priority over everything else
 | **Model agreement analysis** | 4 | B | **Done** | Codex | #59 — Unanimous/majority/split classification. Track: does agreement predict outcome? |
 | **Risk gate tuning** | 4 | A | **Done** | Claude Code | risk_config table, half-Kelly auto-tuning, volatility_scalar, REST/MCP endpoints, risk gate enforcement. `calculatePositionSize` now reads tuned config from DB (max_position_pct, volatility_scalar). Regime-based scaling: low=1.0×, normal=0.75×, high=0.5× via `volatilityRegime` param on REST, MCP, and agent routes. |
 | **Weight simulation endpoint** | 4 | B | **Done** | Claude Code | `POST /api/eval/weights/simulate` + `simulate_weights` MCP tool. Re-scores historical evals with custom weights. |
+| **Outcome auto-link** | 4 | B | Not started | Claude Code | #289 — Auto-link eval → execution → outcome. Closes feedback loop. |
 
 ---
 
@@ -73,7 +74,7 @@ Protect capital and prevent silent failures.
 | **Input validation hardening** | 3 | **Done** | Claude Code | Symbol regex, order price validation, limit capping, crash handlers |
 | **Risk gate unit tests** | 3 | **Done** | Copilot | PR #36 — 34 tests |
 | **Weight history tracking** | 3 | **Done** | Claude Code | `insertWeightHistory()` — records each recalibration. Audit trail. |
-| **Min TWS version check** | 3 | Not started | Claude Code | Startup warning if connected TWS < 10.30 |
+| **Min TWS version check** | 3 | **Done** | Claude Code | #282 — Startup warning if connected TWS < 10.30 |
 | **One-message bracket orders** | 3 | Blocked | — | Depends on @stoqey/ib update for TWS 10.42. Reduces race conditions. |
 
 ---
@@ -94,6 +95,8 @@ See what's happening. Required before edge experiments can be measured.
 | **Model agreement heatmap** | 2 | **Done** | Copilot | PR #152 — Pairwise agreement rates, divergence signals |
 | **Run Comparer** | 2 | **Done** | Copilot | #121 — Select 2-5 evals, side-by-side comparison |
 | **Collab channel feed** | 2 | **Done** | Copilot | PR #55 — human visibility into AI-to-AI chat |
+| **Intraday equity curve** | 2 | Not started | Copilot | #292 — Real-time P&L chart on dashboard |
+| **Alert webhooks** | 2 | Not started | Codex | #293 — Drift/risk notifications to Discord/Slack |
 
 ---
 
@@ -117,8 +120,8 @@ Keep the system running. Don't over-invest here.
 | **News stack** | 1 | **Done** | Codex | PR #117 — 4 news methods |
 | **Prompt caching** | 1 | **Done** | Codex | PR #116 — Anthropic + Gemini |
 | **Yahoo recommendations** | 1 | **Done** | Copilot | PR #115 — analyst consensus |
-| WebSocket real-time updates | 1 | Parked | Claude Code | #73 — replaces polling, cross-cutting |
-| Production build | 1 | Parked | Claude Code | #81 — static export from Express, cross-cutting |
+| WebSocket real-time updates | 1 | Not started | Claude Code | #290 — replaces polling, cross-cutting |
+| Production build | 1 | Not started | Claude Code | #291 — static export from Express, cross-cutting |
 | Subscription APIs (6 methods) | 1 | Deferred | Claude Code | #105 — needs architecture session (streaming) |
 
 ---
@@ -144,8 +147,9 @@ Frontend pages exposing the 68 REST endpoints that currently have no UI.
 | Command palette (Cmd+K) | Nice but zero edge. |
 | Keyboard shortcuts (j/k/r/n) | QoL only. |
 | Permalink/shareable state | Already partially done (URL sync in filters). |
-| Options chain viewer | Endpoint exists, low priority. |
+| Options chain viewer | **Done** | Copilot | PR #286 |
 | Financials page | Endpoint exists, low priority. |
+| Journal timeline | **Done** | Copilot | PR #287 — chronological view with outcome colors |
 
 ---
 
