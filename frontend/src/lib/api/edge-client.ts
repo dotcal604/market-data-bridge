@@ -74,7 +74,7 @@ interface AgentResponse<T> {
 }
 
 export const edgeClient = {
-  async getReport(days = 90): Promise<EdgeReport> {
+  async getReport(days = 90, includeWalkForward = true): Promise<EdgeReport> {
     const response = await fetchJson<AgentResponse<EdgeReport>>(
       `${API_BASE}/agent`,
       {
@@ -82,7 +82,7 @@ export const edgeClient = {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "edge_report",
-          params: { days, include_walk_forward: true },
+          params: { days, include_walk_forward: includeWalkForward },
         }),
       }
     );

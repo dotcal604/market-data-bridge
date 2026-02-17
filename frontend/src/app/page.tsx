@@ -2,6 +2,7 @@
 
 import { useEvalStats, useEvalHistory } from "@/lib/hooks/use-evals";
 import { StatsCards } from "@/components/dashboard/stats-cards";
+import { EdgeSummaryCard } from "@/components/dashboard/edge-summary-card";
 import { RecentEvalsMini } from "@/components/dashboard/recent-evals-mini";
 import { HollyStats } from "@/components/dashboard/holly-stats";
 import { HollyAlerts } from "@/components/dashboard/holly-alerts";
@@ -31,6 +32,8 @@ export default function DashboardPage() {
       ) : (
         <p className="text-sm text-muted-foreground">Failed to load stats</p>
       )}
+
+      <EdgeSummaryCard />
 
       <div>
         <h2 className="mb-3 text-lg font-semibold">Recent Evaluations</h2>
