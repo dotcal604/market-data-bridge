@@ -239,6 +239,17 @@ db.exec(`
     created_at TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS drift_alerts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    alert_type TEXT NOT NULL,
+    model_id TEXT,
+    metric_value REAL NOT NULL,
+    threshold REAL NOT NULL,
+    message TEXT NOT NULL,
+    timestamp TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
   CREATE INDEX IF NOT EXISTS idx_eval_symbol ON evaluations(symbol);
   CREATE INDEX IF NOT EXISTS idx_eval_timestamp ON evaluations(timestamp);
   CREATE INDEX IF NOT EXISTS idx_eval_symbol_time ON evaluations(symbol, timestamp);
@@ -247,6 +258,9 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_model_eval_id ON model_outputs(evaluation_id);
   CREATE INDEX IF NOT EXISTS idx_model_model_id ON model_outputs(model_id);
   CREATE INDEX IF NOT EXISTS idx_outcome_eval_id ON outcomes(evaluation_id);
+  CREATE INDEX IF NOT EXISTS idx_drift_alert_type_model ON drift_alerts(alert_type, model_id);
+  CREATE INDEX IF NOT EXISTS idx_drift_alert_timestamp ON drift_alerts(timestamp);
+  CREATE INDEX IF NOT EXISTS idx_drift_alert_created ON drift_alerts(created_at);
 
   ${evalReasoningSchemaSql}
 
@@ -474,6 +488,22 @@ const stmts = {
       AVG(latency_ms) as avg_latency_ms
     FROM model_outputs
     GROUP BY model_id
+  `),
+
+  // Drift alerts
+  insertDriftAlert: db.prepare(`
+    INSERT INTO drift_alerts (alert_type, model_id, metric_value, threshold, message, timestamp)
+    VALUES (@alert_type, @model_id, @metric_value, @threshold, @message, @timestamp)
+  `),
+  getRecentDriftAlerts: db.prepare(`
+    SELECT * FROM drift_alerts ORDER BY created_at DESC LIMIT ?
+  `),
+  checkRecentDriftAlert: db.prepare(`
+    SELECT id FROM drift_alerts
+    WHERE alert_type = @alert_type
+      AND (model_id IS NULL AND @model_id IS NULL OR model_id = @model_id)
+      AND datetime(created_at) > datetime(@cutoff_time)
+    LIMIT 1
   `),
 };
 
@@ -1367,6 +1397,65 @@ export function getLatestHollySymbols(limit = 20): string[] {
     SELECT DISTINCT symbol FROM holly_alerts ORDER BY alert_time DESC LIMIT ?
   `).all(limit) as Array<{ symbol: string }>;
   return rows.map((r) => r.symbol);
+}
+
+// ── Drift Alerts ──────────────────────────────────────────────────────────
+
+export interface DriftAlertRow {
+  id: number;
+  alert_type: string;
+  model_id: string | null;
+  metric_value: number;
+  threshold: number;
+  message: string;
+  timestamp: string;
+  created_at: string;
+}
+
+/**
+ * Insert a drift alert with deduplication.
+ * Skips insert if same alert_type+model_id exists within last hour.
+ */
+export function insertDriftAlert(
+  alert: {
+    alert_type: string;
+    model_id: string | null;
+    metric_value: number;
+    threshold: number;
+    message: string;
+    timestamp: string;
+  },
+  database: DatabaseType = db
+): void {
+  // Check for recent duplicate (within 1 hour)
+  const cutoffTime = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const existing = stmts.checkRecentDriftAlert.get({
+    alert_type: alert.alert_type,
+    model_id: alert.model_id,
+    cutoff_time: cutoffTime,
+  });
+
+  if (existing) {
+    // Skip — same alert type+model within 1 hour
+    return;
+  }
+
+  // Insert new alert
+  stmts.insertDriftAlert.run({
+    alert_type: alert.alert_type,
+    model_id: alert.model_id,
+    metric_value: alert.metric_value,
+    threshold: alert.threshold,
+    message: alert.message,
+    timestamp: alert.timestamp,
+  });
+}
+
+/**
+ * Get recent drift alerts from database.
+ */
+export function getRecentDriftAlerts(limit: number = 50): DriftAlertRow[] {
+  return stmts.getRecentDriftAlerts.all(limit) as DriftAlertRow[];
 }
 
 export function isDbWritable(): boolean {

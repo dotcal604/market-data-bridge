@@ -71,6 +71,7 @@ import {
   getLatestHollySymbols,
 } from "../db/database.js";
 import { computeDriftReport } from "../eval/drift.js";
+import { getRecentDriftAlerts } from "../eval/drift-alerts.js";
 import { importTraderSyncCSV } from "../tradersync/importer.js";
 import { importHollyAlerts } from "../holly/importer.js";
 import { computeEnsembleWithWeights } from "../eval/ensemble/scorer.js";
@@ -2072,6 +2073,23 @@ export function createMcpServer(): McpServer {
       try {
         const report = computeDriftReport();
         return { content: [{ type: "text", text: JSON.stringify(report, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: drift_alerts ---
+  server.tool(
+    "drift_alerts",
+    "Get recent drift alerts that were triggered when model accuracy or calibration metrics fell below configured thresholds. Returns alert history with type, model, metric values, and timestamps.",
+    {
+      limit: z.number().int().positive().optional().describe("Number of recent alerts to return (default: 50)"),
+    },
+    async ({ limit }) => {
+      try {
+        const alerts = getRecentDriftAlerts(limit ?? 50);
+        return { content: [{ type: "text", text: JSON.stringify({ count: alerts.length, alerts }, null, 2) }] };
       } catch (e: any) {
         return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
       }
