@@ -298,6 +298,29 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_ts_batch ON tradersync_trades(import_batch);
 `);
 
+// ── Holly AI Alerts ───────────────────────────────────────────────────────
+db.exec(`
+  CREATE TABLE IF NOT EXISTS holly_alerts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    alert_time TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    strategy TEXT,
+    entry_price REAL,
+    stop_price REAL,
+    shares INTEGER,
+    last_price REAL,
+    segment TEXT,
+    extra TEXT,
+    import_batch TEXT,
+    imported_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(symbol, alert_time, strategy)
+  );
+  CREATE INDEX IF NOT EXISTS idx_holly_symbol ON holly_alerts(symbol);
+  CREATE INDEX IF NOT EXISTS idx_holly_time ON holly_alerts(alert_time);
+  CREATE INDEX IF NOT EXISTS idx_holly_strategy ON holly_alerts(strategy);
+  CREATE INDEX IF NOT EXISTS idx_holly_batch ON holly_alerts(import_batch);
+`);
+
 db.exec(RISK_CONFIG_SCHEMA_SQL);
 
 // ── Column Migrations (safe for existing DBs — silently ignored if column exists) ──
@@ -1279,6 +1302,71 @@ export function getTraderSyncByDate(date: string): Array<Record<string, unknown>
   return db.prepare(`
     SELECT * FROM tradersync_trades WHERE open_date = ? ORDER BY open_time ASC
   `).all(date) as Array<Record<string, unknown>>;
+}
+
+// ── Holly Alert Helpers ──────────────────────────────────────────────────
+
+export function bulkInsertHollyAlerts(rows: Array<Record<string, unknown>>): { inserted: number; skipped: number } {
+  let inserted = 0;
+  let skipped = 0;
+  const insert = db.transaction((alerts: Array<Record<string, unknown>>) => {
+    for (const row of alerts) {
+      try {
+        runEvalInsert("holly_alerts", row);
+        inserted++;
+      } catch (e: any) {
+        if (e.message?.includes("UNIQUE constraint")) {
+          skipped++;
+        } else {
+          throw e;
+        }
+      }
+    }
+  });
+  insert(rows);
+  return { inserted, skipped };
+}
+
+export function queryHollyAlerts(opts: {
+  symbol?: string;
+  strategy?: string;
+  limit?: number;
+  since?: string;
+} = {}): Array<Record<string, unknown>> {
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+
+  if (opts.symbol) { conditions.push("symbol = ?"); params.push(opts.symbol); }
+  if (opts.strategy) { conditions.push("strategy = ?"); params.push(opts.strategy); }
+  if (opts.since) { conditions.push("alert_time >= ?"); params.push(opts.since); }
+
+  const where = conditions.length > 0 ? "WHERE " + conditions.join(" AND ") : "";
+  const limit = opts.limit ?? 100;
+
+  return db.prepare(`
+    SELECT * FROM holly_alerts ${where} ORDER BY alert_time DESC LIMIT ?
+  `).all(...params, limit) as Array<Record<string, unknown>>;
+}
+
+export function getHollyAlertStats(): Record<string, unknown> {
+  return db.prepare(`
+    SELECT
+      COUNT(*) as total_alerts,
+      COUNT(DISTINCT symbol) as unique_symbols,
+      COUNT(DISTINCT strategy) as unique_strategies,
+      MIN(alert_time) as first_alert,
+      MAX(alert_time) as last_alert,
+      COUNT(DISTINCT import_batch) as import_batches,
+      COUNT(DISTINCT date(imported_at)) as days_with_alerts
+    FROM holly_alerts
+  `).get() as Record<string, unknown>;
+}
+
+export function getLatestHollySymbols(limit = 20): string[] {
+  const rows = db.prepare(`
+    SELECT DISTINCT symbol FROM holly_alerts ORDER BY alert_time DESC LIMIT ?
+  `).all(limit) as Array<{ symbol: string }>;
+  return rows.map((r) => r.symbol);
 }
 
 export function isDbWritable(): boolean {

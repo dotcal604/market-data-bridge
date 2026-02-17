@@ -16,4 +16,8 @@ export const config = {
     port: parseInt(process.env.REST_PORT ?? "3000", 10),
     apiKey: process.env.REST_API_KEY ?? "",
   },
+  holly: {
+    watchPath: process.env.HOLLY_WATCH_PATH ?? "",
+    pollIntervalMs: parseInt(process.env.HOLLY_POLL_INTERVAL_MS ?? "5000", 10),
+  },
 };

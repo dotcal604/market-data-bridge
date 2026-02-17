@@ -14,6 +14,7 @@ import { closeDb } from "./db/database.js";
 import { startScheduler, stopScheduler } from "./scheduler.js";
 import { initWeights } from "./eval/ensemble/weights.js";
 import { unsubscribeAll } from "./ibkr/subscriptions.js";
+import { startHollyWatcher, stopHollyWatcher } from "./holly/watcher.js";
 
 type Mode = "mcp" | "rest" | "both";
 
@@ -55,6 +56,9 @@ async function main() {
 
     // Start periodic snapshots (account + positions every 5 min during market hours)
     startScheduler();
+
+    // Start Holly AI alert file watcher (polls Trade Ideas CSV export)
+    startHollyWatcher();
   } catch (e: any) {
     logger.warn({ err: e.message }, "IBKR not available — market data still works via Yahoo");
     logger.info("Will keep retrying IBKR connection in background...");
@@ -77,6 +81,7 @@ async function main() {
   // Graceful shutdown
   const shutdown = () => {
     logger.info("Shutting down...");
+    stopHollyWatcher();
     stopScheduler();
     unsubscribeAll();
     disconnect();

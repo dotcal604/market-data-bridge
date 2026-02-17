@@ -136,6 +136,12 @@ Yahoo (always available): get_quote, get_historical_bars, get_financials, get_ea
 - record_outcome — { evaluation_id, trade_taken, decision_type?, confidence_rating?, rule_followed?, setup_type?, actual_entry_price?, actual_exit_price?, r_multiple?, exit_reason?, notes? } — decision_type: "took_trade"|"passed_setup"|"ensemble_no"|"risk_gate_blocked", confidence_rating: 1-3
 - simulate_weights — { claude, gpt4o, gemini, k?, days?, symbol? } — simulate ensemble weights against historical evaluations
 
+### Holly AI Alerts (Trade Ideas integration)
+- holly_import — { csv } — import Trade Ideas Holly AI alert CSV content (auto-detects columns from header)
+- holly_alerts — { symbol?, strategy?, since?, limit? } — query imported Holly alerts. limit default 100.
+- holly_stats — no params — aggregate stats (total alerts, unique symbols, strategies, date range)
+- holly_symbols — { limit? } — latest distinct symbols from Holly alerts (default 20). Use for ensemble scoring.
+
 ### History
 - orders_history — { symbol?, strategy?, limit? } — limit default 100
 - executions_history — { symbol?, limit? } — limit default 100

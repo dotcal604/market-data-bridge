@@ -66,9 +66,13 @@ import {
   getTraderSyncTrades,
   getTraderSyncStats,
   getWeightHistory,
+  queryHollyAlerts,
+  getHollyAlertStats,
+  getLatestHollySymbols,
 } from "../db/database.js";
 import { computeDriftReport } from "../eval/drift.js";
 import { importTraderSyncCSV } from "../tradersync/importer.js";
+import { importHollyAlerts } from "../holly/importer.js";
 import { computeEnsembleWithWeights } from "../eval/ensemble/scorer.js";
 import { getWeights } from "../eval/ensemble/weights.js";
 import { tuneRiskParams } from "../eval/risk-tuning.js";
@@ -2130,6 +2134,63 @@ export function createMcpServer(): McpServer {
       } catch (e: any) {
         return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
       }
+    }
+  );
+
+  // --- Tool: holly_import ---
+  server.tool(
+    "holly_import",
+    "Import Trade Ideas Holly AI alert CSV content into the database. Pass the full CSV content as a string. Auto-detects columns from the header row.",
+    {
+      csv: z.string().describe("Full CSV content from Trade Ideas Holly AI alert export"),
+    },
+    async (params) => {
+      try {
+        const result = importHollyAlerts(params.csv);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: holly_alerts ---
+  server.tool(
+    "holly_alerts",
+    "Query imported Holly AI alerts with optional filters. Returns alerts sorted by most recent first.",
+    {
+      symbol: z.string().optional().describe("Filter by ticker symbol"),
+      strategy: z.string().optional().describe("Filter by Holly strategy name"),
+      since: z.string().optional().describe("Only alerts after this timestamp"),
+      limit: z.number().optional().default(100).describe("Max results (default: 100)"),
+    },
+    async (params) => {
+      const alerts = queryHollyAlerts(params);
+      return { content: [{ type: "text", text: JSON.stringify({ count: alerts.length, alerts }, null, 2) }] };
+    }
+  );
+
+  // --- Tool: holly_stats ---
+  server.tool(
+    "holly_stats",
+    "Get aggregate statistics from imported Holly AI alerts — total alerts, unique symbols, strategies, date range.",
+    {},
+    async () => {
+      const stats = getHollyAlertStats();
+      return { content: [{ type: "text", text: JSON.stringify(stats, null, 2) }] };
+    }
+  );
+
+  // --- Tool: holly_symbols ---
+  server.tool(
+    "holly_symbols",
+    "Get the most recent distinct symbols from Holly AI alerts. Useful for feeding into ensemble scoring or watchlist.",
+    {
+      limit: z.number().optional().default(20).describe("Max symbols to return (default: 20)"),
+    },
+    async (params) => {
+      const symbols = getLatestHollySymbols(params.limit);
+      return { content: [{ type: "text", text: JSON.stringify({ count: symbols.length, symbols }, null, 2) }] };
     }
   );
 

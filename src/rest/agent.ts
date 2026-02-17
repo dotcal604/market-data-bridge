@@ -60,6 +60,8 @@ import {
   subscribeAccountUpdates, unsubscribeAccountUpdates, getAccountSnapshot,
   getScannerParameters, listSubscriptions,
 } from "../ibkr/subscriptions.js";
+import { importHollyAlerts } from "../holly/importer.js";
+import { queryHollyAlerts, getHollyAlertStats, getLatestHollySymbols } from "../db/database.js";
 
 const log = logger.child({ module: "agent" });
 
@@ -335,6 +337,12 @@ const actions: Record<string, ActionHandler> = {
   get_account_snapshot_stream: async () => { const snapshot = getAccountSnapshot(); if (!snapshot) throw new Error("No active account updates subscription"); return snapshot; },
   get_scanner_parameters: async () => { requireIBKR(); return { xml: await getScannerParameters() }; },
   list_subscriptions: async () => { const subs = listSubscriptions(); return { count: subs.length, subscriptions: subs }; },
+
+  // ── Holly AI Alerts ──
+  holly_import: async (p) => { const csv = str(p, "csv"); if (!csv) throw new Error("csv is required"); return importHollyAlerts(csv); },
+  holly_alerts: async (p) => { const alerts = queryHollyAlerts({ symbol: str(p, "symbol") || undefined, strategy: str(p, "strategy") || undefined, limit: num(p, "limit", 100), since: str(p, "since") || undefined }); return { count: alerts.length, alerts }; },
+  holly_stats: async () => getHollyAlertStats(),
+  holly_symbols: async (p) => { const symbols = getLatestHollySymbols(num(p, "limit", 20)); return { count: symbols.length, symbols }; },
 };
 
 // ── Dispatcher ───────────────────────────────────────────────────
