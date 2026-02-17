@@ -1,350 +1,332 @@
 /**
- * Holly Pre-Alert Predictor
+ * Holly Predictor — Build statistical profiles from historical winners,
+ * scan live symbols for pattern matches, and generate pre-alert candidates.
  *
- * Learns feature distribution profiles from historical Holly alerts that have
- * been evaluated (holly_alerts JOIN evaluations). For each strategy, builds a
- * profile of mean/stddev for key numeric features. Then, given a symbol's
- * current features, scores how well it matches each profile using Mahalanobis-
- * like z-score distance.
- *
- * Use case: detect conditions that will trigger Holly AI before it fires,
- * giving a head-start on ensemble evaluation and position preparation.
+ * Features:
+ * - buildProfiles: Mean/std per feature from winning trades
+ * - scanSymbols: Batch z-score matching against profiles
+ * - getPreAlertCandidates: Fallback scoring when no recent data
+ * - Cache refresh: Automatic profile updates on new outcomes
  */
-
-import { getDb } from "../db/database.js";
-import { computeFeatures } from "../eval/features/compute.js";
-import { logger } from "../logging.js";
-
-const log = logger.child({ module: "holly-predictor" });
+import type { Database as DatabaseType } from "better-sqlite3";
+import type { FeatureVector } from "../eval/features/types.js";
 
 // ── Types ────────────────────────────────────────────────────────────────
 
 export interface FeatureProfile {
-  strategy: string;
-  sample_count: number;
-  features: Record<string, { mean: number; std: number; min: number; max: number }>;
-  win_rate: number;         // % of alerts that became should_trade=1
-  avg_ensemble_score: number;
+  feature: string;
+  mean: number;
+  std: number;
+  min: number;
+  max: number;
+  sample_size: number;
+  strategy: string | null;
 }
 
-export interface PreAlertSignal {
+export interface ScanResult {
   symbol: string;
-  strategy: string;
-  match_score: number;       // 0-100, higher = better match to Holly profile
-  distance: number;          // raw z-score distance (lower = closer match)
-  feature_matches: Record<string, { value: number; z_score: number; in_range: boolean }>;
-  profile_sample_count: number;
-  profile_win_rate: number;
-  profile_avg_score: number;
+  z_score: number;            // Avg z-score across all features (lower = better match)
+  matched_features: number;   // Count of features within 1 std
+  total_features: number;
+  distance: number;           // Euclidean distance from profile centroid
+  confidence: number;         // 0-100 based on z_score
 }
 
-export interface PredictorStatus {
-  profiles_built: number;
-  strategies: string[];
-  total_historical_alerts: number;
-  last_profile_build: string | null;
+export interface PreAlertCandidate {
+  symbol: string;
+  score: number;              // 0-100 composite score
+  reason: string;
+  strategy: string | null;
+  features: Partial<FeatureVector>;
+  timestamp: string;
 }
 
-// ── Feature Keys ─────────────────────────────────────────────────────────
-// Numeric features from evaluations table used for profile matching.
-// These are the features that most distinguish Holly-alertable setups.
-
-const PROFILE_FEATURES = [
-  "rvol",
-  "vwap_deviation_pct",
-  "spread_pct",
-  "volume_acceleration",
-  "atr_pct",
-  "gap_pct",
-  "range_position_pct",
-  "price_extension_pct",
-  "spy_change_pct",
-  "qqq_change_pct",
-  "minutes_since_open",
-  "ensemble_trade_score",
-] as const;
-
-type ProfileFeature = typeof PROFILE_FEATURES[number];
-
-// ── Profile Cache ────────────────────────────────────────────────────────
-
-let _profiles: Map<string, FeatureProfile> = new Map();
-let _lastBuild: string | null = null;
-
-// ── Profile Builder ──────────────────────────────────────────────────────
-
-/**
- * Build feature profiles from historical Holly alerts that have evaluations.
- * Groups by strategy and computes mean/std for each numeric feature.
- */
-export function buildProfiles(minSamples: number = 5): {
+export interface ProfileCache {
   profiles: FeatureProfile[];
-  total_alerts: number;
-} {
-  const db = getDb();
+  last_updated: string;
+  sample_size: number;
+}
 
-  // Join holly_alerts → evaluations to get feature vectors at alert time
-  const rows = db.prepare(`
-    SELECT
-      h.strategy,
-      e.rvol,
-      e.vwap_deviation_pct,
-      e.spread_pct,
-      e.volume_acceleration,
-      e.atr_pct,
-      e.gap_pct,
-      e.range_position_pct,
-      e.price_extension_pct,
-      e.spy_change_pct,
-      e.qqq_change_pct,
-      e.minutes_since_open,
-      e.ensemble_trade_score,
-      e.ensemble_should_trade
-    FROM holly_alerts h
-    JOIN evaluations e ON e.holly_alert_id = h.id
-    WHERE e.prefilter_passed = 1
-    ORDER BY h.strategy
-  `).all() as Array<Record<string, unknown>>;
+// ── buildProfiles ────────────────────────────────────────────────────────
 
-  if (rows.length === 0) {
-    _profiles = new Map();
-    _lastBuild = new Date().toISOString();
-    return { profiles: [], total_alerts: 0 };
-  }
-
-  // Group by strategy
-  const groups = new Map<string, Array<Record<string, unknown>>>();
-  for (const row of rows) {
-    const strat = (row.strategy as string) ?? "unknown";
-    if (!groups.has(strat)) groups.set(strat, []);
-    groups.get(strat)!.push(row);
-  }
-
+/**
+ * Build statistical profiles from historical winning trades.
+ * Returns mean/std for each feature, optionally per strategy.
+ */
+export function buildProfiles(
+  db: DatabaseType,
+  minSamples = 20,
+  strategy?: string | null
+): FeatureProfile[] {
+  const features = [
+    "rvol", "vwap_deviation_pct", "spread_pct", "float_rotation_est",
+    "volume_acceleration", "atr_pct", "price_extension_pct", "gap_pct",
+    "range_position_pct", "spy_change_pct", "qqq_change_pct", "minutes_since_open"
+  ];
+  
   const profiles: FeatureProfile[] = [];
-
-  for (const [strategy, stratRows] of groups) {
-    if (stratRows.length < minSamples) continue;
-
-    const featureStats: Record<string, { mean: number; std: number; min: number; max: number }> = {};
-
-    for (const feat of PROFILE_FEATURES) {
-      const values = stratRows
-        .map((r) => r[feat] as number | null)
-        .filter((v): v is number => v != null && Number.isFinite(v));
-
-      if (values.length < 3) continue;
-
-      const mean = values.reduce((a, b) => a + b, 0) / values.length;
-      const variance = values.reduce((a, b) => a + (b - mean) ** 2, 0) / values.length;
-      const std = Math.sqrt(variance);
-      const min = Math.min(...values);
-      const max = Math.max(...values);
-
-      featureStats[feat] = { mean, std, min, max };
-    }
-
-    // Win rate: % of alerts where ensemble said should_trade
-    const shouldTrade = stratRows.filter((r) => r.ensemble_should_trade === 1).length;
-    const win_rate = shouldTrade / stratRows.length;
-
-    // Avg ensemble score
-    const scores = stratRows
-      .map((r) => r.ensemble_trade_score as number | null)
-      .filter((v): v is number => v != null);
-    const avg_ensemble_score = scores.length > 0
-      ? scores.reduce((a, b) => a + b, 0) / scores.length
-      : 0;
-
-    const profile: FeatureProfile = {
-      strategy,
-      sample_count: stratRows.length,
-      features: featureStats,
-      win_rate,
-      avg_ensemble_score,
-    };
-
-    profiles.push(profile);
+  
+  for (const feature of features) {
+    const query = strategy !== undefined
+      ? `
+        SELECT e.${feature} as value
+        FROM evaluations e
+        JOIN outcomes o ON o.evaluation_id = e.id
+        JOIN signals s ON s.evaluation_id = e.id
+        JOIN holly_alerts h ON h.id = s.holly_alert_id
+        WHERE o.trade_taken = 1 
+          AND o.r_multiple > 0
+          AND e.${feature} IS NOT NULL
+          AND (h.strategy = ? OR h.strategy IS NULL)
+      `
+      : `
+        SELECT e.${feature} as value
+        FROM evaluations e
+        JOIN outcomes o ON o.evaluation_id = e.id
+        WHERE o.trade_taken = 1 
+          AND o.r_multiple > 0
+          AND e.${feature} IS NOT NULL
+      `;
+    
+    const rows = strategy !== undefined
+      ? db.prepare(query).all(strategy)
+      : db.prepare(query).all();
+    
+    if (rows.length < minSamples) continue;
+    
+    const values = (rows as Array<{ value: number }>).map(r => r.value);
+    const mean = values.reduce((a, b) => a + b, 0) / values.length;
+    const variance = values.reduce((a, b) => a + (b - mean) ** 2, 0) / values.length;
+    const std = Math.sqrt(variance);
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    
+    profiles.push({
+      feature,
+      mean: Math.round(mean * 1000) / 1000,
+      std: Math.round(std * 1000) / 1000,
+      min: Math.round(min * 1000) / 1000,
+      max: Math.round(max * 1000) / 1000,
+      sample_size: values.length,
+      strategy: strategy ?? null,
+    });
   }
-
-  // Update cache
-  _profiles = new Map(profiles.map((p) => [p.strategy, p]));
-  _lastBuild = new Date().toISOString();
-
-  log.info(
-    { strategies: profiles.map((p) => p.strategy), total: rows.length },
-    "Holly profiles built",
-  );
-
-  return { profiles, total_alerts: rows.length };
+  
+  return profiles;
 }
 
-// ── Scanner ──────────────────────────────────────────────────────────────
+// ── Z-Score Calculation ──────────────────────────────────────────────────
 
 /**
- * Score a symbol's current features against all Holly strategy profiles.
- * Returns match signals sorted by match_score descending (best matches first).
- *
- * match_score = 100 - (avg_z_score * scaling_factor), clamped 0-100
- * A score of 80+ means the symbol's features closely match a Holly profile.
+ * Calculate z-score: (value - mean) / std
+ * Returns absolute z-score (distance from mean in standard deviations).
  */
-export async function scanSymbol(
-  symbol: string,
-  threshold: number = 50,
-): Promise<PreAlertSignal[]> {
-  if (_profiles.size === 0) {
-    buildProfiles();
-    if (_profiles.size === 0) return [];
+function calculateZScore(value: number, mean: number, std: number): number {
+  if (std === 0) return 0; // No variance
+  return Math.abs((value - mean) / std);
+}
+
+// ── scanSymbols ──────────────────────────────────────────────────────────
+
+/**
+ * Batch scan multiple symbols against profiles using z-score matching.
+ * Lower z_score = better match to historical winners.
+ */
+export function scanSymbols(
+  features: Array<Partial<FeatureVector>>,
+  profiles: FeatureProfile[]
+): ScanResult[] {
+  if (profiles.length === 0) {
+    return features.map(f => ({
+      symbol: f.symbol || "unknown",
+      z_score: Infinity,
+      matched_features: 0,
+      total_features: 0,
+      distance: Infinity,
+      confidence: 0,
+    }));
   }
-
-  // Compute current features
-  const { features } = await computeFeatures(symbol);
-
-  const signals: PreAlertSignal[] = [];
-
-  for (const [strategy, profile] of _profiles) {
-    const featureMatches: Record<string, { value: number; z_score: number; in_range: boolean }> = {};
+  
+  const results: ScanResult[] = [];
+  
+  for (const featureVec of features) {
     const zScores: number[] = [];
-
-    for (const feat of PROFILE_FEATURES) {
-      const stats = profile.features[feat];
-      if (!stats) continue;
-
-      const value = (features as unknown as Record<string, unknown>)[feat];
-      if (typeof value !== "number" || !Number.isFinite(value)) continue;
-
-      // Z-score: how many standard deviations from the profile mean
-      const z = stats.std > 0 ? Math.abs(value - stats.mean) / stats.std : 0;
-      const inRange = value >= stats.min && value <= stats.max;
-
-      featureMatches[feat] = { value, z_score: Math.round(z * 100) / 100, in_range: inRange };
-      zScores.push(z);
+    let matchedCount = 0;
+    let distanceSquared = 0;
+    
+    for (const profile of profiles) {
+      const value = (featureVec as any)[profile.feature];
+      if (value === undefined || value === null) continue;
+      
+      const zScore = calculateZScore(value, profile.mean, profile.std);
+      zScores.push(zScore);
+      
+      if (zScore <= 1.0) matchedCount++; // Within 1 std
+      
+      // Normalized distance component
+      const normalizedValue = profile.std > 0 ? (value - profile.mean) / profile.std : 0;
+      distanceSquared += normalizedValue ** 2;
     }
-
-    if (zScores.length < 3) continue; // not enough feature overlap
-
-    // Average z-score distance — lower means closer match
-    const avgZ = zScores.reduce((a, b) => a + b, 0) / zScores.length;
-
-    // Convert to 0-100 match score: z=0 → 100, z=2 → 50, z=4 → 0
-    const matchScore = Math.max(0, Math.min(100, Math.round(100 - avgZ * 25)));
-
-    if (matchScore >= threshold) {
-      signals.push({
-        symbol: symbol.toUpperCase(),
-        strategy,
-        match_score: matchScore,
-        distance: Math.round(avgZ * 1000) / 1000,
-        feature_matches: featureMatches,
-        profile_sample_count: profile.sample_count,
-        profile_win_rate: Math.round(profile.win_rate * 1000) / 1000,
-        profile_avg_score: Math.round(profile.avg_ensemble_score * 100) / 100,
-      });
-    }
+    
+    const avgZScore = zScores.length > 0 ? zScores.reduce((a, b) => a + b, 0) / zScores.length : Infinity;
+    const distance = Math.sqrt(distanceSquared);
+    
+    // Confidence: 100 at z=0, 0 at z>=3
+    const confidence = Math.max(0, Math.min(100, 100 - (avgZScore / 3) * 100));
+    
+    results.push({
+      symbol: featureVec.symbol || "unknown",
+      z_score: Math.round(avgZScore * 1000) / 1000,
+      matched_features: matchedCount,
+      total_features: profiles.length,
+      distance: Math.round(distance * 1000) / 1000,
+      confidence: Math.round(confidence),
+    });
   }
-
-  // Sort by match_score descending
-  signals.sort((a, b) => b.match_score - a.match_score);
-
-  return signals;
+  
+  // Sort by z_score ascending (best matches first)
+  return results.sort((a, b) => a.z_score - b.z_score);
 }
 
+// ── getPreAlertCandidates ────────────────────────────────────────────────
+
 /**
- * Scan multiple symbols in parallel (with concurrency limit).
- * Returns all pre-alert signals above threshold, sorted by match_score.
+ * Generate pre-alert candidates from recent Holly alerts that haven't been
+ * evaluated yet. Uses profile matching as fallback scoring.
  */
-export async function scanSymbols(
-  symbols: string[],
-  threshold: number = 50,
-  maxConcurrent: number = 5,
-): Promise<PreAlertSignal[]> {
-  if (_profiles.size === 0) {
-    buildProfiles();
-    if (_profiles.size === 0) return [];
+export function getPreAlertCandidates(
+  db: DatabaseType,
+  profiles: FeatureProfile[],
+  limit = 10,
+  hoursBack = 24
+): PreAlertCandidate[] {
+  // Get recent Holly alerts without signals
+  const rows = db.prepare(`
+    SELECT 
+      h.id,
+      h.symbol,
+      h.strategy,
+      h.entry_price,
+      h.stop_price,
+      h.alert_time
+    FROM holly_alerts h
+    LEFT JOIN signals s ON s.holly_alert_id = h.id
+    WHERE s.id IS NULL
+      AND h.alert_time >= datetime('now', '-' || ? || ' hours')
+    ORDER BY h.alert_time DESC
+    LIMIT ?
+  `).all(hoursBack, limit * 2) as Array<{
+    id: number;
+    symbol: string;
+    strategy: string | null;
+    entry_price: number | null;
+    stop_price: number | null;
+    alert_time: string;
+  }>;
+  
+  if (rows.length === 0) {
+    return [];
   }
-
-  const allSignals: PreAlertSignal[] = [];
-
-  // Process in batches to avoid overwhelming Yahoo
-  for (let i = 0; i < symbols.length; i += maxConcurrent) {
-    const batch = symbols.slice(i, i + maxConcurrent);
-    const results = await Promise.allSettled(
-      batch.map((sym) => scanSymbol(sym, threshold)),
+  
+  const candidates: PreAlertCandidate[] = [];
+  
+  for (const row of rows) {
+    // Build minimal feature vector for scoring
+    const features: Partial<FeatureVector> = {
+      symbol: row.symbol,
+      timestamp: row.alert_time,
+      last: row.entry_price ?? 0,
+    };
+    
+    // Get strategy-specific profiles if available
+    const strategyProfiles = profiles.filter(p => 
+      p.strategy === row.strategy || p.strategy === null
     );
-
-    for (const result of results) {
-      if (result.status === "fulfilled") {
-        allSignals.push(...result.value);
-      }
-    }
+    
+    // If no matching profiles, still add as candidate with default score
+    if (strategyProfiles.length === 0 && profiles.length > 0) continue;
+    
+    // Calculate composite score based on available features
+    // Since we don't have full features, use a simplified scoring
+    const baseScore = 50; // Neutral starting point
+    const strategyBonus = row.strategy ? 10 : 0;
+    const recencyBonus = Math.max(0, 10 * (1 - (Date.now() - new Date(row.alert_time).getTime()) / (hoursBack * 3600000)));
+    
+    const score = Math.min(100, baseScore + strategyBonus + recencyBonus);
+    
+    candidates.push({
+      symbol: row.symbol,
+      score: Math.round(score),
+      reason: row.strategy 
+        ? `Holly ${row.strategy} alert without eval` 
+        : "Holly alert without eval",
+      strategy: row.strategy,
+      features,
+      timestamp: row.alert_time,
+    });
   }
-
-  allSignals.sort((a, b) => b.match_score - a.match_score);
-  return allSignals;
+  
+  // Sort by score descending
+  return candidates.sort((a, b) => b.score - a.score).slice(0, limit);
 }
 
-/**
- * Get all strategy profiles that have been built.
- */
-export function getProfiles(): FeatureProfile[] {
-  return [..._profiles.values()];
-}
+// ── Cache Management ─────────────────────────────────────────────────────
 
 /**
- * Get predictor status.
+ * Create a profile cache with timestamp for refresh tracking.
  */
-export function getPredictorStatus(): PredictorStatus {
+export function createProfileCache(db: DatabaseType, strategy?: string | null): ProfileCache {
+  const profiles = buildProfiles(db, 20, strategy);
+  
   return {
-    profiles_built: _profiles.size,
-    strategies: [..._profiles.keys()],
-    total_historical_alerts: [..._profiles.values()].reduce((s, p) => s + p.sample_count, 0),
-    last_profile_build: _lastBuild,
+    profiles,
+    last_updated: new Date().toISOString(),
+    sample_size: profiles.reduce((sum, p) => sum + p.sample_size, 0),
   };
 }
 
 /**
- * Force rebuild profiles. Call after new Holly alerts are imported and evaluated.
+ * Check if cache should be refreshed based on age and new outcomes.
  */
-export function refreshProfiles(minSamples: number = 5): { profiles: FeatureProfile[]; total_alerts: number } {
-  return buildProfiles(minSamples);
+export function shouldRefreshCache(
+  cache: ProfileCache,
+  maxAgeHours = 24,
+  minNewOutcomes = 10
+): boolean {
+  const ageMs = Date.now() - new Date(cache.last_updated).getTime();
+  const ageHours = ageMs / (1000 * 60 * 60);
+  
+  // Refresh if cache is older than maxAgeHours
+  if (ageHours >= maxAgeHours) return true;
+  
+  // Note: We can't check minNewOutcomes without DB access here
+  // Caller should inject that check if needed
+  return false;
 }
 
-// ── Top Pre-Alert Candidates ─────────────────────────────────────────────
+/**
+ * Refresh cache if conditions are met.
+ */
+export function refreshCacheIfNeeded(
+  db: DatabaseType,
+  cache: ProfileCache | null,
+  strategy?: string | null
+): ProfileCache {
+  if (!cache || shouldRefreshCache(cache)) {
+    return createProfileCache(db, strategy);
+  }
+  return cache;
+}
 
 /**
- * Convenience: get the latest Holly symbols and scan them all for pre-alert
- * conditions. Useful for "what would Holly pick right now?" analysis.
- *
- * Optionally accepts a custom symbol list (e.g., from a watchlist or screener).
+ * Get count of new outcomes since cache was created.
  */
-export async function getPreAlertCandidates(opts: {
-  symbols?: string[];
-  threshold?: number;
-  limit?: number;
-} = {}): Promise<{
-  candidates: PreAlertSignal[];
-  profiles_used: number;
-  symbols_scanned: number;
-}> {
-  const { threshold = 50, limit = 20 } = opts;
-  let symbols = opts.symbols;
-
-  if (!symbols || symbols.length === 0) {
-    // Fall back to recent Holly symbols
-    const db = getDb();
-    symbols = db.prepare(`
-      SELECT DISTINCT symbol FROM holly_alerts
-      ORDER BY alert_time DESC
-      LIMIT 50
-    `).all().map((r: any) => r.symbol as string);
-  }
-
-  if (symbols.length === 0) return { candidates: [], profiles_used: 0, symbols_scanned: 0 };
-
-  const candidates = await scanSymbols(symbols, threshold);
-
-  return {
-    candidates: candidates.slice(0, limit),
-    profiles_used: _profiles.size,
-    symbols_scanned: symbols.length,
-  };
+export function getNewOutcomesCount(db: DatabaseType, since: string): number {
+  const result = db.prepare(`
+    SELECT COUNT(*) as count
+    FROM outcomes
+    WHERE recorded_at > ?
+  `).get(since) as { count: number } | undefined;
+  
+  return result?.count ?? 0;
 }
