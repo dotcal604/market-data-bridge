@@ -19,6 +19,8 @@ describe("Action Catalog", () => {
         "collab_post",
         "collab_read",
         "collab_stats",
+        "drift_alerts",
+        "drift_check",
         "drift_report",
         "edge_report",
         "executions_history",

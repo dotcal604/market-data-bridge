@@ -638,6 +638,8 @@ export const actionsMeta: Record<string, ActionMeta> = {
   record_outcome: { description: "Record outcome for an evaluation", params: ["evaluation_id", "trade_taken", "decision_type?", "confidence_rating?", "rule_followed?", "setup_type?", "actual_entry_price?", "actual_exit_price?", "r_multiple?", "exit_reason?", "notes?"] },
   simulate_weights: { description: "Simulate ensemble weights against historical evaluations", params: ["claude", "gpt4o", "gemini", "k?", "days?", "symbol?"] },
   drift_report: { description: "Get model drift report (accuracy, calibration, regime shifts)" },
+  drift_check: { description: "Check model drift against thresholds and generate alerts" },
+  drift_alerts: { description: "Get recent model drift alerts from database", params: ["limit?"] },
   edge_report: { description: "Full edge analytics: rolling Sharpe/Sortino, win rate, profit factor, feature attribution, walk-forward validation", params: ["days?", "rolling_window?", "include_walk_forward?"] },
   walk_forward: { description: "Walk-forward backtest: train/test split with weight optimization, proves out-of-sample edge vs luck", params: ["days?", "train_size?", "test_size?"] },
 
