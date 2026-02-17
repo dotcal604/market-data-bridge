@@ -433,3 +433,44 @@ export interface FlattenResult {
   skipped: Array<{ symbol: string; reason: string }>;
   error?: string;
 }
+
+// Holly Alerts types
+export interface HollyAlert {
+  id: number;
+  alert_time: string;
+  symbol: string;
+  strategy: string | null;
+  entry_price: number | null;
+  stop_price: number | null;
+  shares: number | null;
+  last_price: number | null;
+  segment: string | null;
+  extra: string | null;
+  import_batch: string | null;
+  imported_at: string;
+}
+
+export interface HollyAlertsResponse {
+  count: number;
+  alerts: HollyAlert[];
+}
+
+export interface HollyStats {
+  total_alerts: number;
+  unique_symbols: number;
+  unique_strategies: number;
+  first_alert: string | null;
+  last_alert: string | null;
+  import_batches: number;
+  days_with_alerts: number;
+}
+
+export interface HollySymbolsResponse {
+  count: number;
+  symbols: string[];
+}
+
+export interface AgentResponse<T> {
+  action: string;
+  result: T;
+}
