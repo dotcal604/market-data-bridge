@@ -40,9 +40,9 @@ const NAV_ITEMS = [
   { href: "/edge", label: "Edge Analytics", icon: Crosshair },
   { href: "/holly/autopsy", label: "Holly Autopsy", icon: Microscope },
   { href: "/weights", label: "Weights", icon: SlidersHorizontal },
-  { href: "/orders", label: "Orders", icon: ShoppingCart },
   { href: "/account", label: "Account", icon: Wallet },
   { href: "/session", label: "Session", icon: Shield },
+  { href: "/orders", label: "Orders", icon: ShoppingCart },
   { href: "/collab", label: "Collaboration", icon: MessageSquare },
 ] as const;
 
