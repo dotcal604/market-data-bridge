@@ -242,4 +242,203 @@ describe("validateConfig", () => {
     };
     expect(validateConfig(validMaxThreshold).errors).toEqual([]);
   });
+
+  // autoEval validation tests
+  it("should return error when autoEval.maxConcurrent is too low", () => {
+    const config = {
+      ibkr: { host: "127.0.0.1", port: 7496, clientId: 0, maxClientIdRetries: 5, orderTimeoutMs: 10000, executionTimeoutMs: 15000 },
+      rest: { port: 3000, apiKey: "secure-api-key-16+" },
+      holly: { watchPath: "", pollIntervalMs: 5000 },
+      drift: { accuracyThreshold: 0.55, calibrationThreshold: 0.15, enabled: true },
+      autoEval: { enabled: false, dedupWindowMin: 5, maxConcurrent: 0 },
+    };
+
+    const result = validateConfig(config);
+    expect(result.errors).toContain("autoEval.maxConcurrent must be between 1 and 20, got 0");
+  });
+
+  it("should return error when autoEval.maxConcurrent is too high", () => {
+    const config = {
+      ibkr: { host: "127.0.0.1", port: 7496, clientId: 0, maxClientIdRetries: 5, orderTimeoutMs: 10000, executionTimeoutMs: 15000 },
+      rest: { port: 3000, apiKey: "secure-api-key-16+" },
+      holly: { watchPath: "", pollIntervalMs: 5000 },
+      drift: { accuracyThreshold: 0.55, calibrationThreshold: 0.15, enabled: true },
+      autoEval: { enabled: false, dedupWindowMin: 5, maxConcurrent: 21 },
+    };
+
+    const result = validateConfig(config);
+    expect(result.errors).toContain("autoEval.maxConcurrent must be between 1 and 20, got 21");
+  });
+
+  it("should validate boundary values for autoEval.maxConcurrent", () => {
+    const validMinConcurrent = {
+      ibkr: { host: "127.0.0.1", port: 7496, clientId: 0, maxClientIdRetries: 5, orderTimeoutMs: 10000, executionTimeoutMs: 15000 },
+      rest: { port: 3000, apiKey: "secure-api-key-16+" },
+      holly: { watchPath: "", pollIntervalMs: 5000 },
+      drift: { accuracyThreshold: 0.55, calibrationThreshold: 0.15, enabled: true },
+      autoEval: { enabled: false, dedupWindowMin: 5, maxConcurrent: 1 },
+    };
+    expect(validateConfig(validMinConcurrent).errors).toEqual([]);
+
+    const validMaxConcurrent = {
+      ibkr: { host: "127.0.0.1", port: 7496, clientId: 0, maxClientIdRetries: 5, orderTimeoutMs: 10000, executionTimeoutMs: 15000 },
+      rest: { port: 3000, apiKey: "secure-api-key-16+" },
+      holly: { watchPath: "", pollIntervalMs: 5000 },
+      drift: { accuracyThreshold: 0.55, calibrationThreshold: 0.15, enabled: true },
+      autoEval: { enabled: false, dedupWindowMin: 5, maxConcurrent: 20 },
+    };
+    expect(validateConfig(validMaxConcurrent).errors).toEqual([]);
+  });
+
+  it("should return error when autoEval.dedupWindowMin is zero", () => {
+    const config = {
+      ibkr: { host: "127.0.0.1", port: 7496, clientId: 0, maxClientIdRetries: 5, orderTimeoutMs: 10000, executionTimeoutMs: 15000 },
+      rest: { port: 3000, apiKey: "secure-api-key-16+" },
+      holly: { watchPath: "", pollIntervalMs: 5000 },
+      drift: { accuracyThreshold: 0.55, calibrationThreshold: 0.15, enabled: true },
+      autoEval: { enabled: false, dedupWindowMin: 0, maxConcurrent: 3 },
+    };
+
+    const result = validateConfig(config);
+    expect(result.errors).toContain("autoEval.dedupWindowMin must be positive, got 0");
+  });
+
+  it("should return error when autoEval.dedupWindowMin is negative", () => {
+    const config = {
+      ibkr: { host: "127.0.0.1", port: 7496, clientId: 0, maxClientIdRetries: 5, orderTimeoutMs: 10000, executionTimeoutMs: 15000 },
+      rest: { port: 3000, apiKey: "secure-api-key-16+" },
+      holly: { watchPath: "", pollIntervalMs: 5000 },
+      drift: { accuracyThreshold: 0.55, calibrationThreshold: 0.15, enabled: true },
+      autoEval: { enabled: false, dedupWindowMin: -5, maxConcurrent: 3 },
+    };
+
+    const result = validateConfig(config);
+    expect(result.errors).toContain("autoEval.dedupWindowMin must be positive, got -5");
+  });
+
+  // IBKR timeout validation tests
+  it("should return error when ibkr.orderTimeoutMs is zero", () => {
+    const config = {
+      ibkr: { host: "127.0.0.1", port: 7496, clientId: 0, maxClientIdRetries: 5, orderTimeoutMs: 0, executionTimeoutMs: 15000 },
+      rest: { port: 3000, apiKey: "secure-api-key-16+" },
+      holly: { watchPath: "", pollIntervalMs: 5000 },
+      drift: { accuracyThreshold: 0.55, calibrationThreshold: 0.15, enabled: true },
+      autoEval: { enabled: false, dedupWindowMin: 5, maxConcurrent: 3 },
+    };
+
+    const result = validateConfig(config);
+    expect(result.errors).toContain("ibkr.orderTimeoutMs must be positive, got 0");
+  });
+
+  it("should return error when ibkr.orderTimeoutMs is negative", () => {
+    const config = {
+      ibkr: { host: "127.0.0.1", port: 7496, clientId: 0, maxClientIdRetries: 5, orderTimeoutMs: -1000, executionTimeoutMs: 15000 },
+      rest: { port: 3000, apiKey: "secure-api-key-16+" },
+      holly: { watchPath: "", pollIntervalMs: 5000 },
+      drift: { accuracyThreshold: 0.55, calibrationThreshold: 0.15, enabled: true },
+      autoEval: { enabled: false, dedupWindowMin: 5, maxConcurrent: 3 },
+    };
+
+    const result = validateConfig(config);
+    expect(result.errors).toContain("ibkr.orderTimeoutMs must be positive, got -1000");
+  });
+
+  it("should return error when ibkr.executionTimeoutMs is zero", () => {
+    const config = {
+      ibkr: { host: "127.0.0.1", port: 7496, clientId: 0, maxClientIdRetries: 5, orderTimeoutMs: 10000, executionTimeoutMs: 0 },
+      rest: { port: 3000, apiKey: "secure-api-key-16+" },
+      holly: { watchPath: "", pollIntervalMs: 5000 },
+      drift: { accuracyThreshold: 0.55, calibrationThreshold: 0.15, enabled: true },
+      autoEval: { enabled: false, dedupWindowMin: 5, maxConcurrent: 3 },
+    };
+
+    const result = validateConfig(config);
+    expect(result.errors).toContain("ibkr.executionTimeoutMs must be positive, got 0");
+  });
+
+  it("should return error when ibkr.executionTimeoutMs is negative", () => {
+    const config = {
+      ibkr: { host: "127.0.0.1", port: 7496, clientId: 0, maxClientIdRetries: 5, orderTimeoutMs: 10000, executionTimeoutMs: -5000 },
+      rest: { port: 3000, apiKey: "secure-api-key-16+" },
+      holly: { watchPath: "", pollIntervalMs: 5000 },
+      drift: { accuracyThreshold: 0.55, calibrationThreshold: 0.15, enabled: true },
+      autoEval: { enabled: false, dedupWindowMin: 5, maxConcurrent: 3 },
+    };
+
+    const result = validateConfig(config);
+    expect(result.errors).toContain("ibkr.executionTimeoutMs must be positive, got -5000");
+  });
+
+  it("should return error when ibkr.executionTimeoutMs is less than orderTimeoutMs", () => {
+    const config = {
+      ibkr: { host: "127.0.0.1", port: 7496, clientId: 0, maxClientIdRetries: 5, orderTimeoutMs: 10000, executionTimeoutMs: 5000 },
+      rest: { port: 3000, apiKey: "secure-api-key-16+" },
+      holly: { watchPath: "", pollIntervalMs: 5000 },
+      drift: { accuracyThreshold: 0.55, calibrationThreshold: 0.15, enabled: true },
+      autoEval: { enabled: false, dedupWindowMin: 5, maxConcurrent: 3 },
+    };
+
+    const result = validateConfig(config);
+    expect(result.errors).toContain("ibkr.executionTimeoutMs (5000) must be >= ibkr.orderTimeoutMs (10000)");
+  });
+
+  it("should pass validation when ibkr.executionTimeoutMs equals orderTimeoutMs", () => {
+    const config = {
+      ibkr: { host: "127.0.0.1", port: 7496, clientId: 0, maxClientIdRetries: 5, orderTimeoutMs: 10000, executionTimeoutMs: 10000 },
+      rest: { port: 3000, apiKey: "secure-api-key-16+" },
+      holly: { watchPath: "", pollIntervalMs: 5000 },
+      drift: { accuracyThreshold: 0.55, calibrationThreshold: 0.15, enabled: true },
+      autoEval: { enabled: false, dedupWindowMin: 5, maxConcurrent: 3 },
+    };
+
+    const result = validateConfig(config);
+    expect(result.errors).toEqual([]);
+  });
+
+  // IBKR clientId validation tests
+  it("should return error when ibkr.clientId is negative", () => {
+    const config = {
+      ibkr: { host: "127.0.0.1", port: 7496, clientId: -1, maxClientIdRetries: 5, orderTimeoutMs: 10000, executionTimeoutMs: 15000 },
+      rest: { port: 3000, apiKey: "secure-api-key-16+" },
+      holly: { watchPath: "", pollIntervalMs: 5000 },
+      drift: { accuracyThreshold: 0.55, calibrationThreshold: 0.15, enabled: true },
+      autoEval: { enabled: false, dedupWindowMin: 5, maxConcurrent: 3 },
+    };
+
+    const result = validateConfig(config);
+    expect(result.errors).toContain("ibkr.clientId must be between 0 and 32, got -1");
+  });
+
+  it("should return error when ibkr.clientId is too high", () => {
+    const config = {
+      ibkr: { host: "127.0.0.1", port: 7496, clientId: 33, maxClientIdRetries: 5, orderTimeoutMs: 10000, executionTimeoutMs: 15000 },
+      rest: { port: 3000, apiKey: "secure-api-key-16+" },
+      holly: { watchPath: "", pollIntervalMs: 5000 },
+      drift: { accuracyThreshold: 0.55, calibrationThreshold: 0.15, enabled: true },
+      autoEval: { enabled: false, dedupWindowMin: 5, maxConcurrent: 3 },
+    };
+
+    const result = validateConfig(config);
+    expect(result.errors).toContain("ibkr.clientId must be between 0 and 32, got 33");
+  });
+
+  it("should validate boundary values for ibkr.clientId", () => {
+    const validMinClientId = {
+      ibkr: { host: "127.0.0.1", port: 7496, clientId: 0, maxClientIdRetries: 5, orderTimeoutMs: 10000, executionTimeoutMs: 15000 },
+      rest: { port: 3000, apiKey: "secure-api-key-16+" },
+      holly: { watchPath: "", pollIntervalMs: 5000 },
+      drift: { accuracyThreshold: 0.55, calibrationThreshold: 0.15, enabled: true },
+      autoEval: { enabled: false, dedupWindowMin: 5, maxConcurrent: 3 },
+    };
+    expect(validateConfig(validMinClientId).errors).toEqual([]);
+
+    const validMaxClientId = {
+      ibkr: { host: "127.0.0.1", port: 7496, clientId: 32, maxClientIdRetries: 5, orderTimeoutMs: 10000, executionTimeoutMs: 15000 },
+      rest: { port: 3000, apiKey: "secure-api-key-16+" },
+      holly: { watchPath: "", pollIntervalMs: 5000 },
+      drift: { accuracyThreshold: 0.55, calibrationThreshold: 0.15, enabled: true },
+      autoEval: { enabled: false, dedupWindowMin: 5, maxConcurrent: 3 },
+    };
+    expect(validateConfig(validMaxClientId).errors).toEqual([]);
+  });
 });
