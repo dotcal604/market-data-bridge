@@ -22,6 +22,7 @@ import { Trash2 } from "lucide-react";
 export default function CollabPage() {
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
   const [error, setError] = useState("");
+  const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
   const { mutate: clearMessages, isPending } = useClearMessages();
 
   const handleClear = () => {
@@ -34,6 +35,11 @@ export default function CollabPage() {
         setError(error.message);
       },
     });
+  };
+
+  const handleTagFilter = (tag: string) => {
+    // Toggle tag filter
+    setActiveTagFilter(activeTagFilter === tag ? null : tag);
   };
 
   return (
@@ -84,7 +90,10 @@ export default function CollabPage() {
       <StatsBar />
 
       {/* Message Feed */}
-      <MessageFeed />
+      <MessageFeed 
+        onTagFilter={handleTagFilter}
+        activeTagFilter={activeTagFilter}
+      />
 
       {/* Post Form */}
       <PostForm />
