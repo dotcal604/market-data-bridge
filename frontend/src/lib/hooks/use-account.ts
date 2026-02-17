@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { accountClient } from "../api/account-client";
-import type { StatusResponse, AccountSummary, PnLData } from "../api/types";
+import type { StatusResponse, AccountSummary, PnLData, IntradayPnLResponse } from "../api/types";
 
 const API_BASE = "/api";
 
@@ -28,6 +28,14 @@ async function fetchPnL(): Promise<PnLData> {
   return data;
 }
 
+async function fetchIntradayPnL(): Promise<IntradayPnLResponse> {
+  const res = await fetch(`${API_BASE}/account/pnl/intraday`);
+  if (!res.ok) throw new Error(`Failed to fetch intraday P&L (${res.status}: ${res.statusText})`);
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return data;
+}
+
 export function useStatus(refetchInterval?: number) {
   return useQuery({
     queryKey: ["status"],
@@ -48,6 +56,14 @@ export function usePnL(refetchInterval?: number) {
   return useQuery({
     queryKey: ["account-pnl"],
     queryFn: fetchPnL,
+    refetchInterval,
+  });
+}
+
+export function useIntradayPnL(refetchInterval?: number) {
+  return useQuery({
+    queryKey: ["account-pnl-intraday"],
+    queryFn: fetchIntradayPnL,
     refetchInterval,
   });
 }

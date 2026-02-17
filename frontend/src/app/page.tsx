@@ -6,6 +6,7 @@ import { EdgeSummaryCard } from "@/components/dashboard/edge-summary-card";
 import { RecentEvalsMini } from "@/components/dashboard/recent-evals-mini";
 import { HollyStats } from "@/components/dashboard/holly-stats";
 import { HollyAlerts } from "@/components/dashboard/holly-alerts";
+import { EquityCurve } from "@/components/dashboard/equity-curve";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function DashboardPage() {
@@ -34,6 +35,8 @@ export default function DashboardPage() {
       )}
 
       <EdgeSummaryCard />
+
+      <EquityCurve />
 
       <div>
         <h2 className="mb-3 text-lg font-semibold">Recent Evaluations</h2>
