@@ -4,6 +4,8 @@ import { SessionStateCard } from "@/components/session/session-state-card";
 import { RiskConfigCard } from "@/components/session/risk-config-card";
 import { PositionSizer } from "@/components/session/position-sizer";
 import { SessionEdgeCard } from "@/components/session/session-edge-card";
+import { SessionHistory } from "@/components/session/session-history";
+import { RiskChecker } from "@/components/session/risk-checker";
 
 export default function SessionPage() {
   return (
@@ -21,6 +23,11 @@ export default function SessionPage() {
         <RiskConfigCard />
         <PositionSizer />
         <SessionEdgeCard />
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <RiskChecker />
+        <SessionHistory />
       </div>
     </div>
   );
