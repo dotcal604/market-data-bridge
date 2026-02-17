@@ -20,6 +20,7 @@ import {
   Shield,
   Zap,
   Crosshair,
+  Microscope,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -37,6 +38,7 @@ const NAV_ITEMS = [
   { href: "/model-stats", label: "Model Stats", icon: BarChart3 },
   { href: "/drift", label: "Drift Monitor", icon: Activity },
   { href: "/edge", label: "Edge Analytics", icon: Crosshair },
+  { href: "/holly/autopsy", label: "Holly Autopsy", icon: Microscope },
   { href: "/weights", label: "Weights", icon: SlidersHorizontal },
   { href: "/orders", label: "Orders", icon: ShoppingCart },
   { href: "/account", label: "Account", icon: Wallet },

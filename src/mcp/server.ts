@@ -78,6 +78,10 @@ import { computeEdgeReport, runWalkForward } from "../eval/edge-analytics.js";
 import { importTraderSyncCSV } from "../tradersync/importer.js";
 import { importHollyAlerts } from "../holly/importer.js";
 import { isAutoEvalEnabled, setAutoEvalEnabled, getAutoEvalStatus } from "../holly/auto-eval.js";
+import { scanSymbol, scanSymbols, getProfiles, getPredictorStatus, getPreAlertCandidates, refreshProfiles } from "../holly/predictor.js";
+import { extractRules, runBacktest, getStrategyBreakdown } from "../holly/backtester.js";
+import { importHollyTradesFromFile, getHollyTradeStats, queryHollyTrades } from "../holly/trade-importer.js";
+import { runExitAutopsy } from "../holly/exit-autopsy.js";
 import { computeEnsembleWithWeights } from "../eval/ensemble/scorer.js";
 import { getWeights } from "../eval/ensemble/weights.js";
 import { tuneRiskParams } from "../eval/risk-tuning.js";
@@ -2259,6 +2263,181 @@ export function createMcpServer(): McpServer {
     async (params) => {
       const symbols = getLatestHollySymbols(params.limit);
       return { content: [{ type: "text", text: JSON.stringify({ count: symbols.length, symbols }, null, 2) }] };
+    }
+  );
+
+  // --- Tool: holly_predictor_status ---
+  server.tool(
+    "holly_predictor_status",
+    "Get Holly pre-alert predictor status: how many strategy profiles are built, what strategies, and total historical alert count used for learning.",
+    {},
+    async () => {
+      const status = getPredictorStatus();
+      return { content: [{ type: "text", text: JSON.stringify(status, null, 2) }] };
+    }
+  );
+
+  // --- Tool: holly_predictor_scan ---
+  server.tool(
+    "holly_predictor_scan",
+    "Scan a single symbol against learned Holly strategy feature profiles. Returns match scores indicating how closely the symbol's current features match historical Holly alert conditions. Score 80+ means strong pre-alert match.",
+    {
+      symbol: z.string().describe("Symbol to scan (e.g. AAPL)"),
+      threshold: z.number().optional().default(50).describe("Minimum match score 0-100 (default: 50)"),
+    },
+    async (params) => {
+      const signals = await scanSymbol(params.symbol, params.threshold);
+      return { content: [{ type: "text", text: JSON.stringify(signals, null, 2) }] };
+    }
+  );
+
+  // --- Tool: holly_predictor_candidates ---
+  server.tool(
+    "holly_predictor_candidates",
+    "Get top pre-alert candidates — symbols most likely to trigger Holly AI alerts soon based on feature profile matching. Scans recent Holly symbols or a custom watchlist.",
+    {
+      symbols: z.array(z.string()).optional().describe("Custom symbol list to scan (default: recent Holly symbols)"),
+      threshold: z.number().optional().default(50).describe("Minimum match score 0-100 (default: 50)"),
+      limit: z.number().optional().default(20).describe("Max candidates to return (default: 20)"),
+    },
+    async (params) => {
+      const result = await getPreAlertCandidates({
+        symbols: params.symbols,
+        threshold: params.threshold,
+        limit: params.limit,
+      });
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  // --- Tool: holly_predictor_refresh ---
+  server.tool(
+    "holly_predictor_refresh",
+    "Force-rebuild Holly predictor profiles from the latest historical data. Call after importing new Holly alerts and running auto-eval.",
+    {
+      min_samples: z.number().optional().default(5).describe("Minimum alerts per strategy to build a profile (default: 5)"),
+    },
+    async (params) => {
+      const result = refreshProfiles(params.min_samples);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  // --- Tool: holly_extract_rules ---
+  server.tool(
+    "holly_extract_rules",
+    "Reverse-engineer Holly alert trigger conditions. Compares feature distributions of Holly-triggered evaluations vs baseline to extract decision boundary thresholds per strategy. Each rule shows which features (e.g. RVOL, gap%, extension%) distinguish Holly alerts with effect size (Cohen's d).",
+    {
+      min_alerts: z.number().optional().default(5).describe("Minimum alerts per strategy (default: 5)"),
+      min_separation: z.number().optional().default(0.3).describe("Minimum Cohen's d separation to include a rule (default: 0.3)"),
+      since: z.string().optional().describe("Only use alerts after this date (ISO format)"),
+    },
+    async (params) => {
+      const rules = extractRules({
+        minAlerts: params.min_alerts,
+        minSeparation: params.min_separation,
+        since: params.since,
+      });
+      return { content: [{ type: "text", text: JSON.stringify({ strategy_count: rules.length, total_rules: rules.reduce((s, r) => s + r.rules.length, 0), rule_sets: rules }, null, 2) }] };
+    }
+  );
+
+  // --- Tool: holly_backtest ---
+  server.tool(
+    "holly_backtest",
+    "Backtest extracted Holly rules across any symbol universe and timeframe. Applies reverse-engineered trigger rules to historical evaluations, measures precision (signal quality), win rate, Sharpe, P&L per strategy, and aggregate. The definitive test of whether Holly's patterns produce edge.",
+    {
+      days: z.number().optional().default(180).describe("Lookback period in days (default: 180)"),
+      symbols: z.array(z.string()).optional().describe("Restrict to specific symbols (default: all)"),
+      min_match_score: z.number().optional().default(0.6).describe("Min rule-match score 0-1 (default: 0.6)"),
+      since: z.string().optional().describe("Start date (ISO format)"),
+      until: z.string().optional().describe("End date (ISO format)"),
+    },
+    async (params) => {
+      const report = runBacktest({
+        days: params.days,
+        symbols: params.symbols,
+        minMatchScore: params.min_match_score,
+        since: params.since,
+        until: params.until,
+      });
+      return { content: [{ type: "text", text: JSON.stringify(report, null, 2) }] };
+    }
+  );
+
+  // --- Tool: holly_strategy_breakdown ---
+  server.tool(
+    "holly_strategy_breakdown",
+    "Quick breakdown of each Holly strategy: defining features, effect sizes, tradeable rate, and outcome P&L. Lighter than full backtest — shows which strategies are worth running.",
+    {
+      since: z.string().optional().describe("Only analyze alerts after this date"),
+    },
+    async (params) => {
+      const result = getStrategyBreakdown({ since: params.since });
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  // --- Tool: holly_trade_import_file ---
+  server.tool(
+    "holly_trade_import_file",
+    "Import Holly trades from a Trade Ideas CSV export file on disk. Parses the non-standard format, computes derived metrics (hold time, MFE, MAE, giveback, R-multiple), and stores in holly_trades table.",
+    {
+      file_path: z.string().describe("Absolute path to the Trade Ideas Holly CSV export"),
+    },
+    async (params) => {
+      const result = importHollyTradesFromFile(params.file_path);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  // --- Tool: holly_trade_stats ---
+  server.tool(
+    "holly_trade_stats",
+    "Get aggregate statistics from imported Holly trades: total trades, win rate, avg R, avg giveback, avg hold time, total P&L.",
+    {},
+    async () => {
+      const stats = getHollyTradeStats();
+      return { content: [{ type: "text", text: JSON.stringify(stats, null, 2) }] };
+    }
+  );
+
+  // --- Tool: holly_trades ---
+  server.tool(
+    "holly_trades",
+    "Query Holly historical trades with full MFE/MAE/giveback metrics. Filter by symbol, strategy, segment, date range.",
+    {
+      symbol: z.string().optional().describe("Filter by symbol"),
+      strategy: z.string().optional().describe("Filter by strategy name"),
+      segment: z.string().optional().describe("Filter by segment (Holly Grail, Holly Neo, etc.)"),
+      since: z.string().optional().describe("Start date (ISO)"),
+      until: z.string().optional().describe("End date (ISO)"),
+      limit: z.number().optional().default(100).describe("Max trades (default: 100, max: 1000)"),
+    },
+    async (params) => {
+      const trades = queryHollyTrades({
+        symbol: params.symbol,
+        strategy: params.strategy,
+        segment: params.segment,
+        since: params.since,
+        until: params.until,
+        limit: params.limit,
+      });
+      return { content: [{ type: "text", text: JSON.stringify({ count: trades.length, trades }, null, 2) }] };
+    }
+  );
+
+  // --- Tool: holly_exit_autopsy ---
+  server.tool(
+    "holly_exit_autopsy",
+    "Full exit autopsy report on Holly historical trades. Strategy leaderboard (expectancy, Sharpe, profit factor), MFE/MAE giveback profiles, exit policy recommendations per strategy archetype (early_peaker/late_grower/bleeder), time-of-day performance, segment comparison (Grail vs Neo).",
+    {
+      since: z.string().optional().describe("Start date (ISO)"),
+      until: z.string().optional().describe("End date (ISO)"),
+    },
+    async (params) => {
+      const report = runExitAutopsy({ since: params.since, until: params.until });
+      return { content: [{ type: "text", text: JSON.stringify(report, null, 2) }] };
     }
   );
 

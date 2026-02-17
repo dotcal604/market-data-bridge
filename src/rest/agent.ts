@@ -65,6 +65,10 @@ import {
 } from "../ibkr/subscriptions.js";
 import { importHollyAlerts } from "../holly/importer.js";
 import { isAutoEvalEnabled, setAutoEvalEnabled, getAutoEvalStatus } from "../holly/auto-eval.js";
+import { buildProfiles, scanSymbol, scanSymbols, getProfiles, getPredictorStatus, getPreAlertCandidates, refreshProfiles } from "../holly/predictor.js";
+import { extractRules, runBacktest, getStrategyBreakdown } from "../holly/backtester.js";
+import { importHollyTrades, importHollyTradesFromFile, getHollyTradeStats, queryHollyTrades } from "../holly/trade-importer.js";
+import { runExitAutopsy } from "../holly/exit-autopsy.js";
 import { queryHollyAlerts, getHollyAlertStats, getLatestHollySymbols, querySignals, getSignalStats } from "../db/database.js";
 
 const log = logger.child({ module: "agent" });
@@ -371,6 +375,86 @@ const actions: Record<string, ActionHandler> = {
   holly_stats: async () => getHollyAlertStats(),
   holly_symbols: async (p) => { const symbols = getLatestHollySymbols(num(p, "limit", 20)); return { count: symbols.length, symbols }; },
 
+  // ── Holly Pre-Alert Predictor ──
+  holly_predictor_status: async () => getPredictorStatus(),
+  holly_predictor_profiles: async (p) => {
+    const profiles = getProfiles();
+    if (profiles.length === 0) refreshProfiles(num(p, "min_samples", 5));
+    return { count: getProfiles().length, profiles: getProfiles() };
+  },
+  holly_predictor_scan: async (p) => {
+    const symbol = str(p, "symbol");
+    if (!symbol) throw new Error("symbol is required");
+    return scanSymbol(symbol, num(p, "threshold", 50));
+  },
+  holly_predictor_scan_batch: async (p) => {
+    const symbols = p.symbols as string[] | undefined;
+    if (!symbols || !Array.isArray(symbols) || symbols.length === 0) throw new Error("symbols array is required");
+    return scanSymbols(symbols, num(p, "threshold", 50));
+  },
+  holly_predictor_candidates: async (p) => {
+    const symbols = p.symbols as string[] | undefined;
+    return getPreAlertCandidates({
+      symbols: symbols && symbols.length > 0 ? symbols : undefined,
+      threshold: num(p, "threshold", 50),
+      limit: num(p, "limit", 20),
+    });
+  },
+  holly_predictor_refresh: async (p) => refreshProfiles(num(p, "min_samples", 5)),
+
+  // ── Holly Reverse-Engineering & Backtest ──
+  holly_extract_rules: async (p) => {
+    const rules = extractRules({
+      minAlerts: num(p, "min_alerts", 5),
+      minSeparation: num(p, "min_separation", 0.3),
+      since: str(p, "since") || undefined,
+    });
+    return { strategy_count: rules.length, total_rules: rules.reduce((s, r) => s + r.rules.length, 0), rule_sets: rules };
+  },
+  holly_backtest: async (p) => {
+    const symbols = p.symbols as string[] | undefined;
+    return runBacktest({
+      days: num(p, "days", 180),
+      symbols: symbols && symbols.length > 0 ? symbols : undefined,
+      minMatchScore: num(p, "min_match_score", 0.6),
+      since: str(p, "since") || undefined,
+      until: str(p, "until") || undefined,
+    });
+  },
+  holly_strategy_breakdown: async (p) => getStrategyBreakdown({
+    since: str(p, "since") || undefined,
+  }),
+
+  // ── Holly Trade Data ──
+  holly_trade_import: async (p) => {
+    const csv = str(p, "csv");
+    if (!csv) throw new Error("csv content is required");
+    return importHollyTrades(csv);
+  },
+  holly_trade_import_file: async (p) => {
+    const filePath = str(p, "file_path");
+    if (!filePath) throw new Error("file_path is required");
+    return importHollyTradesFromFile(filePath);
+  },
+  holly_trade_stats: async () => getHollyTradeStats(),
+  holly_trades: async (p) => {
+    const trades = queryHollyTrades({
+      symbol: str(p, "symbol") || undefined,
+      strategy: str(p, "strategy") || undefined,
+      segment: str(p, "segment") || undefined,
+      since: str(p, "since") || undefined,
+      until: str(p, "until") || undefined,
+      limit: num(p, "limit", 100),
+    });
+    return { count: trades.length, trades };
+  },
+
+  // ── Holly Exit Autopsy ──
+  holly_exit_autopsy: async (p) => runExitAutopsy({
+    since: str(p, "since") || undefined,
+    until: str(p, "until") || undefined,
+  }),
+
   // ── Signals / Auto-Eval ──
   signal_feed: async (p) => {
     const signals = querySignals({ symbol: str(p, "symbol") || undefined, direction: str(p, "direction") || undefined, limit: num(p, "limit", 50), since: str(p, "since") || undefined });
@@ -547,6 +631,28 @@ export const actionsMeta: Record<string, ActionMeta> = {
   holly_alerts: { description: "Query Holly AI alerts", params: ["symbol?", "strategy?", "since?", "limit?"] },
   holly_stats: { description: "Get Holly AI alert statistics" },
   holly_symbols: { description: "Get latest distinct symbols from Holly alerts", params: ["limit?"] },
+
+  // Holly Pre-Alert Predictor
+  holly_predictor_status: { description: "Get Holly predictor status (profiles built, strategies, sample count)" },
+  holly_predictor_profiles: { description: "Get feature distribution profiles learned from historical Holly alerts", params: ["min_samples?"] },
+  holly_predictor_scan: { description: "Scan a single symbol against Holly strategy profiles to detect pre-alert conditions", params: ["symbol", "threshold?"] },
+  holly_predictor_scan_batch: { description: "Scan multiple symbols against Holly profiles in parallel", params: ["symbols", "threshold?"] },
+  holly_predictor_candidates: { description: "Get top pre-alert candidates — symbols most likely to trigger Holly alerts soon", params: ["symbols?", "threshold?", "limit?"] },
+  holly_predictor_refresh: { description: "Rebuild Holly predictor profiles from latest data", params: ["min_samples?"] },
+
+  // Holly Reverse-Engineering & Backtest
+  holly_extract_rules: { description: "Reverse-engineer Holly trigger conditions: extract feature thresholds that distinguish Holly alerts from baseline evaluations", params: ["min_alerts?", "min_separation?", "since?"] },
+  holly_backtest: { description: "Backtest extracted Holly rules across any symbol universe and timeframe. Reports precision, win rate, Sharpe, P&L per strategy", params: ["days?", "symbols?", "min_match_score?", "since?", "until?"] },
+  holly_strategy_breakdown: { description: "Quick breakdown of each Holly strategy: defining features, separation, outcome P&L", params: ["since?"] },
+
+  // Holly Trade Data (historical Trade Ideas export)
+  holly_trade_import: { description: "Import Holly trade CSV content (Trade Ideas export format)", params: ["csv"] },
+  holly_trade_import_file: { description: "Import Holly trades from a file path on disk", params: ["file_path"] },
+  holly_trade_stats: { description: "Get Holly trade statistics (total, win rate, avg R, avg giveback, avg hold time)" },
+  holly_trades: { description: "Query Holly historical trades with MFE/MAE/giveback metrics", params: ["symbol?", "strategy?", "segment?", "since?", "until?", "limit?"] },
+
+  // Holly Exit Autopsy
+  holly_exit_autopsy: { description: "Full exit autopsy report: strategy leaderboard, MFE/MAE profiles, exit policy recommendations, time-of-day analysis, segment comparison", params: ["since?", "until?"] },
 
   // Signals / Auto-Eval
   signal_feed: { description: "Query evaluated signals from auto-eval pipeline", params: ["symbol?", "direction?", "since?", "limit?"] },
