@@ -34,6 +34,7 @@ const NAV_ITEMS = [
   { href: "/executions", label: "Executions", icon: Receipt },
   { href: "/signals", label: "Signals", icon: Zap },
   { href: "/model-stats", label: "Model Stats", icon: BarChart3 },
+  { href: "/drift", label: "Drift Monitor", icon: Activity },
   { href: "/weights", label: "Weights", icon: SlidersHorizontal },
   { href: "/orders", label: "Orders", icon: ShoppingCart },
   { href: "/account", label: "Account", icon: Wallet },
