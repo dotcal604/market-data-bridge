@@ -6,6 +6,7 @@ import { computeDriftReport, type DriftReport } from "./eval/drift.js";
 import { checkDriftAlerts } from "./eval/drift-alerts.js";
 import { pruneInbox } from "./inbox/store.js";
 import { config } from "./config.js";
+import { checkTunnelHealth } from "./ops/tunnel-monitor.js";
 import { logger } from "./logging.js";
 
 const log = logger.child({ subsystem: "scheduler" });
@@ -13,6 +14,7 @@ const log = logger.child({ subsystem: "scheduler" });
 let snapshotTimer: ReturnType<typeof setInterval> | null = null;
 let flattenTimer: ReturnType<typeof setInterval> | null = null;
 let pruneTimer: ReturnType<typeof setInterval> | null = null;
+let tunnelCheckTimer: ReturnType<typeof setInterval> | null = null;
 let flattenFiredToday = "";
 let lastPruneDate = "";
 
@@ -256,6 +258,7 @@ function checkPrune() {
 
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const FLATTEN_CHECK_MS = 30 * 1000;         // check every 30s (tight window)
+const TUNNEL_CHECK_MS = 5 * 60 * 1000;      // check tunnel every 5 minutes
 
 export function startScheduler(intervalMs: number = DEFAULT_INTERVAL_MS) {
   if (snapshotTimer) return;
@@ -296,6 +299,18 @@ export function startScheduler(intervalMs: number = DEFAULT_INTERVAL_MS) {
     setTimeout(checkPrune, 30_000);
     log.info({ ttlDays: config.inbox.ttlDays }, "Inbox prune scheduler armed — daily cleanup");
   }
+
+  // Start tunnel health monitoring (5-min interval)
+  if (!tunnelCheckTimer) {
+    tunnelCheckTimer = setInterval(() => {
+      checkTunnelHealth().catch((err) => log.error({ err }, "Tunnel health check error (swallowed)"));
+    }, TUNNEL_CHECK_MS);
+    // Run first check after 30s (give tunnel time to settle on startup)
+    setTimeout(() => {
+      checkTunnelHealth().catch((err) => log.error({ err }, "Initial tunnel health check error (swallowed)"));
+    }, 30_000);
+    log.info({ intervalMin: TUNNEL_CHECK_MS / 60_000 }, "Tunnel health monitor armed — checking every 5 min");
+  }
 }
 
 export function stopScheduler() {
@@ -314,6 +329,10 @@ export function stopScheduler() {
   if (pruneTimer) {
     clearInterval(pruneTimer);
     pruneTimer = null;
+  }
+  if (tunnelCheckTimer) {
+    clearInterval(tunnelCheckTimer);
+    tunnelCheckTimer = null;
   }
   log.info("Scheduler stopped");
 }
