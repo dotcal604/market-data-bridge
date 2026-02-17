@@ -9,6 +9,7 @@
  * max profit times, exit metrics — everything needed for the exit autopsy.
  */
 
+import { readFileSync } from "node:fs";
 import { getDb } from "../db/database.js";
 import { logger } from "../logging.js";
 
@@ -111,7 +112,8 @@ export function ensureHollyTradesTable(): void {
       giveback_ratio REAL,    -- giveback / max_profit (0-1, lower=better)
       time_to_mfe_min REAL,   -- minutes from entry to max profit
       time_to_mae_min REAL,   -- minutes from entry to min profit
-      r_multiple REAL,        -- closed_profit / |entry - stop| (if stop exists)
+      r_multiple REAL,        -- actual_pnl / risk (if stop exists)
+      actual_pnl REAL,        -- (exit_price - entry_price) * shares (per-trade, not cumulative)
       import_batch TEXT,
       imported_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(symbol, entry_time, strategy)
@@ -248,13 +250,17 @@ function computeDerived(t: HollyTrade): Record<string, number | null> {
     ? (exitMs - entryMs) / 60000
     : null;
 
-  // MFE / MAE
+  // Actual per-trade P&L (CSV "closed_profit" is cumulative, NOT per-trade)
+  const shares = t.shares || 100;
+  const actualPnl = (t.exit_price - t.entry_price) * shares;
+
+  // MFE / MAE (these are per-trade dollar amounts from Trade Ideas)
   const mfe = t.max_profit;
   const mae = t.min_profit;
 
-  // Giveback
-  const giveback = mfe != null ? mfe - (t.closed_profit ?? 0) : null;
-  const givebackRatio = mfe != null && mfe > 0 && giveback != null
+  // Giveback = how much was left on the table (MFE - actual P&L)
+  const giveback = mfe != null ? mfe - actualPnl : null;
+  const givebackRatio = mfe != null && mfe > 0 && giveback != null && giveback >= 0
     ? giveback / mfe
     : null;
 
@@ -272,12 +278,12 @@ function computeDerived(t: HollyTrade): Record<string, number | null> {
     if (Number.isFinite(maeMs)) timeToMae = (maeMs - entryMs) / 60000;
   }
 
-  // R-multiple
+  // R-multiple = actual P&L / risk per share * shares
   let rMultiple: number | null = null;
-  if (t.stop_price != null && t.entry_price > 0 && t.closed_profit != null) {
-    const risk = Math.abs(t.entry_price - t.stop_price);
+  if (t.stop_price != null && t.entry_price > 0) {
+    const risk = Math.abs(t.entry_price - t.stop_price) * shares;
     if (risk > 0) {
-      rMultiple = t.closed_profit / (risk * (t.shares || 100));
+      rMultiple = actualPnl / risk;
     }
   }
 
@@ -290,6 +296,7 @@ function computeDerived(t: HollyTrade): Record<string, number | null> {
     time_to_mfe_min: timeToMfe != null ? Math.round(timeToMfe * 10) / 10 : null,
     time_to_mae_min: timeToMae != null ? Math.round(timeToMae * 10) / 10 : null,
     r_multiple: rMultiple != null ? Math.round(rMultiple * 1000) / 1000 : null,
+    actual_pnl: Math.round(actualPnl * 100) / 100,
   };
 }
 
@@ -324,7 +331,7 @@ export function importHollyTrades(csvContent: string, batchId?: string): TradeIm
       segment, change_from_entry_pct, long_term_profit, long_term_profit_pct,
       hold_minutes, mfe, mae, giveback, giveback_ratio,
       time_to_mfe_min, time_to_mae_min, r_multiple,
-      import_batch
+      actual_pnl, import_batch
     ) VALUES (
       ?, ?, ?, ?, ?, ?,
       ?, ?, ?,
@@ -337,7 +344,7 @@ export function importHollyTrades(csvContent: string, batchId?: string): TradeIm
       ?, ?, ?, ?,
       ?, ?, ?, ?, ?,
       ?, ?, ?,
-      ?
+      ?, ?
     )
   `);
 
@@ -373,7 +380,7 @@ export function importHollyTrades(csvContent: string, batchId?: string): TradeIm
           derived.hold_minutes, derived.mfe, derived.mae,
           derived.giveback, derived.giveback_ratio,
           derived.time_to_mfe_min, derived.time_to_mae_min, derived.r_multiple,
-          batch,
+          derived.actual_pnl, batch,
         );
 
         if (result.changes > 0) imported++;
@@ -395,8 +402,7 @@ export function importHollyTrades(csvContent: string, batchId?: string): TradeIm
  * Import Holly trades from a file path.
  */
 export function importHollyTradesFromFile(filePath: string, batchId?: string): TradeImportResult {
-  const fs = require("node:fs");
-  const content = fs.readFileSync(filePath, "utf-8");
+  const content = readFileSync(filePath, "utf-8");
   // Strip BOM if present
   const clean = content.charCodeAt(0) === 0xFEFF ? content.slice(1) : content;
   return importHollyTrades(clean, batchId);
@@ -416,9 +422,9 @@ export function getHollyTradeStats(): Record<string, unknown> {
       MIN(entry_time) as earliest_trade,
       MAX(entry_time) as latest_trade,
       ROUND(AVG(hold_minutes), 1) as avg_hold_minutes,
-      ROUND(AVG(closed_profit), 2) as avg_closed_profit,
-      ROUND(SUM(closed_profit), 2) as total_closed_profit,
-      ROUND(AVG(CASE WHEN closed_profit > 0 THEN 1.0 ELSE 0.0 END) * 100, 1) as win_rate_pct,
+      ROUND(AVG(actual_pnl), 2) as avg_pnl,
+      ROUND(SUM(actual_pnl), 2) as total_pnl,
+      ROUND(AVG(CASE WHEN actual_pnl > 0 THEN 1.0 ELSE 0.0 END) * 100, 1) as win_rate_pct,
       ROUND(AVG(giveback), 2) as avg_giveback,
       ROUND(AVG(giveback_ratio), 3) as avg_giveback_ratio,
       ROUND(AVG(time_to_mfe_min), 1) as avg_time_to_mfe_min,

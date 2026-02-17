@@ -25,7 +25,7 @@ export interface StrategyLeaderboard {
   strategy: string;
   total_trades: number;
   win_rate: number;
-  avg_closed_profit: number;
+  avg_pnl: number;
   total_profit: number;
   avg_r_multiple: number | null;
   avg_hold_minutes: number;
@@ -126,16 +126,16 @@ function buildStrategyLeaderboard(opts: {
     SELECT
       strategy,
       COUNT(*) as total_trades,
-      ROUND(AVG(CASE WHEN closed_profit > 0 THEN 1.0 ELSE 0.0 END), 3) as win_rate,
-      ROUND(AVG(closed_profit), 2) as avg_closed_profit,
-      ROUND(SUM(closed_profit), 2) as total_profit,
+      ROUND(AVG(CASE WHEN actual_pnl > 0 THEN 1.0 ELSE 0.0 END), 3) as win_rate,
+      ROUND(AVG(actual_pnl), 2) as avg_pnl,
+      ROUND(SUM(actual_pnl), 2) as total_profit,
       ROUND(AVG(r_multiple), 3) as avg_r_multiple,
       ROUND(AVG(hold_minutes), 1) as avg_hold_minutes,
       ROUND(AVG(giveback), 2) as avg_giveback,
       ROUND(AVG(giveback_ratio), 3) as avg_giveback_ratio,
       ROUND(AVG(time_to_mfe_min), 1) as avg_time_to_mfe_min,
-      MAX(closed_profit) as max_win,
-      MIN(closed_profit) as max_loss
+      MAX(actual_pnl) as max_win,
+      MIN(actual_pnl) as max_loss
     FROM holly_trades
     ${where}
     GROUP BY strategy
@@ -145,12 +145,12 @@ function buildStrategyLeaderboard(opts: {
 
   return rows.map((r) => {
     const profits = db.prepare(`
-      SELECT closed_profit, hold_minutes FROM holly_trades
+      SELECT actual_pnl, hold_minutes FROM holly_trades
       WHERE strategy = ? ${conditions.length > 0 ? "AND " + conditions.join(" AND ") : ""}
-      ORDER BY closed_profit
-    `).all(r.strategy, ...params) as Array<{ closed_profit: number; hold_minutes: number }>;
+      ORDER BY actual_pnl
+    `).all(r.strategy, ...params) as Array<{ actual_pnl: number; hold_minutes: number }>;
 
-    const pValues = profits.map((p) => p.closed_profit).filter((v) => v != null);
+    const pValues = profits.map((p) => p.actual_pnl).filter((v) => v != null);
     const holdValues = profits.map((p) => p.hold_minutes).filter((v) => v != null);
 
     // Sharpe
@@ -175,7 +175,7 @@ function buildStrategyLeaderboard(opts: {
       strategy: r.strategy as string,
       total_trades: r.total_trades as number,
       win_rate: r.win_rate as number,
-      avg_closed_profit: r.avg_closed_profit as number,
+      avg_pnl: r.avg_pnl as number,
       total_profit: r.total_profit as number,
       avg_r_multiple: r.avg_r_multiple as number | null,
       avg_hold_minutes: r.avg_hold_minutes as number,
@@ -303,8 +303,8 @@ function buildTimeOfDayAnalysis(opts: {
     SELECT
       CAST(substr(entry_time, 12, 2) AS INTEGER) as hour,
       COUNT(*) as total_trades,
-      ROUND(AVG(CASE WHEN closed_profit > 0 THEN 1.0 ELSE 0.0 END), 3) as win_rate,
-      ROUND(AVG(closed_profit), 2) as avg_profit,
+      ROUND(AVG(CASE WHEN actual_pnl > 0 THEN 1.0 ELSE 0.0 END), 3) as win_rate,
+      ROUND(AVG(actual_pnl), 2) as avg_profit,
       ROUND(AVG(r_multiple), 3) as avg_r_multiple,
       ROUND(AVG(giveback_ratio), 3) as avg_giveback_ratio
     FROM holly_trades
@@ -342,12 +342,12 @@ function buildSegmentComparison(opts: {
     SELECT
       COALESCE(segment, 'Unknown') as segment,
       COUNT(*) as total_trades,
-      ROUND(AVG(CASE WHEN closed_profit > 0 THEN 1.0 ELSE 0.0 END), 3) as win_rate,
-      ROUND(AVG(closed_profit), 2) as avg_profit,
+      ROUND(AVG(CASE WHEN actual_pnl > 0 THEN 1.0 ELSE 0.0 END), 3) as win_rate,
+      ROUND(AVG(actual_pnl), 2) as avg_profit,
       ROUND(AVG(r_multiple), 3) as avg_r_multiple,
       ROUND(AVG(giveback_ratio), 3) as avg_giveback_ratio,
       ROUND(AVG(hold_minutes), 1) as avg_hold_minutes,
-      ROUND(SUM(closed_profit), 2) as total_profit
+      ROUND(SUM(actual_pnl), 2) as total_profit
     FROM holly_trades
     ${where}
     GROUP BY segment
@@ -392,9 +392,9 @@ export function runExitAutopsy(opts: {
       MAX(entry_time) as end_date,
       COUNT(DISTINCT symbol) as unique_symbols,
       COUNT(DISTINCT strategy) as unique_strategies,
-      ROUND(AVG(CASE WHEN closed_profit > 0 THEN 1.0 ELSE 0.0 END), 3) as win_rate,
+      ROUND(AVG(CASE WHEN actual_pnl > 0 THEN 1.0 ELSE 0.0 END), 3) as win_rate,
       ROUND(AVG(r_multiple), 3) as avg_r,
-      ROUND(SUM(closed_profit), 2) as total_profit,
+      ROUND(SUM(actual_pnl), 2) as total_profit,
       ROUND(AVG(giveback_ratio), 3) as avg_giveback_ratio
     FROM holly_trades
     ${where}
