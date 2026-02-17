@@ -30,4 +30,12 @@ export const config = {
     dedupWindowMin: parseInt(process.env.AUTO_EVAL_DEDUP_WINDOW_MIN ?? "5", 10),
     maxConcurrent: parseInt(process.env.AUTO_EVAL_MAX_CONCURRENT ?? "3", 10),
   },
+  orchestrator: {
+    weights: {
+      gpt: parseFloat(process.env.ORCHESTRATOR_WEIGHT_GPT ?? "0.4"),
+      gemini: parseFloat(process.env.ORCHESTRATOR_WEIGHT_GEMINI ?? "0.3"),
+      claude: parseFloat(process.env.ORCHESTRATOR_WEIGHT_CLAUDE ?? "0.3"),
+    },
+    requiredAgreement: parseFloat(process.env.ORCHESTRATOR_REQUIRED_AGREEMENT ?? "0.6"),
+  },
 };

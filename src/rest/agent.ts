@@ -75,6 +75,8 @@ import {
   getOptimizationSummary, getDefaultParamSets,
 } from "../holly/trailing-stop-optimizer.js";
 import { queryHollyAlerts, getHollyAlertStats, getLatestHollySymbols, querySignals, getSignalStats } from "../db/database.js";
+import { z } from "zod";
+import { orchestrator, getConsensusVerdict, formatDisagreements, ProviderScoresSchema } from "../orchestrator.js";
 
 const log = logger.child({ module: "agent" });
 
@@ -101,6 +103,13 @@ function requireIBKR(): void {
 
 const KNOWN_RISK_KEYS = new Set<RiskConfigParam>(Object.keys(RISK_CONFIG_DEFAULTS) as RiskConfigParam[]);
 const VALID_DECISION_TYPES = new Set(["took_trade", "passed_setup", "ensemble_no", "risk_gate_blocked"]);
+const MultiModelScoreParamsSchema = z.object({
+  symbol: z.string().min(1),
+  features: z.record(z.unknown()).default({}),
+});
+const MultiModelConsensusParamsSchema = z.object({
+  scores: ProviderScoresSchema,
+});
 
 const actions: Record<string, ActionHandler> = {
   // ── System ──
@@ -515,6 +524,19 @@ const actions: Record<string, ActionHandler> = {
     setAutoEvalEnabled(enabled);
     return getAutoEvalStatus();
   },
+
+  // ── Multi-model orchestration ──
+  multi_model_score: async (p) => {
+    const parsed = MultiModelScoreParamsSchema.parse(p);
+    return orchestrator.collectEnsembleScores(parsed.symbol, parsed.features);
+  },
+  multi_model_consensus: async (p) => {
+    const parsed = MultiModelConsensusParamsSchema.parse(p);
+    return {
+      consensus: getConsensusVerdict(parsed.scores),
+      disagreements: formatDisagreements(parsed.scores),
+    };
+  },
 };
 
 // ── Dispatcher ───────────────────────────────────────────────────
@@ -716,6 +738,10 @@ export const actionsMeta: Record<string, ActionMeta> = {
   signal_stats: { description: "Get signal statistics (total, tradeable, blocked)" },
   auto_eval_status: { description: "Get auto-eval pipeline status (enabled, running, config)" },
   auto_eval_toggle: { description: "Enable or disable auto-eval pipeline", params: ["enabled"] },
+
+  // Multi-model orchestration
+  multi_model_score: { description: "Collect weighted scores from GPT, Gemini, and Claude providers", params: ["symbol", "features?"] },
+  multi_model_consensus: { description: "Return weighted consensus verdict and disagreement notes from provider scores", params: ["scores"] },
 };
 
 /**
