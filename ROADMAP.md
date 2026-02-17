@@ -35,12 +35,13 @@ Every backlog item is scored on 5 dimensions (1-5 scale):
 ## Current State
 
 - **Backend**: 68 REST endpoints, 75 MCP tools, 10 SQLite tables, 3-model eval engine
-- **Frontend**: 18 pages — Dashboard, Evals, Model Stats, Weights, Journal, Executions, Orders, Account, Collab, Market (symbol lookup, price chart, news/earnings, screener)
-- **Tests**: 284 passing (22 test files) — Vitest + in-memory SQLite
+- **Frontend**: 20 pages — Dashboard, Evals, Model Stats, Weights, Journal (+ timeline), Executions, Orders, Account, Collab, Market (symbol lookup, price chart, news/earnings, screener, options chain), Holly (performance, autopsy), Session
+- **Tests**: 1079 passing (55 test files) — Vitest + in-memory SQLite
 - **SDK versions**: @anthropic-ai/sdk 0.74, openai 6.21, @google/genai 1.0, @stoqey/ib 1.5.3
 - **MCP transport**: Streamable HTTP at `/mcp` for ChatGPT connector (session management, 30-min idle TTL)
-- **Hardening**: Input validation on order routes, symbol regex, crash handlers, safe JSON parsing
-- **Analytics**: Python scaffold ready (`analytics/db_loader.py`, `requirements.txt`). 4 Codex issues created (#56-59)
+- **Slash commands**: 16 Claude Code commands in `.claude/commands/` (trading, market data, dev, analytics)
+- **Hardening**: Input validation on order routes, symbol regex, crash handlers, safe JSON parsing, TWS version check
+- **Analytics**: Python scaffold with 5 scripts (`calibration.py`, `regime.py`, `agreement.py`, `weights.py`, `holly_rules.py`)
 - **IBKR coverage**: Market data, news, historical ticks, data wrappers (13 methods), prompt caching, Yahoo recommendations
 
 ---
