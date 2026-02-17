@@ -12,7 +12,7 @@ import { handleAgentRequest, getActionCatalog } from "./agent.js";
 import { config } from "../config.js";
 import { requestLogger, logRest } from "../logging.js";
 import { isConnected, getConnectionStatus } from "../ibkr/connection.js";
-import { isDbWritable } from "../db/database.js";
+import { isDbWritable, insertMcpSession, updateMcpSessionActivity, closeMcpSession, getActiveMcpSessions } from "../db/database.js";
 import { createMcpServer } from "../mcp/server.js";
 import { initWebSocket } from "../ws/server.js";
 import { getMetrics, getRecentIncidents } from "../ops/metrics.js";
@@ -112,7 +112,9 @@ function configureFrontendStaticHosting(app: express.Express): void {
 // Sessions are keyed by the Mcp-Session-Id header.
 const mcpSessions = new Map<string, StreamableHTTPServerTransport>();
 const SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes idle timeout
+const KEEPALIVE_INTERVAL_MS = 60 * 1000; // 60 seconds keepalive ping
 const sessionTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const keepaliveIntervals = new Map<string, ReturnType<typeof setInterval>>();
 
 function touchSession(sessionId: string): void {
   const existing = sessionTimers.get(sessionId);
@@ -126,9 +128,26 @@ function touchSession(sessionId: string): void {
         void transport.close();
         mcpSessions.delete(sessionId);
         sessionTimers.delete(sessionId);
+        const keepalive = keepaliveIntervals.get(sessionId);
+        if (keepalive) {
+          clearInterval(keepalive);
+          keepaliveIntervals.delete(sessionId);
+        }
+        closeMcpSession(sessionId);
       }
     }, SESSION_TTL_MS),
   );
+}
+
+// Log session recovery info on startup
+function logSessionRecovery(): void {
+  const activeSessions = getActiveMcpSessions();
+  if (activeSessions.length > 0) {
+    logRest.info(
+      { count: activeSessions.length, sessions: activeSessions.map(s => s.id) },
+      "Session recovery: ${count} sessions were active before restart — clients will need to reconnect"
+    );
+  }
 }
 
 // NOTE: Do NOT register process.on("uncaughtException"/"unhandledRejection") here.
@@ -137,6 +156,9 @@ function touchSession(sessionId: string): void {
 
 export function createApp(): express.Express {
   const app = express();
+
+  // Log session recovery on startup
+  logSessionRecovery();
 
   app.use(cors());
   app.use(express.json());
@@ -264,6 +286,16 @@ export function createApp(): express.Express {
       onsessioninitialized: (id: string) => {
         mcpSessions.set(id, newTransport);
         touchSession(id);
+        insertMcpSession(id, "http");
+        
+        // Start keepalive ping (every 60s) for SSE connection
+        const keepalive = setInterval(() => {
+          // SSE keepalive is handled automatically by the transport
+          // We just need to update activity tracking in DB
+          updateMcpSessionActivity(id);
+        }, KEEPALIVE_INTERVAL_MS);
+        keepaliveIntervals.set(id, keepalive);
+        
         logRest.info({ sessionId: id, total: mcpSessions.size }, "MCP session created");
       },
       onsessionclosed: (id: string) => {
@@ -271,6 +303,10 @@ export function createApp(): express.Express {
         const timer = sessionTimers.get(id);
         if (timer) clearTimeout(timer);
         sessionTimers.delete(id);
+        const keepalive = keepaliveIntervals.get(id);
+        if (keepalive) clearInterval(keepalive);
+        keepaliveIntervals.delete(id);
+        closeMcpSession(id);
         logRest.info({ sessionId: id, total: mcpSessions.size }, "MCP session closed");
       },
     });

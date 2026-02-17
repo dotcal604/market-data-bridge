@@ -147,6 +147,20 @@ async function main() {
   if (mode === "mcp" || mode === "both") {
     const mcpServer = createMcpServer();
     const transport = new StdioServerTransport();
+    
+    // Add error handlers for stdio transport
+    process.stdin.on("error", (err) => {
+      logger.error({ err: err.message }, "MCP stdin error — attempting graceful shutdown");
+      // Don't exit immediately — let shutdown handler run
+      shutdown().catch((e) => logger.error({ err: e }, "Shutdown error after stdin failure"));
+    });
+
+    process.stdout.on("error", (err) => {
+      logger.error({ err: err.message }, "MCP stdout error — attempting graceful shutdown");
+      // Don't exit immediately — let shutdown handler run
+      shutdown().catch((e) => logger.error({ err: e }, "Shutdown error after stdout failure"));
+    });
+
     await mcpServer.connect(transport);
     logger.info("MCP server running on stdio");
   }
