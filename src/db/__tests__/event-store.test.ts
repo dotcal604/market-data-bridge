@@ -767,6 +767,10 @@ describe('EventStore', () => {
     });
 
     it('should handle zero timestamp (treated as falsy, uses Date.now())', () => {
+      // NOTE: This documents current implementation behavior where 0 is treated as falsy.
+      // Zero is a valid Unix timestamp (Jan 1, 1970 00:00:00 UTC), so ideally
+      // the implementation should use `?? Date.now()` instead of `|| Date.now()`
+      // to only fallback for null/undefined. This is a known limitation.
       const event: TradingEvent = {
         type: 'OrderPlaced',
         payload: {
@@ -931,34 +935,6 @@ describe('EventStore', () => {
   });
 
   describe('Unsubscribe and Listener Management', () => {
-    it('should not call listeners after they are removed (if unsubscribe implemented)', () => {
-      // Note: Current implementation does not have unsubscribe.
-      // This test documents the expected behavior if it were added.
-      const listener = vi.fn();
-      eventStore.subscribe(listener);
-
-      const event1: TradingEvent = {
-        type: 'OrderPlaced',
-        payload: {
-          orderId: 'order-1',
-          symbol: 'AAPL',
-          side: 'BUY',
-          quantity: 100,
-          orderType: 'MKT',
-          strategyId: 'strat-1',
-          timestamp: Date.now(),
-        },
-      };
-
-      eventStore.publish(event1);
-      expect(listener).toHaveBeenCalledTimes(1);
-
-      // If unsubscribe were implemented:
-      // eventStore.unsubscribe(listener);
-      // eventStore.publish(event1);
-      // expect(listener).toHaveBeenCalledTimes(1); // Still just 1
-    });
-
     it('should handle duplicate listener subscriptions', () => {
       const listener = vi.fn();
       

@@ -1403,6 +1403,11 @@ describe('ReadModelStore', () => {
     });
 
     it('should handle negative prices', () => {
+      // NOTE: The current implementation accepts negative prices without validation.
+      // In financial markets, negative prices are rare but possible (e.g., negative oil prices
+      // in April 2020, or certain derivative strategies). This test documents that the system
+      // does not reject negative prices. If price validation is needed, it should be added
+      // at the order placement level, not in the read model projection.
       eventStore.publish({
         type: 'OrderPlaced',
         payload: {
@@ -1747,6 +1752,12 @@ describe('ReadModelStore', () => {
     });
 
     it('should handle regime changes with confidence > 1', () => {
+      // NOTE: Confidence is typically a probability bounded between 0 and 1.
+      // The current implementation accepts values > 1 without validation.
+      // This test documents that behavior. If strict validation is needed,
+      // it should be added at the regime shift event generation level.
+      // Some ML models or custom confidence metrics may intentionally use
+      // scales beyond [0,1], so this flexibility may be by design.
       eventStore.publish({
         type: 'RegimeShifted',
         payload: {
