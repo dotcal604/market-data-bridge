@@ -102,3 +102,36 @@ export class OrderBookFeatures {
     return absoluteImbalanceSum / totalVolumeSum;
   }
 }
+
+/**
+ * Adapter function to convert IBKR MarketDepthSnapshot to OrderBookState.
+ * This bridges the gap between IBKR market data format and our feature computation format.
+ */
+export function marketDepthToOrderBook(snapshot: {
+  symbol: string;
+  bids: Array<{ price: number; size: number; marketMaker?: string }>;
+  asks: Array<{ price: number; size: number; marketMaker?: string }>;
+  timestamp: number;
+}): OrderBookState {
+  return {
+    symbol: snapshot.symbol,
+    bids: snapshot.bids.map((level) => [level.price, level.size] as [number, number]),
+    asks: snapshot.asks.map((level) => [level.price, level.size] as [number, number]),
+    timestamp: snapshot.timestamp,
+  };
+}
+
+/**
+ * Compute all order book features from a single snapshot.
+ * Convenience function that calculates OBI, WOBI for a given book state.
+ * Note: VPIN requires historical trade flow data and cannot be computed from a single snapshot.
+ */
+export function computeOrderBookFeatures(book: OrderBookState, depth: number = 5): {
+  obi: number;
+  wobi: number;
+} {
+  return {
+    obi: OrderBookFeatures.calculateOBI(book),
+    wobi: OrderBookFeatures.calculateWOBI(book, depth),
+  };
+}

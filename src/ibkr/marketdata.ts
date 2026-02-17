@@ -290,3 +290,136 @@ export async function getHistoricalTicks(
     ib.reqHistoricalTicks(reqId, contract, startTime, endTime, count, type, 1, false);
   });
 }
+
+export interface MarketDepthLevel {
+  price: number;
+  size: number;
+  marketMaker?: string;
+}
+
+export interface MarketDepthSnapshot {
+  symbol: string;
+  bids: MarketDepthLevel[];
+  asks: MarketDepthLevel[];
+  timestamp: number;
+}
+
+/**
+ * Subscribe to Level 2 market depth for a symbol.
+ * Returns a snapshot after collecting initial depth data.
+ * 
+ * @param symbol - Stock symbol
+ * @param numRows - Number of depth levels to request (max 10 for stocks)
+ * @param timeoutMs - Timeout in milliseconds (default 5000)
+ */
+export async function getMarketDepth(
+  symbol: string,
+  numRows: number = 10,
+  timeoutMs: number = 5000,
+): Promise<MarketDepthSnapshot> {
+  if (!isConnected()) {
+    throw new Error("IBKR not connected. Start TWS/Gateway for market depth data.");
+  }
+
+  const ib = getIB();
+  const reqId = getNextReqId();
+
+  const contract: Contract = {
+    symbol,
+    secType: "STK" as any,
+    exchange: "SMART",
+    currency: "USD",
+  };
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const bids: Map<number, MarketDepthLevel> = new Map();
+    const asks: Map<number, MarketDepthLevel> = new Map();
+
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      ib.cancelMktDepth(reqId, false);
+
+      // Convert maps to sorted arrays
+      const bidLevels = Array.from(bids.values()).sort((a, b) => b.price - a.price);
+      const askLevels = Array.from(asks.values()).sort((a, b) => a.price - b.price);
+
+      resolve({
+        symbol: symbol.toUpperCase(),
+        bids: bidLevels,
+        asks: askLevels,
+        timestamp: Date.now(),
+      });
+    }, timeoutMs);
+
+    const onUpdateMktDepth = (
+      id: number,
+      position: number,
+      operation: number,
+      side: number,
+      price: number,
+      size: number,
+    ) => {
+      if (id !== reqId) return;
+
+      // side: 0 = ask, 1 = bid
+      // operation: 0 = insert, 1 = update, 2 = delete
+      const targetMap = side === 1 ? bids : asks;
+
+      if (operation === 2) {
+        // Delete
+        targetMap.delete(position);
+      } else {
+        // Insert or Update
+        targetMap.set(position, { price, size });
+      }
+    };
+
+    const onUpdateMktDepthL2 = (
+      id: number,
+      position: number,
+      marketMaker: string,
+      operation: number,
+      side: number,
+      price: number,
+      size: number,
+      isSmartDepth: boolean,
+    ) => {
+      if (id !== reqId) return;
+
+      const targetMap = side === 1 ? bids : asks;
+
+      if (operation === 2) {
+        targetMap.delete(position);
+      } else {
+        targetMap.set(position, { price, size, marketMaker });
+      }
+    };
+
+    const onError = (err: Error, code: ErrorCode, id: number) => {
+      if (id !== reqId) return;
+      if (isNonFatalError(code, err)) return;
+      if (settled) return;
+      settled = true;
+      cleanup();
+      ib.cancelMktDepth(reqId, false);
+      reject(new Error(`Market depth error (${code}): ${err.message}`));
+    };
+
+    const cleanup = () => {
+      clearTimeout(timeout);
+      ib.off(EventName.updateMktDepth, onUpdateMktDepth);
+      ib.off(EventName.updateMktDepthL2, onUpdateMktDepthL2);
+      ib.off(EventName.error, onError);
+    };
+
+    ib.on(EventName.updateMktDepth, onUpdateMktDepth);
+    ib.on(EventName.updateMktDepthL2, onUpdateMktDepthL2);
+    ib.on(EventName.error, onError);
+
+    log.info({ reqId, symbol, numRows }, "Requesting IBKR market depth (Level 2)");
+    ib.reqMktDepth(reqId, contract, numRows, false, []);
+  });
+}
