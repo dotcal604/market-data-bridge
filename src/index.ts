@@ -15,6 +15,7 @@ import { startScheduler, stopScheduler } from "./scheduler.js";
 import { initWeights } from "./eval/ensemble/weights.js";
 import { unsubscribeAll } from "./ibkr/subscriptions.js";
 import { startHollyWatcher, stopHollyWatcher } from "./holly/watcher.js";
+import { startDivoomUpdater, stopDivoomUpdater } from "./divoom/updater.js";
 import { config } from "./config.js";
 import { validateConfig } from "./config-validator.js";
 
@@ -82,6 +83,10 @@ async function main() {
   // Runs independently of IBKR — watches a local CSV file
   startHollyWatcher();
 
+  // Start Divoom display updater (sends live trading data to pixel art display)
+  // Runs independently — polls data and updates display periodically
+  await startDivoomUpdater();
+
   // Start REST server
   if (mode === "rest" || mode === "both") {
     await startRestServer();
@@ -96,9 +101,10 @@ async function main() {
   }
 
   // Graceful shutdown
-  const shutdown = () => {
+  const shutdown = async () => {
     logger.info("Shutting down...");
     stopHollyWatcher();
+    await stopDivoomUpdater();
     stopScheduler();
     unsubscribeAll();
     disconnect();
