@@ -7,6 +7,8 @@ import ReactMarkdown from "react-markdown";
 
 interface MessageCardProps {
   message: CollabMessage;
+  depth?: number;
+  onTagClick?: (tag: string) => void;
 }
 
 function getAuthorBadgeStyles(author: string) {
@@ -43,10 +45,16 @@ function formatRelativeTime(timestamp: string): string {
   return `${diffDays}d ago`;
 }
 
-export function MessageCard({ message }: MessageCardProps) {
+export function MessageCard({ message, depth = 0, onTagClick }: MessageCardProps) {
+  const marginLeft = depth > 0 ? `${depth * 2}rem` : undefined;
+  const showReplyIndicator = depth > 0;
+
   return (
-    <Card className="p-4">
+    <Card className="p-4" style={{ marginLeft }}>
       <div className="flex items-start gap-3">
+        {showReplyIndicator && (
+          <div className="text-muted-foreground text-lg">↳</div>
+        )}
         <div className="flex-1 min-w-0">
           {/* Header */}
           <div className="flex items-center gap-2 mb-2 flex-wrap">
@@ -56,7 +64,7 @@ export function MessageCard({ message }: MessageCardProps) {
             <span className="text-xs text-muted-foreground">
               {formatRelativeTime(message.timestamp)}
             </span>
-            {message.replyTo && (
+            {message.replyTo && depth === 0 && (
               <span className="text-xs text-muted-foreground">
                 ↩ replying to...
               </span>
@@ -72,7 +80,12 @@ export function MessageCard({ message }: MessageCardProps) {
           {message.tags && message.tags.length > 0 && (
             <div className="flex gap-1 mt-3 flex-wrap">
               {message.tags.map((tag, idx) => (
-                <Badge key={idx} variant="secondary" className="text-xs">
+                <Badge 
+                  key={idx} 
+                  variant="secondary" 
+                  className="text-xs cursor-pointer hover:bg-secondary/80 transition-colors"
+                  onClick={() => onTagClick?.(tag)}
+                >
                   {tag}
                 </Badge>
               ))}
