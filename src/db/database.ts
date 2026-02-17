@@ -359,6 +359,22 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_signals_eval ON signals(evaluation_id);
 `);
 
+// ── Inbox (event buffer for ChatGPT polling) ────────────────────────────
+db.exec(`
+  CREATE TABLE IF NOT EXISTS inbox (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL,
+    symbol TEXT,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    read INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_inbox_type ON inbox(type);
+  CREATE INDEX IF NOT EXISTS idx_inbox_read ON inbox(read);
+  CREATE INDEX IF NOT EXISTS idx_inbox_created ON inbox(created_at);
+`);
+
 // ── Eval-Execution Auto-Links ────────────────────────────────────────────
 db.exec(`
   CREATE TABLE IF NOT EXISTS eval_execution_links (
@@ -591,6 +607,17 @@ const stmts = {
       AND datetime(created_at) > datetime(@cutoff_time)
     LIMIT 1
   `),
+
+  // Inbox
+  insertInbox: db.prepare(`
+    INSERT INTO inbox (id, type, symbol, title, body, created_at)
+    VALUES (@id, @type, @symbol, @title, @body, @created_at)
+  `),
+  getRecentInbox: db.prepare(`SELECT * FROM inbox ORDER BY created_at DESC LIMIT ?`),
+  markInboxRead: db.prepare(`UPDATE inbox SET read = 1 WHERE id = ?`),
+  markAllInboxRead: db.prepare(`UPDATE inbox SET read = 1 WHERE read = 0`),
+  deleteAllInbox: db.prepare(`DELETE FROM inbox`),
+  countInbox: db.prepare(`SELECT COUNT(*) as total, SUM(CASE WHEN read = 0 THEN 1 ELSE 0 END) as unread FROM inbox`),
 };
 
 // ── Helper Functions ─────────────────────────────────────────────────────
@@ -718,6 +745,60 @@ export function loadRecentCollab(limit: number = 200): Array<{
 export function clearCollabDb(): number {
   const info = stmts.deleteAllCollab.run();
   return info.changes;
+}
+
+// ── Inbox DB Helpers ──────────────────────────────────────────────────────
+
+export interface InboxItemRow {
+  id: string;
+  type: string;
+  symbol: string | null;
+  title: string;
+  body: string;
+  read: number;
+  created_at: string;
+}
+
+export function insertInboxItem(item: {
+  id: string;
+  type: string;
+  symbol?: string | null;
+  title: string;
+  body: string;
+  created_at: string;
+}): void {
+  stmts.insertInbox.run({
+    id: item.id,
+    type: item.type,
+    symbol: item.symbol ?? null,
+    title: item.title,
+    body: typeof item.body === "string" ? item.body : JSON.stringify(item.body),
+    created_at: item.created_at,
+  });
+}
+
+export function loadRecentInbox(limit: number = 500): InboxItemRow[] {
+  const rows = stmts.getRecentInbox.all(limit) as InboxItemRow[];
+  return rows.reverse(); // oldest first
+}
+
+export function markInboxItemRead(id: string): void {
+  stmts.markInboxRead.run(id);
+}
+
+export function markAllInboxItemsRead(): number {
+  const info = stmts.markAllInboxRead.run();
+  return info.changes;
+}
+
+export function clearInboxDb(): number {
+  const info = stmts.deleteAllInbox.run();
+  return info.changes;
+}
+
+export function getInboxCounts(): { total: number; unread: number } {
+  const row = stmts.countInbox.get() as { total: number; unread: number };
+  return { total: row.total ?? 0, unread: row.unread ?? 0 };
 }
 
 export function insertPositionSnapshot(positions: any[], source: string = "reconcile") {

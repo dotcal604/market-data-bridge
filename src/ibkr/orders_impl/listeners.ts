@@ -13,6 +13,7 @@ import {
 } from "../../db/database.js";
 import { tryLinkExecution, schedulePositionCloseCheck } from "../../eval/auto-link.js";
 import { logOrder, logExec } from "../../logging.js";
+import { appendInboxItem } from "../../inbox/store.js";
 
 let persistentListenersAttached = false;
 
@@ -39,6 +40,20 @@ export function attachPersistentOrderListeners() {
       if (!existing) return; // Order not in our DB (placed externally)
       dbUpdateOrderStatus(orderId, status, filled, avgFillPrice || undefined);
       logOrder.info({ orderId, status, filled, remaining, avgFillPrice }, "Order status updated");
+
+      // Inbox: notify on terminal statuses
+      if (status === "Filled" || status === "Cancelled") {
+        try {
+          const sym = (existing as any).symbol ?? "???";
+          const action = (existing as any).action ?? "";
+          appendInboxItem({
+            type: "order_status",
+            symbol: sym,
+            title: `${action} ${sym} ${status}` + (status === "Filled" ? ` @ ${avgFillPrice}` : ""),
+            body: { orderId, status, filled, remaining, avgFillPrice, action },
+          });
+        } catch { /* non-fatal */ }
+      }
     } catch (e: any) {
       logOrder.error({ err: e, orderId, status }, "Failed to update order status in DB");
     }
@@ -91,6 +106,15 @@ export function attachPersistentOrderListeners() {
       // Auto-link: schedule position close check when IBKR reports realized PNL
       if (report.realizedPNL != null && report.realizedPNL < 1e307) {
         schedulePositionCloseCheck(execId, report.realizedPNL);
+
+        // Inbox: notify on fills with realized PNL
+        try {
+          appendInboxItem({
+            type: "fill",
+            title: `Fill: PNL $${report.realizedPNL.toFixed(2)} (comm $${(report.commission ?? 0).toFixed(2)})`,
+            body: { execId, commission: report.commission, realizedPnl: report.realizedPNL },
+          });
+        } catch { /* non-fatal */ }
       }
     } catch (e: any) {
       logExec.error({ err: e, execId: report.execId }, "Failed to update commission in DB");

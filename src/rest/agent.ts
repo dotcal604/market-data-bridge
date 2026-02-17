@@ -31,6 +31,7 @@ import {
   reqMktDepthExchanges, reqPnLSingleBySymbol, reqSmartComponents,
 } from "../ibkr/data.js";
 import { readMessages, postMessage, clearMessages, getStats } from "../collab/store.js";
+import { readInbox, markRead, markAllRead, clearInbox, getInboxStats } from "../inbox/store.js";
 import { getGptInstructions } from "./gpt-instructions.js";
 import { checkRisk, getSessionState, recordTradeResult, lockSession, unlockSession, resetSession, getRiskGateConfig } from "../ibkr/risk-gate.js";
 import { calculatePositionSize } from "../ibkr/risk.js";
@@ -352,6 +353,32 @@ const actions: Record<string, ActionHandler> = {
   collab_post: async (p) => postMessage({ author: "chatgpt", content: str(p, "content"), tags: p.tags as string[] | undefined, replyTo: str(p, "replyTo") || undefined }),
   collab_clear: async () => clearMessages(),
   collab_stats: async () => getStats(),
+
+  // ── Inbox (event buffer for ChatGPT polling) ──
+  check_inbox: async (p) => {
+    const items = readInbox({
+      since: str(p, "since") || undefined,
+      type: str(p, "type") || undefined,
+      symbol: str(p, "symbol") || undefined,
+      unreadOnly: p.unread_only !== undefined ? bool(p, "unread_only") : undefined,
+      limit: num(p, "limit", 50),
+    });
+    const stats = getInboxStats();
+    return { total: stats.total, unread: stats.unread, count: items.length, items };
+  },
+  mark_inbox_read: async (p) => {
+    if (bool(p, "all")) {
+      const count = markAllRead();
+      return { marked: count };
+    }
+    const id = str(p, "id");
+    const ids = Array.isArray(p.ids) ? (p.ids as string[]) : id ? [id] : [];
+    if (ids.length === 0) throw new Error("Provide id, ids[], or all: true");
+    const count = markRead(ids);
+    return { marked: count };
+  },
+  clear_inbox: async () => clearInbox(),
+  inbox_stats: async () => getInboxStats(),
 
   // ── Trade Journal ──
   journal_read: async (p) => queryJournal({ symbol: str(p, "symbol") || undefined, strategy: str(p, "strategy") || undefined, limit: num(p, "limit", 100) }),
@@ -743,6 +770,12 @@ export const actionsMeta: Record<string, ActionMeta> = {
   collab_post: { description: "Post a collaboration message", params: ["content", "tags?", "replyTo?"] },
   collab_clear: { description: "Clear all collaboration messages" },
   collab_stats: { description: "Get collaboration statistics" },
+
+  // Inbox (event buffer for ChatGPT polling)
+  check_inbox: { description: "Check inbox for recent events (fills, signals, drift alerts, order status). Poll this at conversation start.", params: ["since?", "type?", "symbol?", "unread_only?", "limit?"] },
+  mark_inbox_read: { description: "Mark inbox items as read", params: ["id?", "ids?", "all?"] },
+  clear_inbox: { description: "Clear all inbox items" },
+  inbox_stats: { description: "Get inbox statistics (total, unread, breakdown by type)" },
 
   // Trade Journal
   journal_read: { description: "Read trade journal entries", params: ["symbol?", "strategy?", "limit?"] },

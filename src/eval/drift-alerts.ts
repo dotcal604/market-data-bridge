@@ -1,5 +1,6 @@
 import { getDb, insertDriftAlert, getRecentDriftAlerts as dbGetRecentDriftAlerts } from "../db/database.js";
 import { config } from "../config.js";
+import { appendInboxItem } from "../inbox/store.js";
 import type { DriftReport } from "./drift.js";
 
 export interface DriftAlert {
@@ -80,6 +81,21 @@ export function checkDriftAlerts(report: DriftReport): DriftAlert[] {
   const db = getDb();
   for (const alert of alerts) {
     insertDriftAlert(alert, db);
+
+    // Inbox: notify on drift alerts
+    try {
+      appendInboxItem({
+        type: "drift_alert",
+        title: `Drift: ${alert.alert_type}` + (alert.model_id ? ` (${alert.model_id})` : ""),
+        body: {
+          alert_type: alert.alert_type,
+          model_id: alert.model_id,
+          metric_value: alert.metric_value,
+          threshold: alert.threshold,
+          message: alert.message,
+        },
+      });
+    } catch { /* non-fatal */ }
   }
 
   return alerts;

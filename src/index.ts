@@ -8,6 +8,7 @@ import { createMcpServer } from "./mcp/server.js";
 import { startRestServer } from "./rest/server.js";
 import { logger, pruneOldLogs } from "./logging.js";
 import { initCollabFromDb } from "./collab/store.js";
+import { initInboxFromDb } from "./inbox/store.js";
 import { attachPersistentOrderListeners, resetPersistentListenerGuard } from "./ibkr/orders.js";
 import { runReconciliation } from "./db/reconcile.js";
 import { closeDb } from "./db/database.js";
@@ -51,6 +52,9 @@ async function main() {
 
   // Initialize DB-backed collab store (loads persisted messages)
   initCollabFromDb();
+
+  // Initialize inbox store (loads persisted event buffer for ChatGPT polling)
+  initInboxFromDb();
 
   // Initialize eval ensemble weights (loads from data/weights.json + hot-reload)
   initWeights();

@@ -29,9 +29,9 @@ export function wsBroadcast(channel: string, data: unknown): void {
   if (_broadcast) _broadcast(channel, data);
 }
 const HEARTBEAT_INTERVAL_MS = 30_000;
-const VALID_CHANNELS = new Set(["positions", "orders", "account", "executions", "signals", "status"]);
+const VALID_CHANNELS = new Set(["positions", "orders", "account", "executions", "signals", "status", "inbox"]);
 
-type ChannelName = "positions" | "orders" | "account" | "executions" | "signals" | "status";
+type ChannelName = "positions" | "orders" | "account" | "executions" | "signals" | "status" | "inbox";
 
 interface AuthMessage { type: "auth"; apiKey: string }
 interface SubscribeMessage { type: "subscribe"; channel: string }

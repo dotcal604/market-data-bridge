@@ -22,6 +22,7 @@ import {
   insertEvaluation, insertModelOutput, insertEvalReasoning,
   getRecentOutcomes, hasRecentEvalForSymbol, insertSignal, getHollyAlertsByBatch,
 } from "../db/database.js";
+import { appendInboxItem } from "../inbox/store.js";
 import type { ImportResult } from "./importer.js";
 import type { FeatureVector } from "../eval/features/types.js";
 
@@ -281,6 +282,21 @@ async function runSingleEval(
     ensemble_score: ensemble.trade_score, should_trade: ensemble.should_trade,
     evaluation_id: id, alert_time: alert.alert_time, latency_ms: totalLatency,
   });
+
+  // Inbox: notify on ensemble signals (full eval only, not prefilter blocks)
+  try {
+    const verdict = ensemble.should_trade ? "TRADE" : "NO TRADE";
+    appendInboxItem({
+      type: "signal",
+      symbol,
+      title: `${symbol} ${direction.toUpperCase()} → ${verdict} (score ${ensemble.trade_score.toFixed(1)})`,
+      body: {
+        signal_id: signalId, evaluation_id: id, direction,
+        strategy: alert.strategy, ensemble_score: ensemble.trade_score,
+        should_trade: ensemble.should_trade, latency_ms: totalLatency,
+      },
+    });
+  } catch { /* non-fatal */ }
 }
 
 // Export for testing

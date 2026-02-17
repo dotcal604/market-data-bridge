@@ -7,7 +7,7 @@ describe("Action Catalog", () => {
       // Get all action keys from the catalog
       const catalogKeys = Object.keys(actionsMeta).sort();
       
-      // Expected actions based on the actions object (94 total)
+      // Expected actions based on the actions object (98 total)
       const expectedActions = [
         "auto_eval_status",
         "auto_eval_toggle",
@@ -16,6 +16,8 @@ describe("Action Catalog", () => {
         "calculate_option_price",
         "cancel_all_orders",
         "cancel_order",
+        "check_inbox",
+        "clear_inbox",
         "collab_clear",
         "collab_post",
         "collab_read",
@@ -87,11 +89,13 @@ describe("Action Catalog", () => {
         "holly_trade_stats",
         "holly_trades",
         "holly_exit_autopsy",
+        "inbox_stats",
         "journal_create",
         "journal_get",
         "journal_read",
         "journal_update",
         "list_subscriptions",
+        "mark_inbox_read",
         "modify_order",
         "multi_model_consensus",
         "multi_model_score",
