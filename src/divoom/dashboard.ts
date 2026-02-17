@@ -38,6 +38,14 @@ export interface MarketStatus {
   qqqChange?: number;
 }
 
+export interface RecentTrade {
+  symbol: string;
+  quantity: number;
+  price: number;
+  side: "BUY" | "SELL";
+  timestamp: string;
+}
+
 /**
  * Format P&L display with color coding
  */
@@ -107,7 +115,8 @@ export function buildDashboard(
   pnlData: PnLData,
   positions: Position[],
   hollyAlert: HollyAlert | null,
-  marketStatus: MarketStatus
+  marketStatus: MarketStatus,
+  recentTrade: RecentTrade | null
 ): DashboardData {
   return {
     pnl: pnlData.totalPnL,
@@ -119,13 +128,24 @@ export function buildDashboard(
       avgPrice: p.avgPrice,
       currentPrice: p.currentPrice,
     })),
-    hollyAlert: hollyAlert ? {
-      symbol: hollyAlert.symbol,
-      strategy: hollyAlert.strategy,
-      entryPrice: hollyAlert.entryPrice,
-    } : undefined,
+    hollyAlert: hollyAlert
+      ? {
+          symbol: hollyAlert.symbol,
+          strategy: hollyAlert.strategy,
+          entryPrice: hollyAlert.entryPrice,
+        }
+      : undefined,
     spy: marketStatus.spy,
     qqq: marketStatus.qqq,
+    recentTrade: recentTrade
+      ? {
+          symbol: recentTrade.symbol,
+          quantity: recentTrade.quantity,
+          price: recentTrade.price,
+          side: recentTrade.side,
+          timestamp: recentTrade.timestamp,
+        }
+      : undefined,
   };
 }
 
