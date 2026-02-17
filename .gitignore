@@ -9,6 +9,7 @@ data/*.db
 data/*.db-wal
 data/*.db-shm
 data/logs/
+error.log
 
 # Artifacts / junk
 NUL
@@ -17,6 +18,11 @@ NUL
 # Test coverage
 coverage/
 .vitest/
+
+# IDE/Editor/Agent configs
+.claude/
+.grok/
+.mcp.json
 
 # Python analytics venv
 analytics/.venv/
