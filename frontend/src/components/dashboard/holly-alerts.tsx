@@ -20,10 +20,7 @@ export function HollyAlerts() {
   if (error) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle>Holly AI Alerts</CardTitle>
-        </CardHeader>
-        <CardContent>
+        <CardContent className="py-6">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <AlertCircle className="h-4 w-4" />
             <span>Failed to load alerts</span>
@@ -36,7 +33,6 @@ export function HollyAlerts() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Holly AI Alerts</CardTitle>
         <p className="text-sm text-muted-foreground">
           Recent Trade Ideas alerts (auto-refresh every 30s)
         </p>
