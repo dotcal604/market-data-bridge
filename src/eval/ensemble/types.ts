@@ -1,3 +1,10 @@
+export interface RegimeWeights {
+  claude: number;
+  gpt4o: number;
+  gemini: number;
+  k: number;
+}
+
 export interface EnsembleWeights {
   claude: number;
   gpt4o: number;
@@ -6,6 +13,10 @@ export interface EnsembleWeights {
   updated_at: string;
   sample_size: number;
   source: string;
+  regime_overrides?: {
+    high?: RegimeWeights;
+    low?: RegimeWeights;
+  };
 }
 
 export interface EnsembleScore {

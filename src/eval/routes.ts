@@ -120,8 +120,8 @@ evalRouter.post("/evaluate", async (req, res) => {
       symbol, direction, entry_price, stop_price, modelFeatures,
     );
 
-    // Step 4: Compute ensemble
-    const ensemble = computeEnsemble(evaluations);
+    // Step 4: Compute ensemble (with regime-conditioned weights)
+    const ensemble = computeEnsemble(evaluations, features.volatility_regime);
 
     // Step 5: Run guardrails (inject DB function to avoid circular dep)
     const guardrail = runGuardrails(ensemble, getRecentOutcomes);

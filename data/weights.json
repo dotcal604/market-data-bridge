@@ -5,5 +5,19 @@
   "k": 1.5,
   "updated_at": "2026-02-12T00:00:00.000Z",
   "sample_size": 0,
-  "source": "default"
+  "source": "default",
+  "regime_overrides": {
+    "high": {
+      "claude": 0.40,
+      "gpt4o": 0.30,
+      "gemini": 0.30,
+      "k": 1.5
+    },
+    "low": {
+      "claude": 0.30,
+      "gpt4o": 0.40,
+      "gemini": 0.30,
+      "k": 0.5
+    }
+  }
 }
