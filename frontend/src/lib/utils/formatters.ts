@@ -2,6 +2,12 @@ export function formatScore(score: number): string {
   return score.toFixed(1);
 }
 
+export function formatExpiration(yyyymmdd: string): string {
+  // Convert YYYYMMDD to YYYY-MM-DD
+  if (yyyymmdd.length !== 8) return yyyymmdd;
+  return `${yyyymmdd.slice(0, 4)}-${yyyymmdd.slice(4, 6)}-${yyyymmdd.slice(6, 8)}`;
+}
+
 export function formatPercent(value: number, decimals = 1): string {
   return `${(value * 100).toFixed(decimals)}%`;
 }

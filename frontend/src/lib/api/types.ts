@@ -433,3 +433,26 @@ export interface FlattenResult {
   skipped: Array<{ symbol: string; reason: string }>;
   error?: string;
 }
+
+// Options types
+export interface OptionContract {
+  contractSymbol: string;
+  strike: number;
+  expiration: string;
+  type: "C" | "P";
+  lastPrice: number | null;
+  bid: number | null;
+  ask: number | null;
+  volume: number | null;
+  openInterest: number | null;
+  impliedVolatility: number | null;
+  inTheMoney: boolean;
+}
+
+export interface OptionsChainData {
+  symbol: string;
+  expirations: string[];
+  strikes: number[];
+  calls: OptionContract[];
+  puts: OptionContract[];
+}
