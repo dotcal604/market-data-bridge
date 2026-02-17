@@ -56,14 +56,15 @@ async function main() {
 
     // Start periodic snapshots (account + positions every 5 min during market hours)
     startScheduler();
-
-    // Start Holly AI alert file watcher (polls Trade Ideas CSV export)
-    startHollyWatcher();
   } catch (e: any) {
     logger.warn({ err: e.message }, "IBKR not available — market data still works via Yahoo");
     logger.info("Will keep retrying IBKR connection in background...");
     scheduleReconnect();
   }
+
+  // Start Holly AI alert file watcher (polls Trade Ideas CSV export)
+  // Runs independently of IBKR — watches a local CSV file
+  startHollyWatcher();
 
   // Start REST server
   if (mode === "rest" || mode === "both") {

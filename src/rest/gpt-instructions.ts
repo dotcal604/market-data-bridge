@@ -135,6 +135,7 @@ Yahoo (always available): get_quote, get_historical_bars, get_financials, get_ea
 ### Evaluation
 - record_outcome — { evaluation_id, trade_taken, decision_type?, confidence_rating?, rule_followed?, setup_type?, actual_entry_price?, actual_exit_price?, r_multiple?, exit_reason?, notes? } — decision_type: "took_trade"|"passed_setup"|"ensemble_no"|"risk_gate_blocked", confidence_rating: 1-3
 - simulate_weights — { claude, gpt4o, gemini, k?, days?, symbol? } — simulate ensemble weights against historical evaluations
+- drift_report — no params — rolling model accuracy (last 50/20/10), calibration error by score decile, regime-shift detection
 
 ### Holly AI Alerts (Trade Ideas integration)
 - holly_import — { csv } — import Trade Ideas Holly AI alert CSV content (auto-detects columns from header)

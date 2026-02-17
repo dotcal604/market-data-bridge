@@ -35,6 +35,7 @@ import { getGptInstructions } from "./gpt-instructions.js";
 import { checkRisk, getSessionState, recordTradeResult, lockSession, unlockSession, resetSession, getRiskGateConfig } from "../ibkr/risk-gate.js";
 import { calculatePositionSize } from "../ibkr/risk.js";
 import { tuneRiskParams } from "../eval/risk-tuning.js";
+import { computeDriftReport } from "../eval/drift.js";
 import { computeEnsembleWithWeights } from "../eval/ensemble/scorer.js";
 import { getWeights } from "../eval/ensemble/weights.js";
 import type { ModelEvaluation } from "../eval/models/types.js";
@@ -291,6 +292,8 @@ const actions: Record<string, ActionHandler> = {
       average_score_delta: rows.length > 0 ? Math.round(((simScoreSum - currentScoreSum) / rows.length) * 100) / 100 : 0,
     };
   },
+
+  drift_report: async () => computeDriftReport(),
 
   // ── Flatten Config ──
   get_flatten_config: async () => getFlattenConfig(),
