@@ -1,4 +1,4 @@
-import type { AccountSummaryResponse, PositionsResponse, FlattenConfig, FlattenResult } from "./types";
+import type { AccountSummaryResponse, PositionsResponse, FlattenConfig, FlattenResult, IntradayPnLResponse } from "./types";
 
 const API_BASE = "/api";
 
@@ -53,5 +53,9 @@ export const accountClient = {
 
   async flattenAllPositions(): Promise<FlattenResult> {
     return postJSON<FlattenResult>(`${API_BASE}/positions/flatten`);
+  },
+
+  async getIntradayPnL(): Promise<IntradayPnLResponse> {
+    return fetchJSON<IntradayPnLResponse>(`${API_BASE}/account/pnl/intraday`);
   },
 };
