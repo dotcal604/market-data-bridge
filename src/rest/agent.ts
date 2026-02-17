@@ -539,6 +539,41 @@ const actions: Record<string, ActionHandler> = {
       disagreements: formatDisagreements(parsed.scores),
     };
   },
+
+  // ── Divoom Display ──
+  divoom_status: async () => {
+    const { getDivoomDisplay } = await import("../divoom/updater.js");
+    const display = getDivoomDisplay();
+    if (!display) {
+      throw new Error("Divoom display not initialized. Check DIVOOM_ENABLED and DIVOOM_DEVICE_IP config.");
+    }
+    return display.getDeviceInfo();
+  },
+  divoom_send_text: async (p) => {
+    const { getDivoomDisplay } = await import("../divoom/updater.js");
+    const display = getDivoomDisplay();
+    if (!display) {
+      throw new Error("Divoom display not initialized. Check DIVOOM_ENABLED and DIVOOM_DEVICE_IP config.");
+    }
+    await display.sendText(str(p, "text"), {
+      color: str(p, "color") || undefined,
+      x: p.x != null ? num(p, "x") : undefined,
+      y: p.y != null ? num(p, "y") : undefined,
+      font: p.font != null ? num(p, "font") : undefined,
+      scrollSpeed: p.scrollSpeed != null ? num(p, "scrollSpeed") : undefined,
+    });
+    return { success: true, text: str(p, "text") };
+  },
+  divoom_set_brightness: async (p) => {
+    const { getDivoomDisplay } = await import("../divoom/updater.js");
+    const display = getDivoomDisplay();
+    if (!display) {
+      throw new Error("Divoom display not initialized. Check DIVOOM_ENABLED and DIVOOM_DEVICE_IP config.");
+    }
+    const brightness = num(p, "brightness");
+    await display.setBrightness(brightness);
+    return { success: true, brightness };
+  },
 };
 
 // ── Dispatcher ───────────────────────────────────────────────────
@@ -745,6 +780,11 @@ export const actionsMeta: Record<string, ActionMeta> = {
   // Multi-model orchestration
   multi_model_score: { description: "Collect weighted scores from GPT, Gemini, and Claude providers", params: ["symbol", "features?"] },
   multi_model_consensus: { description: "Return weighted consensus verdict and disagreement notes from provider scores", params: ["scores"] },
+
+  // Divoom Display
+  divoom_status: { description: "Check Divoom Times Gate display connection and get device info" },
+  divoom_send_text: { description: "Send text to Divoom Times Gate display", params: ["text", "color?", "x?", "y?", "font?", "scrollSpeed?"] },
+  divoom_set_brightness: { description: "Set Divoom Times Gate display brightness (0-100)", params: ["brightness"] },
 };
 
 /**

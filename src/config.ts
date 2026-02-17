@@ -38,4 +38,10 @@ export const config = {
     },
     requiredAgreement: parseFloat(process.env.ORCHESTRATOR_REQUIRED_AGREEMENT ?? "0.6"),
   },
+  divoom: {
+    enabled: process.env.DIVOOM_ENABLED === "true",
+    deviceIp: process.env.DIVOOM_DEVICE_IP ?? "",
+    refreshIntervalMs: parseInt(process.env.DIVOOM_REFRESH_MS ?? "10000", 10),
+    brightness: parseInt(process.env.DIVOOM_BRIGHTNESS ?? "80", 10),
+  },
 };
