@@ -11,6 +11,7 @@ describe("Action Catalog", () => {
       const expectedActions = [
         "auto_eval_status",
         "auto_eval_toggle",
+        "auto_link_stats",
         "calculate_implied_volatility",
         "calculate_option_price",
         "cancel_all_orders",

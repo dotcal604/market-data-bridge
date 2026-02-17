@@ -28,18 +28,34 @@ vi.mock("../../db/database.js", () => ({
   getOrderByOrderId: vi.fn(),
 }));
 
-vi.mock("../../logging.js", () => ({
-  logOrder: {
+vi.mock("../../logging.js", () => {
+  const mockChild = () => ({
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
-  },
-  logExec: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-}));
+    debug: vi.fn(),
+    child: mockChild,
+  });
+  return {
+    logOrder: {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    },
+    logExec: {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    },
+    logger: {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
+      child: mockChild,
+    },
+  };
+});
 
 describe("Order Validation and Advanced Brackets", () => {
   describe("validateOrder()", () => {

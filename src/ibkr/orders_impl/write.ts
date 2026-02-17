@@ -92,6 +92,7 @@ export async function placeOrder(params: PlaceOrderParams): Promise<PlaceOrderRe
       correlation_id: correlationId,
       journal_id: params.journal_id,
       parent_order_id: params.parentId,
+      eval_id: params.eval_id,
     });
     logOrder.info({ orderId, symbol: params.symbol, action: params.action, orderType: params.orderType, qty: params.totalQuantity, correlationId }, "Order recorded in DB");
   } catch (e: any) {
@@ -224,6 +225,7 @@ export async function placeBracketOrder(params: BracketOrderParams): Promise<Bra
     ai_confidence: params.ai_confidence,
     correlation_id: correlationId,
     journal_id: params.journal_id,
+    eval_id: params.eval_id,
   };
   try {
     insertOrder({ order_id: parentId, symbol: params.symbol, action: params.action, order_type: params.entryType, total_quantity: params.totalQuantity, lmt_price: params.entryPrice, sec_type: params.secType, exchange: params.exchange, currency: params.currency, ...dbFields });
@@ -392,6 +394,7 @@ export async function placeAdvancedBracket(params: AdvancedBracketParams): Promi
     ai_confidence: params.ai_confidence,
     correlation_id: correlationId,
     journal_id: params.journal_id,
+    eval_id: params.eval_id,
   };
   try {
     insertOrder({ order_id: parentId, symbol: params.symbol, action: params.action, order_type: params.entry.type, total_quantity: params.quantity, lmt_price: params.entry.price, sec_type: params.secType, exchange: params.exchange, currency: params.currency, ...dbFields });

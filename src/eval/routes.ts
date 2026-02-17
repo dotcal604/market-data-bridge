@@ -28,6 +28,8 @@ import {
   getTraderSyncTrades,
   getTraderSyncStats,
   getWeightHistory,
+  getAutoLinkStats,
+  getRecentLinks,
 } from "../db/database.js";
 import { importTraderSyncCSV } from "../tradersync/importer.js";
 import { computeDriftReport } from "./drift.js";
@@ -820,6 +822,16 @@ evalRouter.get("/:id/reasoning", (req, res) => {
 });
 
 // GET /:id — single evaluation with model outputs and outcome
+evalRouter.get("/auto-links", (_req, res) => {
+  try {
+    const stats = getAutoLinkStats();
+    const recent = getRecentLinks(20);
+    res.json({ stats, recent });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 evalRouter.get("/:id", (req, res) => {
   try {
     const evaluation = getEvaluationById(req.params.id);

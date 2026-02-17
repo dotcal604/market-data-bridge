@@ -93,6 +93,7 @@ export interface PlaceOrderParams {
   order_source?: string;
   ai_confidence?: number;
   journal_id?: number;
+  eval_id?: string;
 }
 
 export interface OrderValidationResult {
@@ -129,6 +130,7 @@ export interface BracketOrderParams {
   order_source?: string;
   ai_confidence?: number;
   journal_id?: number;
+  eval_id?: string;
 }
 
 export interface BracketOrderResult {
@@ -170,6 +172,7 @@ export interface AdvancedBracketParams {
   order_source?: string;
   ai_confidence?: number;
   journal_id?: number;
+  eval_id?: string;
 }
 
 export interface AdvancedBracketResult {

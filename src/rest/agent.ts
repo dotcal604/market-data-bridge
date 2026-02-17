@@ -74,7 +74,7 @@ import {
   runTrailingStopSimulation, runFullOptimization, runPerStrategyOptimization,
   getOptimizationSummary, getDefaultParamSets,
 } from "../holly/trailing-stop-optimizer.js";
-import { queryHollyAlerts, getHollyAlertStats, getLatestHollySymbols, querySignals, getSignalStats } from "../db/database.js";
+import { queryHollyAlerts, getHollyAlertStats, getLatestHollySymbols, querySignals, getSignalStats, getAutoLinkStats, getRecentLinks } from "../db/database.js";
 import { z } from "zod";
 import { orchestrator, getConsensusVerdict, formatDisagreements, ProviderScoresSchema } from "../orchestrator.js";
 import { applyTrailingStopToOrder, trailingStopRecommendation } from "../holly/trailing-stop-executor.js";
@@ -526,6 +526,11 @@ const actions: Record<string, ActionHandler> = {
     setAutoEvalEnabled(enabled);
     return getAutoEvalStatus();
   },
+  auto_link_stats: async () => {
+    const stats = getAutoLinkStats();
+    const recent = getRecentLinks(20);
+    return { stats, recent };
+  },
 
   // ── Multi-model orchestration ──
   multi_model_score: async (p) => {
@@ -776,6 +781,7 @@ export const actionsMeta: Record<string, ActionMeta> = {
   signal_stats: { description: "Get signal statistics (total, tradeable, blocked)" },
   auto_eval_status: { description: "Get auto-eval pipeline status (enabled, running, config)" },
   auto_eval_toggle: { description: "Enable or disable auto-eval pipeline", params: ["enabled"] },
+  auto_link_stats: { description: "Get evaluation-to-execution auto-link statistics and recent links" },
 
   // Multi-model orchestration
   multi_model_score: { description: "Collect weighted scores from GPT, Gemini, and Claude providers", params: ["symbol", "features?"] },

@@ -9,6 +9,7 @@ import {
   getLatestPositionSnapshot,
   updateOrderStatus,
 } from "./database.js";
+import { reconcileClosedPosition } from "../eval/auto-link.js";
 import { logReconcile } from "../logging.js";
 
 /**
@@ -103,6 +104,7 @@ export async function runReconciliation(): Promise<void> {
     for (const [symbol, qty] of lastMap) {
       if ((qty as number) !== 0 && !ibkrPositions.find((p) => p.symbol === symbol)) {
         logReconcile.info({ symbol, previousQty: qty }, "Position closed while offline");
+        reconcileClosedPosition(symbol);
       }
     }
   }

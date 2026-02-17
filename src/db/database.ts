@@ -354,6 +354,25 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_signals_eval ON signals(evaluation_id);
 `);
 
+// ── Eval-Execution Auto-Links ────────────────────────────────────────────
+db.exec(`
+  CREATE TABLE IF NOT EXISTS eval_execution_links (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    evaluation_id TEXT NOT NULL REFERENCES evaluations(id),
+    order_id INTEGER NOT NULL,
+    exec_id TEXT,
+    link_type TEXT NOT NULL,
+    confidence REAL,
+    symbol TEXT NOT NULL,
+    direction TEXT,
+    linked_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(evaluation_id, order_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_eel_eval ON eval_execution_links(evaluation_id);
+  CREATE INDEX IF NOT EXISTS idx_eel_order ON eval_execution_links(order_id);
+  CREATE INDEX IF NOT EXISTS idx_eel_symbol ON eval_execution_links(symbol);
+`);
+
 db.exec(RISK_CONFIG_SCHEMA_SQL);
 
 // ── Column Migrations (safe for existing DBs — silently ignored if column exists) ──
@@ -383,6 +402,9 @@ addColumnIfMissing("outcomes", "setup_type", "TEXT");
 // v5: Link evaluations to holly alerts for auto-eval tracking
 addColumnIfMissing("evaluations", "holly_alert_id", "INTEGER");
 
+// v6: Link orders to evaluations for auto-link tracking
+addColumnIfMissing("orders", "eval_id", "TEXT");
+
 // v4: risk config source label for older DBs that may have only param/value
 addColumnIfMissing("risk_config", "source", "TEXT NOT NULL DEFAULT 'manual'");
 addColumnIfMissing("risk_config", "updated_at", "TEXT NOT NULL DEFAULT (datetime('now'))");
@@ -410,8 +432,8 @@ ensureRiskConfigDefaults();
 const stmts = {
   // Orders
   insertOrder: db.prepare(`
-    INSERT INTO orders (order_id, symbol, action, order_type, total_quantity, lmt_price, aux_price, tif, sec_type, exchange, currency, status, strategy_version, order_source, ai_confidence, correlation_id, journal_id, parent_order_id)
-    VALUES (@order_id, @symbol, @action, @order_type, @total_quantity, @lmt_price, @aux_price, @tif, @sec_type, @exchange, @currency, @status, @strategy_version, @order_source, @ai_confidence, @correlation_id, @journal_id, @parent_order_id)
+    INSERT INTO orders (order_id, symbol, action, order_type, total_quantity, lmt_price, aux_price, tif, sec_type, exchange, currency, status, strategy_version, order_source, ai_confidence, correlation_id, journal_id, parent_order_id, eval_id)
+    VALUES (@order_id, @symbol, @action, @order_type, @total_quantity, @lmt_price, @aux_price, @tif, @sec_type, @exchange, @currency, @status, @strategy_version, @order_source, @ai_confidence, @correlation_id, @journal_id, @parent_order_id, @eval_id)
   `),
   updateOrderStatus: db.prepare(`
     UPDATE orders SET status = @status, filled_quantity = @filled_quantity, avg_fill_price = @avg_fill_price, updated_at = datetime('now')
@@ -439,6 +461,7 @@ const stmts = {
   `),
   queryExecutions: db.prepare(`SELECT * FROM executions ORDER BY timestamp DESC LIMIT ?`),
   queryExecutionsBySymbol: db.prepare(`SELECT * FROM executions WHERE symbol = ? ORDER BY timestamp DESC LIMIT ?`),
+  getExecutionByExecId: db.prepare(`SELECT * FROM executions WHERE exec_id = ?`),
 
   // Positions snapshots
   insertPositionSnapshot: db.prepare(`
@@ -512,6 +535,36 @@ const stmts = {
     GROUP BY model_id
   `),
 
+  // Eval-Execution Auto-Links
+  insertEvalExecutionLink: db.prepare(`
+    INSERT OR IGNORE INTO eval_execution_links (evaluation_id, order_id, exec_id, link_type, confidence, symbol, direction)
+    VALUES (@evaluation_id, @order_id, @exec_id, @link_type, @confidence, @symbol, @direction)
+  `),
+  getLinksForEval: db.prepare(`SELECT * FROM eval_execution_links WHERE evaluation_id = ?`),
+  getLinksForOrder: db.prepare(`SELECT * FROM eval_execution_links WHERE order_id = ?`),
+  getRecentEvalsForSymbol: db.prepare(`
+    SELECT id, symbol, direction, entry_price, stop_price, timestamp, ensemble_should_trade
+    FROM evaluations
+    WHERE symbol = ? AND timestamp >= ? AND prefilter_passed = 1
+    ORDER BY timestamp DESC
+  `),
+  getExecutionsByCorrelation: db.prepare(`SELECT * FROM executions WHERE correlation_id = ?`),
+  getAutoLinkStats: db.prepare(`
+    SELECT
+      COUNT(*) as total,
+      SUM(CASE WHEN link_type = 'explicit' THEN 1 ELSE 0 END) as explicit_links,
+      SUM(CASE WHEN link_type = 'heuristic' THEN 1 ELSE 0 END) as heuristic_links,
+      AVG(confidence) as avg_confidence
+    FROM eval_execution_links
+  `),
+  getRecentLinks: db.prepare(`
+    SELECT eel.*, e.ensemble_trade_score, e.ensemble_should_trade, e.direction as eval_direction
+    FROM eval_execution_links eel
+    LEFT JOIN evaluations e ON e.id = eel.evaluation_id
+    ORDER BY eel.linked_at DESC
+    LIMIT ?
+  `),
+
   // Drift alerts
   insertDriftAlert: db.prepare(`
     INSERT INTO drift_alerts (alert_type, model_id, metric_value, threshold, message, timestamp)
@@ -554,6 +607,7 @@ export function insertOrder(data: {
   correlation_id: string;
   journal_id?: number | null;
   parent_order_id?: number | null;
+  eval_id?: string | null;
 }) {
   return stmts.insertOrder.run({
     order_id: data.order_id,
@@ -574,6 +628,7 @@ export function insertOrder(data: {
     correlation_id: data.correlation_id,
     journal_id: data.journal_id ?? null,
     parent_order_id: data.parent_order_id ?? null,
+    eval_id: data.eval_id ?? null,
   });
 }
 
@@ -898,6 +953,68 @@ export function getEvalStats(): Record<string, unknown> {
     win_rate: totalTrades > 0 ? wins / totalTrades : null,
     model_stats: modelStats,
   };
+}
+
+// ── Eval-Execution Auto-Link Helpers ──────────────────────────────────────
+
+export function insertEvalExecutionLink(row: {
+  evaluation_id: string;
+  order_id: number;
+  exec_id?: string | null;
+  link_type: string;
+  confidence?: number | null;
+  symbol: string;
+  direction?: string | null;
+}): void {
+  stmts.insertEvalExecutionLink.run({
+    evaluation_id: row.evaluation_id,
+    order_id: row.order_id,
+    exec_id: row.exec_id ?? null,
+    link_type: row.link_type,
+    confidence: row.confidence ?? null,
+    symbol: row.symbol,
+    direction: row.direction ?? null,
+  });
+}
+
+export function getLinksForEval(evaluationId: string): Array<Record<string, unknown>> {
+  return stmts.getLinksForEval.all(evaluationId) as Array<Record<string, unknown>>;
+}
+
+export function getLinksForOrder(orderId: number): Array<Record<string, unknown>> {
+  return stmts.getLinksForOrder.all(orderId) as Array<Record<string, unknown>>;
+}
+
+export function getRecentEvalsForSymbol(symbol: string, since: string): Array<Record<string, unknown>> {
+  return stmts.getRecentEvalsForSymbol.all(symbol, since) as Array<Record<string, unknown>>;
+}
+
+export function getExecutionsByCorrelation(correlationId: string): Array<Record<string, unknown>> {
+  return stmts.getExecutionsByCorrelation.all(correlationId) as Array<Record<string, unknown>>;
+}
+
+export function getExecutionByExecId(execId: string): Record<string, unknown> | undefined {
+  return stmts.getExecutionByExecId.get(execId) as Record<string, unknown> | undefined;
+}
+
+export function getAutoLinkStats(): Record<string, unknown> {
+  const linkStats = stmts.getAutoLinkStats.get() as any ?? { total: 0, explicit_links: 0, heuristic_links: 0, avg_confidence: null };
+
+  // Count how many linked evals have recorded outcomes
+  const outcomeCount = db.prepare(`
+    SELECT COUNT(DISTINCT eel.evaluation_id) as count
+    FROM eval_execution_links eel
+    JOIN outcomes o ON o.evaluation_id = eel.evaluation_id
+  `).get() as { count: number };
+
+  return {
+    ...linkStats,
+    outcomes_recorded: outcomeCount?.count ?? 0,
+  };
+}
+
+export function getRecentLinks(limit: number = 20): Array<Record<string, unknown>> {
+  return stmts.getRecentLinks.all(limit) as Array<Record<string, unknown>>;
 }
 
 // ── Eval Outcomes (evals joined with outcomes for analytics) ──────────────

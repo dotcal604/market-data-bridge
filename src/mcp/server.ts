@@ -71,6 +71,8 @@ import {
   getLatestHollySymbols,
   querySignals,
   getSignalStats,
+  getAutoLinkStats,
+  getRecentLinks,
   getDb,
 } from "../db/database.js";
 import { computeDriftReport } from "../eval/drift.js";
@@ -1257,6 +1259,7 @@ export function createMcpServer(): McpServer {
       secType: z.string().optional().describe("Security type: STK (default), OPT, FUT"),
       exchange: z.string().optional().describe("Exchange: SMART (default)"),
       currency: z.string().optional().describe("Currency: USD (default)"),
+      eval_id: z.string().optional().describe("Evaluation ID to link this order to (for auto-link tracking)"),
     },
     async (params) => {
       if (!isConnected()) {
@@ -1297,6 +1300,7 @@ export function createMcpServer(): McpServer {
       secType: z.string().optional().describe("Security type: STK (default)"),
       exchange: z.string().optional().describe("Exchange: SMART (default)"),
       currency: z.string().optional().describe("Currency: USD (default)"),
+      eval_id: z.string().optional().describe("Evaluation ID to link this order to"),
     },
     async (params) => {
       if (!isConnected()) {
@@ -1345,6 +1349,7 @@ export function createMcpServer(): McpServer {
       secType: z.string().optional().describe("Security type: STK (default)"),
       exchange: z.string().optional().describe("Exchange: SMART (default)"),
       currency: z.string().optional().describe("Currency: USD (default)"),
+      eval_id: z.string().optional().describe("Evaluation ID to link this order to"),
     },
     async (params) => {
       if (!isConnected()) {
@@ -2551,6 +2556,18 @@ export function createMcpServer(): McpServer {
       setAutoEvalEnabled(params.enabled);
       const status = getAutoEvalStatus();
       return { content: [{ type: "text", text: JSON.stringify(status, null, 2) }] };
+    }
+  );
+
+  // --- Tool: auto_link_stats ---
+  server.tool(
+    "auto_link_stats",
+    "Get evaluation-to-execution auto-link statistics: total links, explicit vs heuristic, outcomes auto-recorded, and recent links.",
+    {},
+    async () => {
+      const stats = getAutoLinkStats();
+      const recent = getRecentLinks(10);
+      return { content: [{ type: "text", text: JSON.stringify({ stats, recent }, null, 2) }] };
     }
   );
 
