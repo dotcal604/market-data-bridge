@@ -7,7 +7,7 @@ describe("Action Catalog", () => {
       // Get all action keys from the catalog
       const catalogKeys = Object.keys(actionsMeta).sort();
       
-      // Expected actions based on the actions object (90 total)
+      // Expected actions based on the actions object (92 total)
       const expectedActions = [
         "calculate_implied_volatility",
         "calculate_option_price",
@@ -17,6 +17,8 @@ describe("Action Catalog", () => {
         "collab_post",
         "collab_read",
         "collab_stats",
+        "drift_alerts",
+        "drift_check",
         "drift_report",
         "executions_history",
         "flatten_positions",
@@ -104,8 +106,8 @@ describe("Action Catalog", () => {
       expect(catalogKeys).toEqual(expectedActions);
     });
 
-    it("has exactly 90 actions", () => {
-      expect(Object.keys(actionsMeta)).toHaveLength(90);
+    it("has exactly 92 actions", () => {
+      expect(Object.keys(actionsMeta)).toHaveLength(92);
     });
 
     it("every action has a non-empty description", () => {
@@ -276,7 +278,7 @@ describe("Action Catalog", () => {
 
     it("returns an object with all action metadata", () => {
       const catalog = getActionCatalog();
-      expect(Object.keys(catalog)).toHaveLength(90);
+      expect(Object.keys(catalog)).toHaveLength(92);
       
       for (const [action, meta] of Object.entries(catalog)) {
         expect(meta).toHaveProperty("description");

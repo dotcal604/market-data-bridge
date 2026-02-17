@@ -1,7 +1,7 @@
 /**
  * Agent dispatcher — single POST /api/agent endpoint that routes
  * { action, params } to internal handlers. Designed for ChatGPT Actions
- * so all 68+ tools fit in a single OpenAPI operation (no 30-op limit).
+ * so all 92 tools fit in a single OpenAPI operation (no 30-op limit).
  */
 import { Request, Response } from "express";
 import { getStatus } from "../providers/status.js";
@@ -478,7 +478,9 @@ export const actionsMeta: Record<string, ActionMeta> = {
   // Evaluation
   record_outcome: { description: "Record outcome for an evaluation", params: ["evaluation_id", "trade_taken", "decision_type?", "confidence_rating?", "rule_followed?", "setup_type?", "actual_entry_price?", "actual_exit_price?", "r_multiple?", "exit_reason?", "notes?"] },
   simulate_weights: { description: "Simulate ensemble weights against historical evaluations", params: ["claude", "gpt4o", "gemini", "k?", "days?", "symbol?"] },
-  drift_report: { description: "Get model drift report (accuracy, calibration, regime shifts)" },
+  drift_report: { description: "Rolling model accuracy (last 50/20/10), calibration error by score decile, regime-shift detection" },
+  drift_alerts: { description: "Recent drift alerts", params: ["limit?"] },
+  drift_check: { description: "Run drift check now and return any new alerts" },
 
   // Flatten Config
   get_flatten_config: { description: "Get EOD auto-flatten configuration" },
