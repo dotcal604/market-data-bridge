@@ -5,7 +5,8 @@ import {
   Order,
   isNonFatalError,
 } from "@stoqey/ib";
-import { getIB, getNextValidOrderId } from "./read.js"; // Reuse from read.js to avoid cycle/duplication? No, read.js exports it.
+import { getIB } from "../connection.js";
+import { getNextValidOrderId } from "./read.js";
 import {
   generateCorrelationId,
   insertOrder,
