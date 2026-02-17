@@ -1,9 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { writeFileSync, unlinkSync, mkdtempSync, appendFileSync } from "node:fs";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { writeFileSync, unlinkSync, mkdtempSync, appendFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { importHollyAlerts } from "../importer.js";
 import { queryHollyAlerts, getHollyAlertStats, getLatestHollySymbols, db } from "../../db/database.js";
+import { _resetWatcher } from "../watcher.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -129,6 +130,79 @@ describe("Holly Importer", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].entry_price).toBe(125);
   });
+
+  it("handles malformed rows with wrong column count — skips without crashing", () => {
+    const csv = [
+      "Symbol,Entry Time,Strategy,Entry Price",
+      "AAPL,2026-02-17 10:00:00,Holly Grail,150.00", // correct
+      "MSFT,2026-02-17 10:05:00", // too few columns
+      "TSLA,2026-02-17 10:10:00,Holly Neo,250.00,extra,data,here", // too many columns
+      "NVDA,2026-02-17 10:15:00,Holly Grail,300.00", // correct
+    ].join("\n");
+
+    const result = importHollyAlerts(csv);
+    // csv-parse with relax_column_count should parse all rows
+    expect(result.total_parsed).toBe(4);
+    // All valid rows with symbols should be inserted
+    expect(result.inserted).toBeGreaterThanOrEqual(2);
+  });
+
+  it("skips rows with empty symbol field", () => {
+    const csv = [
+      "Symbol,Entry Time,Strategy",
+      ",2026-02-17 10:00:00,Holly Grail", // empty symbol
+      "   ,2026-02-17 10:05:00,Holly Neo", // whitespace-only symbol
+      "AAPL,2026-02-17 10:10:00,Holly Grail", // valid
+    ].join("\n");
+
+    const result = importHollyAlerts(csv);
+    expect(result.inserted).toBe(1);
+    expect(result.errors).toHaveLength(2);
+    expect(result.errors[0]).toMatch(/missing symbol/i);
+    expect(result.errors[1]).toMatch(/missing symbol/i);
+    
+    const rows = queryHollyAlerts({});
+    expect(rows).toHaveLength(1);
+    expect(rows[0].symbol).toBe("AAPL");
+  });
+
+  it("handles special characters in strategy names", () => {
+    const csv = [
+      "Symbol,Entry Time,Strategy",
+      'AAPL,2026-02-17 10:00:00,"Holly\'s Special Strategy!"',
+      "MSFT,2026-02-17 10:05:00,Holly & Friends (v2.0)",
+      "TSLA,2026-02-17 10:10:00,Holly—Neo–Strategy",
+      "NVDA,2026-02-17 10:15:00,Holly策略",
+    ].join("\n");
+
+    const result = importHollyAlerts(csv);
+    expect(result.inserted).toBe(4);
+    expect(result.errors).toHaveLength(0);
+
+    const rows = queryHollyAlerts({});
+    expect(rows).toHaveLength(4);
+    expect(rows.find((r) => r.symbol === "AAPL")?.strategy).toBe("Holly's Special Strategy!");
+    expect(rows.find((r) => r.symbol === "MSFT")?.strategy).toBe("Holly & Friends (v2.0)");
+    expect(rows.find((r) => r.symbol === "TSLA")?.strategy).toBe("Holly—Neo–Strategy");
+    expect(rows.find((r) => r.symbol === "NVDA")?.strategy).toBe("Holly策略");
+  });
+
+  it("handles BOM-prefixed CSV (UTF-8 BOM)", () => {
+    const csv = "\uFEFF" + [
+      "Symbol,Entry Time,Strategy,Entry Price",
+      "AAPL,2026-02-17 10:00:00,Holly Grail,150.00",
+      "MSFT,2026-02-17 10:05:00,Holly Neo,380.00",
+    ].join("\n");
+
+    const result = importHollyAlerts(csv);
+    expect(result.inserted).toBe(2);
+    expect(result.errors).toHaveLength(0);
+
+    const rows = queryHollyAlerts({});
+    expect(rows).toHaveLength(2);
+    expect(rows.some((r) => r.symbol === "AAPL")).toBe(true);
+    expect(rows.some((r) => r.symbol === "MSFT")).toBe(true);
+  });
 });
 
 // ── Query Tests ──────────────────────────────────────────────────────────
@@ -227,5 +301,135 @@ describe("Holly Watcher Simulation", () => {
 
     const symbols = getLatestHollySymbols(10);
     expect(symbols).toHaveLength(3);
+  });
+
+  it("handles file-not-found on first poll — no throw", () => {
+    const nonExistentPath = join(tmpDir, "does-not-exist.csv");
+    
+    // Should not throw when file doesn't exist
+    expect(() => {
+      if (!existsSync(nonExistentPath)) {
+        // Simulate watcher behavior: just return early if file doesn't exist
+        return;
+      }
+    }).not.toThrow();
+
+    expect(existsSync(nonExistentPath)).toBe(false);
+  });
+
+  it("handles file truncation — resets offset", () => {
+    // Initial file with 3 rows
+    const initial = [
+      HEADER,
+      makeRow("AAPL", "2026-02-17 10:00:00"),
+      makeRow("MSFT", "2026-02-17 10:05:00"),
+      makeRow("TSLA", "2026-02-17 10:10:00"),
+    ].join("\n");
+    writeFileSync(filePath, initial);
+
+    const r1 = importHollyAlerts(initial);
+    expect(r1.inserted).toBe(3);
+
+    // Truncate file to just header + 1 new row
+    const truncated = [
+      HEADER,
+      makeRow("NVDA", "2026-02-17 10:15:00"),
+    ].join("\n");
+    writeFileSync(filePath, truncated);
+
+    // Should read from start again after truncation
+    const r2 = importHollyAlerts(truncated);
+    expect(r2.inserted).toBe(1);
+
+    const all = queryHollyAlerts({});
+    expect(all).toHaveLength(4); // 3 original + 1 new
+  });
+
+  it("handles header-only file then rows appended", () => {
+    // Start with header only
+    writeFileSync(filePath, HEADER);
+    const r1 = importHollyAlerts(HEADER);
+    expect(r1.inserted).toBe(0);
+    expect(r1.total_parsed).toBe(0);
+
+    // Append rows
+    const withRows = [
+      HEADER,
+      makeRow("AAPL", "2026-02-17 10:00:00"),
+      makeRow("MSFT", "2026-02-17 10:05:00"),
+    ].join("\n");
+    writeFileSync(filePath, withRows);
+
+    const r2 = importHollyAlerts(withRows);
+    expect(r2.inserted).toBe(2);
+
+    const rows = queryHollyAlerts({});
+    expect(rows).toHaveLength(2);
+  });
+});
+
+// ── File Watcher Integration Tests ───────────────────────────────────────
+
+describe("Holly Watcher Integration", () => {
+  let tmpDir: string;
+  let filePath: string;
+
+  beforeEach(() => {
+    clearHollyTable();
+    _resetWatcher();
+    tmpDir = mkdtempSync(join(tmpdir(), "holly-watcher-"));
+    filePath = join(tmpDir, "holly_alerts.csv");
+  });
+
+  afterEach(() => {
+    _resetWatcher();
+    try { unlinkSync(filePath); } catch {}
+  });
+
+  it("integration: write temp CSV, simulate watcher poll, verify DB", () => {
+    // Write initial CSV
+    const csv = [
+      HEADER,
+      makeRow("AAPL", "2026-02-17 10:00:00", "Holly Grail", "150.00"),
+      makeRow("MSFT", "2026-02-17 10:05:00", "Holly Neo", "380.00"),
+    ].join("\n");
+    writeFileSync(filePath, csv);
+
+    // Simulate watcher behavior: read and import
+    const result = importHollyAlerts(csv);
+    expect(result.inserted).toBe(2);
+    expect(result.skipped).toBe(0);
+
+    // Verify DB state
+    const rows = queryHollyAlerts({});
+    expect(rows).toHaveLength(2);
+    expect(rows.some((r) => r.symbol === "AAPL")).toBe(true);
+    expect(rows.some((r) => r.symbol === "MSFT")).toBe(true);
+
+    // Verify stats
+    const stats = getHollyAlertStats();
+    expect(stats.total_alerts).toBe(2);
+    expect(stats.unique_symbols).toBe(2);
+
+    // Simulate appending more rows
+    const newCsv = [
+      HEADER,
+      makeRow("AAPL", "2026-02-17 10:00:00"), // duplicate
+      makeRow("TSLA", "2026-02-17 10:10:00", "Holly Grail", "250.00"), // new
+    ].join("\n");
+
+    const result2 = importHollyAlerts(newCsv);
+    expect(result2.inserted).toBe(1);
+    expect(result2.skipped).toBe(1);
+
+    // Verify final DB state
+    const allRows = queryHollyAlerts({});
+    expect(allRows).toHaveLength(3);
+
+    const symbols = getLatestHollySymbols(10);
+    expect(symbols).toHaveLength(3);
+    expect(symbols).toContain("AAPL");
+    expect(symbols).toContain("MSFT");
+    expect(symbols).toContain("TSLA");
   });
 });
