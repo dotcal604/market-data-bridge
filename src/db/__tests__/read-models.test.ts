@@ -1307,4 +1307,782 @@ describe('ReadModelStore', () => {
       expect(order3!.status).toBe('FILLED');
     });
   });
+
+  describe('Edge Cases and Boundary Conditions', () => {
+    it('should handle zero quantity orders', () => {
+      const event: TradingEvent = {
+        type: 'OrderPlaced',
+        payload: {
+          orderId: 'order-zero',
+          symbol: 'AAPL',
+          side: 'BUY',
+          quantity: 0,
+          orderType: 'MKT',
+          strategyId: 'strat-1',
+          timestamp: 1000,
+        },
+      };
+
+      eventStore.publish(event);
+
+      const order = readModelStore.getOrder('order-zero');
+      expect(order).toBeDefined();
+      expect(order!.originalQty).toBe(0);
+      expect(order!.filledQty).toBe(0);
+      expect(order!.status).toBe('SUBMITTED');
+    });
+
+    it('should handle zero share executions', () => {
+      eventStore.publish({
+        type: 'OrderPlaced',
+        payload: {
+          orderId: 'order-1',
+          symbol: 'AAPL',
+          side: 'BUY',
+          quantity: 100,
+          orderType: 'MKT',
+          strategyId: 'strat-1',
+          timestamp: 1000,
+        },
+      });
+
+      eventStore.publish({
+        type: 'ExecutionReceived',
+        payload: {
+          execId: 'exec-zero',
+          orderId: 'order-1',
+          symbol: 'AAPL',
+          side: 'BUY',
+          lastShares: 0,
+          lastPrice: 150.00,
+          timestamp: 2000,
+        },
+      });
+
+      const order = readModelStore.getOrder('order-1');
+      expect(order!.filledQty).toBe(0);
+      expect(order!.avgPrice).toBe(0);
+      expect(order!.status).toBe('SUBMITTED');
+    });
+
+    it('should handle zero price executions', () => {
+      eventStore.publish({
+        type: 'OrderPlaced',
+        payload: {
+          orderId: 'order-zero-price',
+          symbol: 'AAPL',
+          side: 'BUY',
+          quantity: 100,
+          orderType: 'MKT',
+          strategyId: 'strat-1',
+          timestamp: 1000,
+        },
+      });
+
+      eventStore.publish({
+        type: 'ExecutionReceived',
+        payload: {
+          execId: 'exec-1',
+          orderId: 'order-zero-price',
+          symbol: 'AAPL',
+          side: 'BUY',
+          lastShares: 100,
+          lastPrice: 0,
+          timestamp: 2000,
+        },
+      });
+
+      const order = readModelStore.getOrder('order-zero-price');
+      expect(order!.filledQty).toBe(100);
+      expect(order!.avgPrice).toBe(0);
+      expect(order!.status).toBe('FILLED');
+
+      const position = readModelStore.getPosition('AAPL');
+      expect(position!.qty).toBe(100);
+      expect(position!.avgPrice).toBe(0);
+    });
+
+    it('should handle negative prices', () => {
+      // NOTE: The current implementation accepts negative prices without validation.
+      // In financial markets, negative prices are rare but possible (e.g., negative oil prices
+      // in April 2020, or certain derivative strategies). This test documents that the system
+      // does not reject negative prices. If price validation is needed, it should be added
+      // at the order placement level, not in the read model projection.
+      eventStore.publish({
+        type: 'OrderPlaced',
+        payload: {
+          orderId: 'order-neg',
+          symbol: 'AAPL',
+          side: 'BUY',
+          quantity: 100,
+          orderType: 'MKT',
+          strategyId: 'strat-1',
+          timestamp: 1000,
+        },
+      });
+
+      eventStore.publish({
+        type: 'ExecutionReceived',
+        payload: {
+          execId: 'exec-neg',
+          orderId: 'order-neg',
+          symbol: 'AAPL',
+          side: 'BUY',
+          lastShares: 100,
+          lastPrice: -10.00,
+          timestamp: 2000,
+        },
+      });
+
+      const order = readModelStore.getOrder('order-neg');
+      expect(order!.avgPrice).toBe(-10.00);
+
+      const position = readModelStore.getPosition('AAPL');
+      expect(position!.avgPrice).toBe(-10.00);
+    });
+
+    it('should handle very large quantities', () => {
+      eventStore.publish({
+        type: 'OrderPlaced',
+        payload: {
+          orderId: 'order-large',
+          symbol: 'AAPL',
+          side: 'BUY',
+          quantity: Number.MAX_SAFE_INTEGER,
+          orderType: 'MKT',
+          strategyId: 'strat-1',
+          timestamp: 1000,
+        },
+      });
+
+      eventStore.publish({
+        type: 'ExecutionReceived',
+        payload: {
+          execId: 'exec-large',
+          orderId: 'order-large',
+          symbol: 'AAPL',
+          side: 'BUY',
+          lastShares: Number.MAX_SAFE_INTEGER,
+          lastPrice: 150.00,
+          timestamp: 2000,
+        },
+      });
+
+      const order = readModelStore.getOrder('order-large');
+      expect(order!.filledQty).toBe(Number.MAX_SAFE_INTEGER);
+      expect(order!.status).toBe('FILLED');
+    });
+
+    it('should handle very small fractional prices', () => {
+      eventStore.publish({
+        type: 'OrderPlaced',
+        payload: {
+          orderId: 'order-fraction',
+          symbol: 'PENNY',
+          side: 'BUY',
+          quantity: 100,
+          orderType: 'MKT',
+          strategyId: 'strat-1',
+          timestamp: 1000,
+        },
+      });
+
+      eventStore.publish({
+        type: 'ExecutionReceived',
+        payload: {
+          execId: 'exec-fraction',
+          orderId: 'order-fraction',
+          symbol: 'PENNY',
+          side: 'BUY',
+          lastShares: 100,
+          lastPrice: 0.0001,
+          timestamp: 2000,
+        },
+      });
+
+      const order = readModelStore.getOrder('order-fraction');
+      expect(order!.avgPrice).toBe(0.0001);
+
+      const position = readModelStore.getPosition('PENNY');
+      expect(position!.avgPrice).toBe(0.0001);
+    });
+
+    it('should handle executions exceeding original quantity', () => {
+      eventStore.publish({
+        type: 'OrderPlaced',
+        payload: {
+          orderId: 'order-over',
+          symbol: 'AAPL',
+          side: 'BUY',
+          quantity: 100,
+          orderType: 'MKT',
+          strategyId: 'strat-1',
+          timestamp: 1000,
+        },
+      });
+
+      eventStore.publish({
+        type: 'ExecutionReceived',
+        payload: {
+          execId: 'exec-over',
+          orderId: 'order-over',
+          symbol: 'AAPL',
+          side: 'BUY',
+          lastShares: 150, // More than ordered
+          lastPrice: 150.00,
+          timestamp: 2000,
+        },
+      });
+
+      const order = readModelStore.getOrder('order-over');
+      expect(order!.filledQty).toBe(150);
+      expect(order!.status).toBe('FILLED'); // Still filled even though exceeds
+    });
+
+    it('should handle multiple symbols in parallel', () => {
+      // AAPL long
+      eventStore.publish({
+        type: 'OrderPlaced',
+        payload: {
+          orderId: 'order-aapl',
+          symbol: 'AAPL',
+          side: 'BUY',
+          quantity: 100,
+          orderType: 'MKT',
+          strategyId: 'strat-1',
+          timestamp: 1000,
+        },
+      });
+
+      eventStore.publish({
+        type: 'ExecutionReceived',
+        payload: {
+          execId: 'exec-aapl',
+          orderId: 'order-aapl',
+          symbol: 'AAPL',
+          side: 'BUY',
+          lastShares: 100,
+          lastPrice: 150.00,
+          timestamp: 2000,
+        },
+      });
+
+      // TSLA short
+      eventStore.publish({
+        type: 'OrderPlaced',
+        payload: {
+          orderId: 'order-tsla',
+          symbol: 'TSLA',
+          side: 'SELL',
+          quantity: 50,
+          orderType: 'MKT',
+          strategyId: 'strat-1',
+          timestamp: 3000,
+        },
+      });
+
+      eventStore.publish({
+        type: 'ExecutionReceived',
+        payload: {
+          execId: 'exec-tsla',
+          orderId: 'order-tsla',
+          symbol: 'TSLA',
+          side: 'SELL',
+          lastShares: 50,
+          lastPrice: 250.00,
+          timestamp: 4000,
+        },
+      });
+
+      // NVDA long
+      eventStore.publish({
+        type: 'OrderPlaced',
+        payload: {
+          orderId: 'order-nvda',
+          symbol: 'NVDA',
+          side: 'BUY',
+          quantity: 75,
+          orderType: 'MKT',
+          strategyId: 'strat-1',
+          timestamp: 5000,
+        },
+      });
+
+      eventStore.publish({
+        type: 'ExecutionReceived',
+        payload: {
+          execId: 'exec-nvda',
+          orderId: 'order-nvda',
+          symbol: 'NVDA',
+          side: 'BUY',
+          lastShares: 75,
+          lastPrice: 500.00,
+          timestamp: 6000,
+        },
+      });
+
+      const positions = readModelStore.getAllPositions();
+      expect(positions).toHaveLength(3);
+
+      const aaplPosition = readModelStore.getPosition('AAPL');
+      expect(aaplPosition!.qty).toBe(100);
+      expect(aaplPosition!.avgPrice).toBe(150.00);
+
+      const tslaPosition = readModelStore.getPosition('TSLA');
+      expect(tslaPosition!.qty).toBe(-50);
+      expect(tslaPosition!.avgPrice).toBe(250.00);
+
+      const nvdaPosition = readModelStore.getPosition('NVDA');
+      expect(nvdaPosition!.qty).toBe(75);
+      expect(nvdaPosition!.avgPrice).toBe(500.00);
+    });
+
+    it('should handle empty string symbols', () => {
+      eventStore.publish({
+        type: 'OrderPlaced',
+        payload: {
+          orderId: 'order-empty-sym',
+          symbol: '',
+          side: 'BUY',
+          quantity: 100,
+          orderType: 'MKT',
+          strategyId: 'strat-1',
+          timestamp: 1000,
+        },
+      });
+
+      const order = readModelStore.getOrder('order-empty-sym');
+      expect(order).toBeDefined();
+      expect(order!.symbol).toBe('');
+    });
+
+    it('should handle special characters in symbols', () => {
+      const specialSymbol = 'BRK.A';
+      
+      eventStore.publish({
+        type: 'OrderPlaced',
+        payload: {
+          orderId: 'order-special',
+          symbol: specialSymbol,
+          side: 'BUY',
+          quantity: 1,
+          orderType: 'MKT',
+          strategyId: 'strat-1',
+          timestamp: 1000,
+        },
+      });
+
+      eventStore.publish({
+        type: 'ExecutionReceived',
+        payload: {
+          execId: 'exec-special',
+          orderId: 'order-special',
+          symbol: specialSymbol,
+          side: 'BUY',
+          lastShares: 1,
+          lastPrice: 500000.00,
+          timestamp: 2000,
+        },
+      });
+
+      const position = readModelStore.getPosition(specialSymbol);
+      expect(position).toBeDefined();
+      expect(position!.symbol).toBe(specialSymbol);
+      expect(position!.qty).toBe(1);
+    });
+
+    it('should handle getOrder for non-existent order', () => {
+      const order = readModelStore.getOrder('non-existent-order');
+      expect(order).toBeUndefined();
+    });
+
+    it('should handle getPosition for non-existent symbol', () => {
+      const position = readModelStore.getPosition('NON_EXISTENT');
+      expect(position).toBeUndefined();
+    });
+
+    it('should maintain separate state for different order IDs', () => {
+      eventStore.publish({
+        type: 'OrderPlaced',
+        payload: {
+          orderId: 'order-1',
+          symbol: 'AAPL',
+          side: 'BUY',
+          quantity: 100,
+          orderType: 'MKT',
+          strategyId: 'strat-1',
+          timestamp: 1000,
+        },
+      });
+
+      eventStore.publish({
+        type: 'OrderPlaced',
+        payload: {
+          orderId: 'order-2',
+          symbol: 'AAPL',
+          side: 'BUY',
+          quantity: 50,
+          orderType: 'MKT',
+          strategyId: 'strat-1',
+          timestamp: 2000,
+        },
+      });
+
+      const order1 = readModelStore.getOrder('order-1');
+      const order2 = readModelStore.getOrder('order-2');
+
+      expect(order1!.originalQty).toBe(100);
+      expect(order2!.originalQty).toBe(50);
+    });
+
+    it('should handle regime changes with zero confidence', () => {
+      eventStore.publish({
+        type: 'RegimeShifted',
+        payload: {
+          prevRegime: 'NEUTRAL',
+          newRegime: 'BULLISH',
+          confidence: 0.0,
+          timestamp: 1000,
+        },
+      });
+
+      const systemState = readModelStore.getSystemState();
+      expect(systemState.currentRegime).toBe('BULLISH');
+      expect(systemState.regimeConfidence).toBe(0.0);
+    });
+
+    it('should handle regime changes with confidence > 1', () => {
+      // NOTE: Confidence is typically a probability bounded between 0 and 1.
+      // The current implementation accepts values > 1 without validation.
+      // This test documents that behavior. If strict validation is needed,
+      // it should be added at the regime shift event generation level.
+      // Some ML models or custom confidence metrics may intentionally use
+      // scales beyond [0,1], so this flexibility may be by design.
+      eventStore.publish({
+        type: 'RegimeShifted',
+        payload: {
+          prevRegime: 'NEUTRAL',
+          newRegime: 'BULLISH',
+          confidence: 1.5, // Invalid but not rejected
+          timestamp: 1000,
+        },
+      });
+
+      const systemState = readModelStore.getSystemState();
+      expect(systemState.regimeConfidence).toBe(1.5);
+    });
+
+    it('should handle multiple risk breaches from different rules', () => {
+      eventStore.publish({
+        type: 'RiskLimitBreached',
+        payload: {
+          ruleId: 'max-position-size',
+          currentValue: 150000,
+          limitValue: 100000,
+          timestamp: 1000,
+        },
+      });
+
+      eventStore.publish({
+        type: 'RiskLimitBreached',
+        payload: {
+          ruleId: 'max-drawdown',
+          currentValue: 20,
+          limitValue: 10,
+          timestamp: 2000,
+        },
+      });
+
+      eventStore.publish({
+        type: 'RiskLimitBreached',
+        payload: {
+          ruleId: 'concentration-limit',
+          currentValue: 0.5,
+          limitValue: 0.3,
+          timestamp: 3000,
+        },
+      });
+
+      const systemState = readModelStore.getSystemState();
+      expect(systemState.riskBreaches).toBe(3);
+    });
+
+    it('should handle position with single share', () => {
+      eventStore.publish({
+        type: 'OrderPlaced',
+        payload: {
+          orderId: 'order-single',
+          symbol: 'AMZN',
+          side: 'BUY',
+          quantity: 1,
+          orderType: 'MKT',
+          strategyId: 'strat-1',
+          timestamp: 1000,
+        },
+      });
+
+      eventStore.publish({
+        type: 'ExecutionReceived',
+        payload: {
+          execId: 'exec-single',
+          orderId: 'order-single',
+          symbol: 'AMZN',
+          side: 'BUY',
+          lastShares: 1,
+          lastPrice: 3500.00,
+          timestamp: 2000,
+        },
+      });
+
+      const position = readModelStore.getPosition('AMZN');
+      expect(position!.qty).toBe(1);
+      expect(position!.avgPrice).toBe(3500.00);
+    });
+
+    it('should accumulate PnL correctly across multiple trades on same symbol', () => {
+      // Trade 1: Buy 100 @ 100, Sell 100 @ 110 -> PnL = 1000
+      eventStore.publish({
+        type: 'OrderPlaced',
+        payload: {
+          orderId: 'order-1',
+          symbol: 'XYZ',
+          side: 'BUY',
+          quantity: 100,
+          orderType: 'MKT',
+          strategyId: 'strat-1',
+          timestamp: 1000,
+        },
+      });
+
+      eventStore.publish({
+        type: 'ExecutionReceived',
+        payload: {
+          execId: 'exec-1',
+          orderId: 'order-1',
+          symbol: 'XYZ',
+          side: 'BUY',
+          lastShares: 100,
+          lastPrice: 100.00,
+          timestamp: 2000,
+        },
+      });
+
+      eventStore.publish({
+        type: 'OrderPlaced',
+        payload: {
+          orderId: 'order-2',
+          symbol: 'XYZ',
+          side: 'SELL',
+          quantity: 100,
+          orderType: 'MKT',
+          strategyId: 'strat-1',
+          timestamp: 3000,
+        },
+      });
+
+      eventStore.publish({
+        type: 'ExecutionReceived',
+        payload: {
+          execId: 'exec-2',
+          orderId: 'order-2',
+          symbol: 'XYZ',
+          side: 'SELL',
+          lastShares: 100,
+          lastPrice: 110.00,
+          timestamp: 4000,
+        },
+      });
+
+      let position = readModelStore.getPosition('XYZ');
+      expect(position!.qty).toBe(0);
+      expect(position!.realizedPnl).toBe(1000);
+
+      // Trade 2: Buy 50 @ 105, Sell 50 @ 115 -> PnL = 500
+      eventStore.publish({
+        type: 'OrderPlaced',
+        payload: {
+          orderId: 'order-3',
+          symbol: 'XYZ',
+          side: 'BUY',
+          quantity: 50,
+          orderType: 'MKT',
+          strategyId: 'strat-1',
+          timestamp: 5000,
+        },
+      });
+
+      eventStore.publish({
+        type: 'ExecutionReceived',
+        payload: {
+          execId: 'exec-3',
+          orderId: 'order-3',
+          symbol: 'XYZ',
+          side: 'BUY',
+          lastShares: 50,
+          lastPrice: 105.00,
+          timestamp: 6000,
+        },
+      });
+
+      eventStore.publish({
+        type: 'OrderPlaced',
+        payload: {
+          orderId: 'order-4',
+          symbol: 'XYZ',
+          side: 'SELL',
+          quantity: 50,
+          orderType: 'MKT',
+          strategyId: 'strat-1',
+          timestamp: 7000,
+        },
+      });
+
+      eventStore.publish({
+        type: 'ExecutionReceived',
+        payload: {
+          execId: 'exec-4',
+          orderId: 'order-4',
+          symbol: 'XYZ',
+          side: 'SELL',
+          lastShares: 50,
+          lastPrice: 115.00,
+          timestamp: 8000,
+        },
+      });
+
+      position = readModelStore.getPosition('XYZ');
+      expect(position!.qty).toBe(0);
+      expect(position!.realizedPnl).toBe(1500); // 1000 + 500
+    });
+
+    it('should handle getSystemState returning a copy', () => {
+      const state1 = readModelStore.getSystemState();
+      const state2 = readModelStore.getSystemState();
+
+      // Should be different objects (copies)
+      expect(state1).not.toBe(state2);
+      expect(state1).toEqual(state2);
+    });
+  });
+
+  describe('Precision and Rounding', () => {
+    it('should maintain precision in weighted average calculations', () => {
+      eventStore.publish({
+        type: 'OrderPlaced',
+        payload: {
+          orderId: 'order-precision',
+          symbol: 'PREC',
+          side: 'BUY',
+          quantity: 100,
+          orderType: 'MKT',
+          strategyId: 'strat-1',
+          timestamp: 1000,
+        },
+      });
+
+      // Multiple executions with fractional prices
+      eventStore.publish({
+        type: 'ExecutionReceived',
+        payload: {
+          execId: 'exec-1',
+          orderId: 'order-precision',
+          symbol: 'PREC',
+          side: 'BUY',
+          lastShares: 33,
+          lastPrice: 100.333,
+          timestamp: 2000,
+        },
+      });
+
+      eventStore.publish({
+        type: 'ExecutionReceived',
+        payload: {
+          execId: 'exec-2',
+          orderId: 'order-precision',
+          symbol: 'PREC',
+          side: 'BUY',
+          lastShares: 33,
+          lastPrice: 100.667,
+          timestamp: 3000,
+        },
+      });
+
+      eventStore.publish({
+        type: 'ExecutionReceived',
+        payload: {
+          execId: 'exec-3',
+          orderId: 'order-precision',
+          symbol: 'PREC',
+          side: 'BUY',
+          lastShares: 34,
+          lastPrice: 100.500,
+          timestamp: 4000,
+        },
+      });
+
+      const order = readModelStore.getOrder('order-precision');
+      const expectedAvg = (33 * 100.333 + 33 * 100.667 + 34 * 100.500) / 100;
+      expect(order!.avgPrice).toBeCloseTo(expectedAvg, 6);
+    });
+
+    it('should handle floating point precision in PnL calculations', () => {
+      // Long position
+      eventStore.publish({
+        type: 'OrderPlaced',
+        payload: {
+          orderId: 'order-float',
+          symbol: 'FLOAT',
+          side: 'BUY',
+          quantity: 100,
+          orderType: 'MKT',
+          strategyId: 'strat-1',
+          timestamp: 1000,
+        },
+      });
+
+      eventStore.publish({
+        type: 'ExecutionReceived',
+        payload: {
+          execId: 'exec-float-1',
+          orderId: 'order-float',
+          symbol: 'FLOAT',
+          side: 'BUY',
+          lastShares: 100,
+          lastPrice: 100.123456789,
+          timestamp: 2000,
+        },
+      });
+
+      // Close position
+      eventStore.publish({
+        type: 'OrderPlaced',
+        payload: {
+          orderId: 'order-float-2',
+          symbol: 'FLOAT',
+          side: 'SELL',
+          quantity: 100,
+          orderType: 'MKT',
+          strategyId: 'strat-1',
+          timestamp: 3000,
+        },
+      });
+
+      eventStore.publish({
+        type: 'ExecutionReceived',
+        payload: {
+          execId: 'exec-float-2',
+          orderId: 'order-float-2',
+          symbol: 'FLOAT',
+          side: 'SELL',
+          lastShares: 100,
+          lastPrice: 110.987654321,
+          timestamp: 4000,
+        },
+      });
+
+      const position = readModelStore.getPosition('FLOAT');
+      const expectedPnl = 100 * (110.987654321 - 100.123456789);
+      expect(position!.realizedPnl).toBeCloseTo(expectedPnl, 6);
+    });
+  });
 });
