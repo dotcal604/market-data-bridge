@@ -359,6 +359,232 @@ describe("WebSocket Server", () => {
 
   // ── Edge Case Tests ───────────────────────────────────────────────────────
 
+  describe("Status Channel", () => {
+    it("should auto-subscribe authenticated client to status channel", async () => {
+      mockIsConnected = false;
+      
+      const ws = new WebSocket(`ws://localhost:${port}/ws`);
+      
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error("Connection timeout")), 2000);
+        ws.on("open", () => {
+          clearTimeout(timeout);
+          resolve();
+        });
+        ws.on("error", (err) => {
+          clearTimeout(timeout);
+          reject(err);
+        });
+      });
+      
+      // Set up message listener BEFORE sending auth
+      const messages: any[] = [];
+      ws.on("message", (data) => {
+        const msg = JSON.parse(data.toString());
+        messages.push(msg);
+      });
+
+      // Send auth
+      ws.send(JSON.stringify({ type: "auth", apiKey: "test-key-123" }));
+
+      // Wait for messages
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Should have received auth response and status message
+      expect(messages.length).toBeGreaterThanOrEqual(2);
+      
+      const authMsg = messages.find(m => m.type === "auth");
+      expect(authMsg).toBeDefined();
+      expect(authMsg.ok).toBe(true);
+      
+      const statusMsg = messages.find(m => m.channel === "status");
+      expect(statusMsg).toBeDefined();
+      expect(statusMsg.channel).toBe("status");
+      expect(statusMsg.data).toHaveLength(1);
+      expect(statusMsg.data[0]).toHaveProperty("ibkr_connected");
+      expect(statusMsg.data[0]).toHaveProperty("timestamp");
+      expect(statusMsg.data[0].ibkr_connected).toBe(false);
+
+      ws.close();
+    });
+
+    it("should send current status on auth success when IBKR connected", async () => {
+      mockIsConnected = true;
+      
+      // Need to reinitialize WebSocket server with IBKR connected
+      if (httpServer && httpServer.listening) {
+        await new Promise<void>((resolve) => {
+          httpServer.close(() => resolve());
+        });
+      }
+      
+      const http = await import("node:http");
+      httpServer = http.createServer();
+      await new Promise<void>((resolve) => {
+        httpServer.listen(0, () => {
+          const addr = httpServer.address();
+          if (addr && typeof addr === "object") {
+            port = addr.port;
+          }
+          resolve();
+        });
+      });
+      initWebSocket(httpServer);
+
+      const ws = new WebSocket(`ws://localhost:${port}/ws`);
+      
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error("Connection timeout")), 2000);
+        ws.on("open", () => {
+          clearTimeout(timeout);
+          resolve();
+        });
+        ws.on("error", (err) => {
+          clearTimeout(timeout);
+          reject(err);
+        });
+      });
+      
+      // Set up message listener BEFORE sending auth
+      const messages: any[] = [];
+      ws.on("message", (data) => {
+        const msg = JSON.parse(data.toString());
+        messages.push(msg);
+      });
+
+      // Send auth
+      ws.send(JSON.stringify({ type: "auth", apiKey: "test-key-123" }));
+
+      // Wait for messages
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Should have received auth response and status message
+      expect(messages.length).toBeGreaterThanOrEqual(2);
+      
+      const statusMsg = messages.find(m => m.channel === "status");
+      expect(statusMsg).toBeDefined();
+      expect(statusMsg.channel).toBe("status");
+      expect(statusMsg.data[0].ibkr_connected).toBe(true);
+
+      ws.close();
+    });
+
+    it("should broadcast status on IBKR connect event", async () => {
+      mockIsConnected = true;
+      
+      // Need to reinitialize WebSocket server with IBKR connected
+      if (httpServer && httpServer.listening) {
+        await new Promise<void>((resolve) => {
+          httpServer.close(() => resolve());
+        });
+      }
+      
+      const http = await import("node:http");
+      httpServer = http.createServer();
+      await new Promise<void>((resolve) => {
+        httpServer.listen(0, () => {
+          const addr = httpServer.address();
+          if (addr && typeof addr === "object") {
+            port = addr.port;
+          }
+          resolve();
+        });
+      });
+      initWebSocket(httpServer);
+
+      const ws = await connectClient(port, "test-key-123");
+      
+      // Set up message listener
+      const messages: any[] = [];
+      ws.on("message", (data) => {
+        const msg = JSON.parse(data.toString());
+        if (msg.channel === "status") messages.push(msg);
+      });
+
+      // Give listener time to set up
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      // Clear initial status message
+      messages.length = 0;
+
+      // Emit IBKR connect event
+      mockIB.emit(EventName.connected);
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Should have received status broadcast
+      expect(messages.length).toBe(1);
+      expect(messages[0].channel).toBe("status");
+      expect(messages[0].data[0].ibkr_connected).toBe(true);
+      expect(messages[0].data[0]).toHaveProperty("timestamp");
+
+      ws.close();
+    });
+
+    it("should broadcast status on IBKR disconnect event", async () => {
+      mockIsConnected = true;
+      
+      // Need to reinitialize WebSocket server with IBKR connected
+      if (httpServer && httpServer.listening) {
+        await new Promise<void>((resolve) => {
+          httpServer.close(() => resolve());
+        });
+      }
+      
+      const http = await import("node:http");
+      httpServer = http.createServer();
+      await new Promise<void>((resolve) => {
+        httpServer.listen(0, () => {
+          const addr = httpServer.address();
+          if (addr && typeof addr === "object") {
+            port = addr.port;
+          }
+          resolve();
+        });
+      });
+      initWebSocket(httpServer);
+
+      const ws = await connectClient(port, "test-key-123");
+      
+      // Set up message listener
+      const messages: any[] = [];
+      ws.on("message", (data) => {
+        const msg = JSON.parse(data.toString());
+        if (msg.channel === "status") messages.push(msg);
+      });
+
+      // Give listener time to set up
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      // Clear initial status message
+      messages.length = 0;
+
+      // Emit IBKR disconnect event
+      mockIB.emit(EventName.disconnected);
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Should have received status broadcast
+      expect(messages.length).toBe(1);
+      expect(messages[0].channel).toBe("status");
+      expect(messages[0].data[0].ibkr_connected).toBe(false);
+      expect(messages[0].data[0]).toHaveProperty("timestamp");
+
+      ws.close();
+    });
+
+    it("should allow manual subscription to status channel", async () => {
+      const ws = await connectClient(port, "test-key-123");
+
+      // Already auto-subscribed, but should allow explicit subscribe too
+      ws.send(JSON.stringify({ type: "subscribe", channel: "status" }));
+      
+      const msg = await waitForMessage(ws);
+      expect(msg.type).toBe("subscribed");
+      expect(msg.channel).toBe("status");
+
+      ws.close();
+    });
+  });
+
   describe("Edge Cases", () => {
     it("should reject invalid JSON", async () => {
       const ws = new WebSocket(`ws://localhost:${port}/ws`);

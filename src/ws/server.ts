@@ -18,9 +18,9 @@ import { logger } from "../logging.js";
 
 const logWs = logger.child({ subsystem: "ws" });
 const HEARTBEAT_INTERVAL_MS = 30_000;
-const VALID_CHANNELS = new Set(["positions", "orders", "account", "executions"]);
+const VALID_CHANNELS = new Set(["positions", "orders", "account", "executions", "status"]);
 
-type ChannelName = "positions" | "orders" | "account" | "executions";
+type ChannelName = "positions" | "orders" | "account" | "executions" | "status";
 
 interface AuthMessage { type: "auth"; apiKey: string }
 interface SubscribeMessage { type: "subscribe"; channel: string }
@@ -81,6 +81,17 @@ export function initWebSocket(httpServer: HttpServer): void {
       (ib as any).on(EventName.updatePortfolio, (...args: unknown[]) => broadcast("positions", args));
       (ib as any).on(EventName.updateAccountValue, (...args: unknown[]) => broadcast("account", args));
       ib.on(EventName.execDetails, (...args: unknown[]) => broadcast("executions", args));
+      
+      // Listen for IBKR connection status changes
+      ib.on(EventName.connected, () => {
+        const statusData = { ibkr_connected: true, timestamp: new Date().toISOString() };
+        broadcast("status", [statusData]);
+      });
+      ib.on(EventName.disconnected, () => {
+        const statusData = { ibkr_connected: false, timestamp: new Date().toISOString() };
+        broadcast("status", [statusData]);
+      });
+      
       ibkrBound = true;
       logWs.info("IBKR event listeners bound to WebSocket broadcast");
     } catch (err) {
@@ -121,7 +132,19 @@ export function initWebSocket(httpServer: HttpServer): void {
           return;
         }
         socket.isAuthenticated = true;
+        
+        // Auto-subscribe to status channel
+        const channels = subscriptions.get(socket);
+        if (channels) {
+          channels.add("status");
+        }
+        
+        // Send auth success response
         socket.send(JSON.stringify({ type: "auth", ok: true }));
+        
+        // Send current IBKR connection status immediately
+        const statusData = { ibkr_connected: isConnected(), timestamp: new Date().toISOString() };
+        socket.send(JSON.stringify({ channel: "status", data: [statusData] }));
         return;
       }
 
