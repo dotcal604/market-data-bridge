@@ -76,6 +76,11 @@ vi.mock("../eval/drift-alerts.js", () => ({
   checkDriftAlerts: vi.fn(() => []),
 }));
 
+// Mock tunnel monitor
+vi.mock("../ops/tunnel-monitor.js", () => ({
+  checkTunnelHealth: vi.fn(async () => {}),
+}));
+
 // Mock logger
 vi.mock("../logging.js", () => ({
   logger: {
@@ -110,11 +115,11 @@ describe("Scheduler", () => {
 
       startScheduler(5 * 60 * 1000); // 5 minutes
 
-      // Should create 4 intervals: snapshot, flatten, drift, inbox prune
-      expect(setIntervalSpy).toHaveBeenCalledTimes(4);
+      // Should create 5 intervals: snapshot, flatten, drift, inbox prune, tunnel
+      expect(setIntervalSpy).toHaveBeenCalledTimes(5);
 
-      // Should create 2 timeouts: initial drift check (60s) + initial prune check (30s)
-      expect(setTimeoutSpy).toHaveBeenCalledTimes(2);
+      // Should create 3 timeouts: initial drift check (60s) + initial prune check (30s) + initial tunnel check (30s)
+      expect(setTimeoutSpy).toHaveBeenCalledTimes(3);
       expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 60_000);
     });
 
@@ -124,8 +129,8 @@ describe("Scheduler", () => {
       startScheduler();
       stopScheduler();
 
-      // Should clear 4 intervals: snapshot, flatten, drift, inbox prune
-      expect(clearIntervalSpy).toHaveBeenCalledTimes(4);
+      // Should clear 5 intervals: snapshot, flatten, drift, inbox prune, tunnel
+      expect(clearIntervalSpy).toHaveBeenCalledTimes(5);
     });
 
     it("should not create duplicate timers if startScheduler() called twice", () => {
