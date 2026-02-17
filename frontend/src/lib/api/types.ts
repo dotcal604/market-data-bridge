@@ -300,6 +300,22 @@ export interface AccountSummaryResponse {
   error?: string;
 }
 
+export interface AccountSnapshot {
+  id: number;
+  net_liquidation: number | null;
+  total_cash_value: number | null;
+  buying_power: number | null;
+  daily_pnl: number | null;
+  unrealized_pnl: number | null;
+  realized_pnl: number | null;
+  created_at: string;
+}
+
+export interface IntradayPnLResponse {
+  count: number;
+  snapshots: AccountSnapshot[];
+}
+
 // Journal types
 export interface JournalEntry {
   id: number;

@@ -1222,6 +1222,28 @@ router.post("/session/reset", (_req, res) => {
   res.json(getSessionState());
 });
 
+// GET /api/account/pnl/intraday — today's account snapshots for equity curve
+router.get("/account/pnl/intraday", (_req, res) => {
+  try {
+    const now = new Date();
+    const et = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" }));
+    const year = et.getFullYear();
+    const month = String(et.getMonth() + 1).padStart(2, "0");
+    const day = String(et.getDate()).padStart(2, "0");
+    const todayStr = `${year}-${month}-${day}`;
+
+    const snapshots = queryAccountSnapshots(1000);
+    const todaySnapshots = (snapshots as any[]).filter((s) => {
+      const createdStr = s.created_at.substring(0, 10); // "YYYY-MM-DD HH:MM:SS" -> "YYYY-MM-DD"
+      return createdStr === todayStr;
+    });
+
+    res.json({ count: todaySnapshots.length, snapshots: todaySnapshots });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // GET /api/risk/config — current persisted risk config + effective guardrail values
 router.get("/risk/config", (_req, res) => {
   try {

@@ -196,3 +196,11 @@ export function useFlattenAllPositions() {
     },
   });
 }
+
+export function useIntradayPnL(refetchInterval = 30_000) {
+  return useQuery({
+    queryKey: ["account-intraday-pnl"],
+    queryFn: () => accountClient.getIntradayPnL(),
+    refetchInterval,
+  });
+}
