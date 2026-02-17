@@ -24,17 +24,24 @@ vi.mock("../logging.js", () => ({
   },
 }));
 
-vi.mock("../config.js", () => ({
-  config: {
-    orchestrator: {
-      weights: {
-        gpt: 0.4,
-        gemini: 0.3,
-        claude: 0.3,
-      },
-      requiredAgreement: 0.6,
+const mockConfig = {
+  orchestrator: {
+    weights: {
+      gpt: 0.4,
+      gemini: 0.3,
+      claude: 0.3,
     },
+    requiredAgreement: 0.6,
   },
+  gemini: {
+    apiKey: "",
+    model: "gemini-2.0-flash",
+    timeoutMs: 10000,
+  },
+};
+
+vi.mock("../config.js", () => ({
+  config: mockConfig,
 }));
 
 import { GoogleGenAI } from "@google/genai";
@@ -43,11 +50,12 @@ import { createOrchestrator, type ProviderScore } from "../orchestrator.js";
 
 describe("Gemini Provider", () => {
   let mockGenerateContent: any;
-  let originalEnv: NodeJS.ProcessEnv;
 
   beforeEach(() => {
-    originalEnv = process.env;
-    process.env = { ...originalEnv };
+    // Reset config to default state
+    mockConfig.gemini.apiKey = "";
+    mockConfig.gemini.model = "gemini-2.0-flash";
+    mockConfig.gemini.timeoutMs = 10000;
     
     // Get the mock function from the module
     const module = vi.mocked(await import("@google/genai"));
@@ -56,14 +64,10 @@ describe("Gemini Provider", () => {
     vi.clearAllMocks();
   });
 
-  afterEach(() => {
-    process.env = originalEnv;
-  });
-
   describe("getGeminiTradeScore", () => {
     it("should return Gemini score with correct parameters", async () => {
-      process.env.GOOGLE_AI_API_KEY = "test-key";
-      process.env.GEMINI_MODEL = "gemini-2.0-flash";
+      mockConfig.gemini.apiKey = "test-key";
+      mockConfig.gemini.model = "gemini-2.0-flash";
 
       const mockResponse = {
         text: JSON.stringify({
@@ -100,7 +104,7 @@ describe("Gemini Provider", () => {
     });
 
     it("should gracefully handle missing GOOGLE_AI_API_KEY", async () => {
-      delete process.env.GOOGLE_AI_API_KEY;
+      mockConfig.gemini.apiKey = "";
 
       const features = { price: 150 };
 
@@ -111,9 +115,9 @@ describe("Gemini Provider", () => {
       expect(mockGenerateContent).not.toHaveBeenCalled();
     });
 
-    it("should use default model when GEMINI_MODEL is not set", async () => {
-      process.env.GOOGLE_AI_API_KEY = "test-key";
-      delete process.env.GEMINI_MODEL;
+    it("should use configured model from config", async () => {
+      mockConfig.gemini.apiKey = "test-key";
+      mockConfig.gemini.model = "gemini-2.5-flash";
 
       const mockResponse = {
         text: JSON.stringify({
@@ -136,7 +140,7 @@ describe("Gemini Provider", () => {
     });
 
     it("should handle invalid JSON response", async () => {
-      process.env.GOOGLE_AI_API_KEY = "test-key";
+      mockConfig.gemini.apiKey = "test-key";
 
       const mockResponse = {
         text: "Invalid JSON {]",
@@ -150,7 +154,7 @@ describe("Gemini Provider", () => {
     });
 
     it("should handle schema validation failure", async () => {
-      process.env.GOOGLE_AI_API_KEY = "test-key";
+      mockConfig.gemini.apiKey = "test-key";
 
       const mockResponse = {
         text: JSON.stringify({
@@ -167,7 +171,7 @@ describe("Gemini Provider", () => {
     });
 
     it("should handle missing trade_score in response", async () => {
-      process.env.GOOGLE_AI_API_KEY = "test-key";
+      mockConfig.gemini.apiKey = "test-key";
 
       const mockResponse = {
         text: JSON.stringify({
@@ -185,7 +189,7 @@ describe("Gemini Provider", () => {
     });
 
     it("should accept optional confidence and reasoning", async () => {
-      process.env.GOOGLE_AI_API_KEY = "test-key";
+      mockConfig.gemini.apiKey = "test-key";
 
       const mockResponse = {
         text: JSON.stringify({
@@ -204,7 +208,7 @@ describe("Gemini Provider", () => {
     });
 
     it("should handle network timeout", async () => {
-      process.env.GOOGLE_AI_API_KEY = "test-key";
+      mockConfig.gemini.apiKey = "test-key";
 
       mockGenerateContent.mockRejectedValue(new Error("Network timeout"));
 
@@ -214,7 +218,7 @@ describe("Gemini Provider", () => {
     });
 
     it("should pass features in prompt", async () => {
-      process.env.GOOGLE_AI_API_KEY = "test-key";
+      mockConfig.gemini.apiKey = "test-key";
 
       const mockResponse = {
         text: JSON.stringify({ trade_score: 70 }),
@@ -238,7 +242,7 @@ describe("Gemini Provider", () => {
 
   describe("Orchestrator Gemini Integration", () => {
     it("should call Gemini provider with correct params in ensemble", async () => {
-      process.env.GOOGLE_AI_API_KEY = "test-key";
+      mockConfig.gemini.apiKey = "test-key";
 
       const mockResponse = {
         text: JSON.stringify({
@@ -320,7 +324,7 @@ describe("Gemini Provider", () => {
     });
 
     it("should compute consensus with 2/3 providers when GPT fails", async () => {
-      process.env.GOOGLE_AI_API_KEY = "test-key";
+      mockConfig.gemini.apiKey = "test-key";
 
       const mockResponse = {
         text: JSON.stringify({ trade_score: 65 }),
@@ -425,7 +429,7 @@ describe("Gemini Provider", () => {
 
   describe("Timeout Handling", () => {
     it("should handle Gemini API timeout", async () => {
-      process.env.GOOGLE_AI_API_KEY = "test-key";
+      mockConfig.gemini.apiKey = "test-key";
 
       mockGenerateContent.mockImplementation(
         () => new Promise((_, reject) => {
