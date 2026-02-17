@@ -28,15 +28,16 @@ export function WeightTunerSliders({ weights, onChange }: WeightTunerSlidersProp
   const handleWeightChange = (modelKey: string, newValue: number) => {
     setIsDragging(modelKey);
     
+    type WeightKey = "claude" | "gpt4o" | "gemini";
     const otherModels = MODEL_CONFIGS.filter((m) => m.key !== modelKey);
-    const otherSum = otherModels.reduce((sum, m) => sum + weights[m.key], 0);
+    const otherSum = otherModels.reduce((sum, m) => sum + weights[m.key as WeightKey], 0);
     
     // If new value is 1, set others to 0
     if (newValue >= 0.99) {
       const newWeights = { ...weights };
       newWeights[modelKey as keyof typeof weights] = 1;
       otherModels.forEach((m) => {
-        newWeights[m.key] = 0;
+        newWeights[m.key as WeightKey] = 0;
       });
       onChange(newWeights);
       return;
@@ -52,13 +53,13 @@ export function WeightTunerSliders({ weights, onChange }: WeightTunerSlidersProp
     if (otherSum > 0) {
       // Proportional distribution
       otherModels.forEach((m) => {
-        newWeights[m.key] = (weights[m.key] / otherSum) * remaining;
+        newWeights[m.key as WeightKey] = (weights[m.key as WeightKey] / otherSum) * remaining;
       });
     } else {
       // Equal distribution if others are zero
       const equalShare = remaining / otherModels.length;
       otherModels.forEach((m) => {
-        newWeights[m.key] = equalShare;
+        newWeights[m.key as WeightKey] = equalShare;
       });
     }
     
