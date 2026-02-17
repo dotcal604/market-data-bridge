@@ -69,10 +69,10 @@ export function useModelAgreement() {
   });
 }
 
-export function useWeightHistory() {
+export function useWeightHistory(days?: number) {
   return useQuery({
-    queryKey: ["weight-history"],
-    queryFn: () => evalClient.getWeightHistory(),
+    queryKey: ["weight-history", days],
+    queryFn: () => evalClient.getWeightHistory(days),
   });
 }
 
