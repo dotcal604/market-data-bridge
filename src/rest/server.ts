@@ -8,7 +8,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { publicRouter, router } from "./routes.js";
 import { evalRouter } from "../eval/routes.js";
 import { openApiAgentSpec } from "./openapi-agent.js";
-import { handleAgentRequest } from "./agent.js";
+import { handleAgentRequest, getActionCatalog } from "./agent.js";
 import { config } from "../config.js";
 import { requestLogger, logRest } from "../logging.js";
 import { isConnected } from "../ibkr/connection.js";
@@ -241,6 +241,11 @@ export function startRestServer(): Promise<void> {
 
     // Agent dispatcher — single endpoint for ChatGPT Actions (no 30-op limit)
     app.post("/api/agent", apiKeyAuth, globalLimiter, (req, res) => { void handleAgentRequest(req, res); });
+    
+    // Agent action catalog — GET endpoint for action metadata
+    app.get("/api/agent/catalog", apiKeyAuth, globalLimiter, (_req, res) => {
+      res.json(getActionCatalog());
+    });
 
     // Mount API routes with rate limiting (authenticated)
     app.use("/api", apiKeyAuth, globalLimiter, router);

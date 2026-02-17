@@ -378,6 +378,146 @@ export async function handleAgentRequest(req: Request, res: Response): Promise<v
   }
 }
 
+// ── Action Catalog Metadata ─────────────────────────────────────
+
+interface ActionMeta {
+  description: string;
+  params?: string[];
+  requiresIBKR?: boolean;
+}
+
+export const actionsMeta: Record<string, ActionMeta> = {
+  // System
+  get_status: { description: "Get system status, market session, and IBKR connection state" },
+  get_gpt_instructions: { description: "Get GPT system instructions" },
+
+  // Market Data (Yahoo — always available)
+  get_quote: { description: "Get real-time quote for a symbol", params: ["symbol"] },
+  get_historical_bars: { description: "Get historical price bars", params: ["symbol", "period?", "interval?"] },
+  get_stock_details: { description: "Get stock details (sector, industry, description, market cap)", params: ["symbol"] },
+  get_options_chain: { description: "Get options chain for a symbol", params: ["symbol", "expiration?"] },
+  get_option_quote: { description: "Get quote for a specific option contract", params: ["symbol", "expiry", "strike", "right"] },
+  search_symbols: { description: "Search for symbols by query string", params: ["query"] },
+  get_news: { description: "Get news articles for a query", params: ["query"] },
+  get_financials: { description: "Get financial data (revenue, margins, debt, analyst targets)", params: ["symbol"] },
+  get_earnings: { description: "Get earnings history (actual vs estimate)", params: ["symbol"] },
+  get_recommendations: { description: "Get analyst recommendations", params: ["symbol"] },
+  get_trending: { description: "Get trending symbols by region", params: ["region?"] },
+  get_screener_filters: { description: "Get list of available screener IDs" },
+  run_screener: { description: "Run a stock screener", params: ["screener_id?", "count?"] },
+  run_screener_with_quotes: { description: "Run a stock screener with full quote data", params: ["screener_id?", "count?"] },
+
+  // IBKR Market Data
+  get_ibkr_quote: { description: "Get IBKR real-time quote", params: ["symbol", "secType?", "exchange?", "currency?"], requiresIBKR: true },
+  get_historical_ticks: { description: "Get historical tick data", params: ["symbol", "startTime", "endTime?", "type?", "count?"], requiresIBKR: true },
+  get_contract_details: { description: "Get contract details from IBKR", params: ["symbol", "secType?", "currency?", "exchange?"], requiresIBKR: true },
+
+  // IBKR News
+  get_news_providers: { description: "Get list of IBKR news providers", requiresIBKR: true },
+  get_news_article: { description: "Get specific news article from IBKR", params: ["providerCode", "articleId"], requiresIBKR: true },
+  get_historical_news: { description: "Get historical news from IBKR", params: ["conId", "providerCodes", "startDateTime", "endDateTime"], requiresIBKR: true },
+  get_news_bulletins: { description: "Get IBKR news bulletins", requiresIBKR: true },
+
+  // IBKR Data Wrappers
+  get_pnl_single: { description: "Get P&L for a single position", params: ["symbol"], requiresIBKR: true },
+  search_ibkr_symbols: { description: "Search for symbols using IBKR", params: ["pattern"], requiresIBKR: true },
+  set_market_data_type: { description: "Set market data type (live, frozen, delayed)", params: ["marketDataType"], requiresIBKR: true },
+  set_auto_open_orders: { description: "Enable/disable auto-binding of open orders", params: ["autoBind?"], requiresIBKR: true },
+  get_head_timestamp: { description: "Get earliest available data timestamp", params: ["symbol", "whatToShow?", "useRTH?", "formatDate?"], requiresIBKR: true },
+  get_histogram_data: { description: "Get histogram data for a symbol", params: ["symbol", "useRTH?", "period?", "periodUnit?"], requiresIBKR: true },
+  calculate_implied_volatility: { description: "Calculate implied volatility for an option", params: ["symbol", "expiry", "strike", "right", "optionPrice", "underlyingPrice"], requiresIBKR: true },
+  calculate_option_price: { description: "Calculate theoretical option price", params: ["symbol", "expiry", "strike", "right", "volatility", "underlyingPrice"], requiresIBKR: true },
+  get_tws_current_time: { description: "Get current time from TWS server", requiresIBKR: true },
+  get_market_rule: { description: "Get market rule by rule ID", params: ["ruleId"], requiresIBKR: true },
+  get_smart_components: { description: "Get smart routing components for an exchange", params: ["exchange"], requiresIBKR: true },
+  get_depth_exchanges: { description: "Get list of exchanges that support market depth", requiresIBKR: true },
+  get_fundamental_data: { description: "Get fundamental data from IBKR", params: ["symbol", "reportType?"], requiresIBKR: true },
+
+  // Account
+  get_account_summary: { description: "Get account summary (buying power, cash, equity)", requiresIBKR: true },
+  get_positions: { description: "Get all open positions", requiresIBKR: true },
+  get_pnl: { description: "Get overall P&L", requiresIBKR: true },
+
+  // Orders
+  get_open_orders: { description: "Get all open orders", requiresIBKR: true },
+  get_completed_orders: { description: "Get completed orders", requiresIBKR: true },
+  get_executions: { description: "Get recent executions", requiresIBKR: true },
+  place_order: { description: "Place a single order", params: ["symbol", "action", "orderType", "totalQuantity", "lmtPrice?", "auxPrice?", "secType?", "exchange?", "currency?", "tif?"], requiresIBKR: true },
+  place_bracket_order: { description: "Place a bracket order (entry + TP + SL)", params: ["symbol", "action", "totalQuantity", "entryType", "entryPrice?", "takeProfitPrice", "stopLossPrice", "secType?", "tif?"], requiresIBKR: true },
+  place_advanced_bracket: { description: "Place an advanced bracket order with full control", params: ["symbol", "action", "totalQuantity", "entry", "takeProfit", "stopLoss", "outsideRth?", "ocaType?", "trailingAmount?", "trailingPercent?"], requiresIBKR: true },
+  modify_order: { description: "Modify an existing open order", params: ["orderId", "lmtPrice?", "auxPrice?", "totalQuantity?", "orderType?", "tif?"], requiresIBKR: true },
+  cancel_order: { description: "Cancel a specific order", params: ["orderId"], requiresIBKR: true },
+  cancel_all_orders: { description: "Cancel all open orders", requiresIBKR: true },
+  flatten_positions: { description: "Flatten all positions immediately with market orders", requiresIBKR: true },
+
+  // Portfolio Analytics
+  portfolio_exposure: { description: "Get portfolio exposure analysis (gross/net, sector breakdown, beta-weighted)", requiresIBKR: true },
+  stress_test: { description: "Run portfolio stress test with market shock", params: ["shockPercent?", "betaAdjusted?"], requiresIBKR: true },
+  size_position: { description: "Calculate position size based on risk parameters", params: ["symbol", "entryPrice", "stopPrice", "riskPercent?", "maxCapitalPercent?", "volatilityRegime?"], requiresIBKR: true },
+
+  // Risk / Session
+  get_risk_config: { description: "Get effective risk limits and configuration" },
+  tune_risk_params: { description: "Auto-tune risk parameters from recent outcomes" },
+  update_risk_config: { description: "Update risk configuration parameters", params: ["max_position_pct?", "max_daily_loss_pct?", "max_concentration_pct?", "volatility_scalar?", "source?"] },
+  get_session_state: { description: "Get current session state (trades, P&L, lock status)" },
+  session_record_trade: { description: "Record a trade result in the session", params: ["realizedPnl"] },
+  session_lock: { description: "Lock trading session", params: ["reason?"] },
+  session_unlock: { description: "Unlock trading session" },
+  session_reset: { description: "Reset trading session state" },
+
+  // Evaluation
+  record_outcome: { description: "Record outcome for an evaluation", params: ["evaluation_id", "trade_taken", "decision_type?", "confidence_rating?", "rule_followed?", "setup_type?", "actual_entry_price?", "actual_exit_price?", "r_multiple?", "exit_reason?", "notes?"] },
+  simulate_weights: { description: "Simulate ensemble weights against historical evaluations", params: ["claude", "gpt4o", "gemini", "k?", "days?", "symbol?"] },
+  drift_report: { description: "Get model drift report (accuracy, calibration, regime shifts)" },
+
+  // Flatten Config
+  get_flatten_config: { description: "Get EOD auto-flatten configuration" },
+  set_flatten_enabled: { description: "Enable/disable EOD auto-flatten", params: ["enabled"] },
+
+  // Collaboration
+  collab_read: { description: "Read collaboration messages", params: ["limit?", "author?", "tag?", "since?"] },
+  collab_post: { description: "Post a collaboration message", params: ["content", "tags?", "replyTo?"] },
+  collab_clear: { description: "Clear all collaboration messages" },
+  collab_stats: { description: "Get collaboration statistics" },
+
+  // Trade Journal
+  journal_read: { description: "Read trade journal entries", params: ["symbol?", "strategy?", "limit?"] },
+  journal_create: { description: "Create a trade journal entry", params: ["symbol", "reasoning", "tags?", "strategy_version?", "spy_price?", "vix_level?", "ai_recommendations?"] },
+  journal_get: { description: "Get a specific journal entry by ID", params: ["id"] },
+  journal_update: { description: "Update a journal entry", params: ["id", "outcome_tags?", "notes?"] },
+  tradersync_import: { description: "Import TraderSync CSV data", params: ["csv"] },
+  tradersync_stats: { description: "Get TraderSync import statistics" },
+  tradersync_trades: { description: "Query TraderSync trades", params: ["symbol?", "side?", "status?", "days?", "limit?"] },
+
+  // History
+  orders_history: { description: "Query historical orders", params: ["symbol?", "strategy?", "limit?"] },
+  executions_history: { description: "Query historical executions", params: ["symbol?", "limit?"] },
+
+  // Subscriptions (streaming)
+  subscribe_real_time_bars: { description: "Subscribe to real-time 5-second bars", params: ["symbol", "secType?", "exchange?", "currency?", "whatToShow?", "useRTH?"], requiresIBKR: true },
+  unsubscribe_real_time_bars: { description: "Unsubscribe from real-time bars", params: ["subscriptionId"], requiresIBKR: true },
+  get_real_time_bars: { description: "Get buffered real-time bars from subscription", params: ["subscriptionId", "limit?"], requiresIBKR: true },
+  subscribe_account_updates: { description: "Subscribe to real-time account updates", params: ["account"], requiresIBKR: true },
+  unsubscribe_account_updates: { description: "Unsubscribe from account updates", requiresIBKR: true },
+  get_account_snapshot_stream: { description: "Get latest account snapshot from active subscription", requiresIBKR: true },
+  get_scanner_parameters: { description: "Get IBKR scanner parameters XML", requiresIBKR: true },
+  list_subscriptions: { description: "List all active subscriptions", requiresIBKR: true },
+
+  // Holly AI Alerts
+  holly_import: { description: "Import Holly AI alerts CSV", params: ["csv"] },
+  holly_alerts: { description: "Query Holly AI alerts", params: ["symbol?", "strategy?", "since?", "limit?"] },
+  holly_stats: { description: "Get Holly AI alert statistics" },
+  holly_symbols: { description: "Get latest distinct symbols from Holly alerts", params: ["limit?"] },
+};
+
+/**
+ * Get the action catalog with metadata for all actions.
+ * Returns a JSON-serializable object with action names as keys.
+ */
+export function getActionCatalog(): Record<string, ActionMeta> {
+  return actionsMeta;
+}
+
 /** List all registered action names (for the OpenAPI spec description) */
 export function getActionList(): string[] {
   return Object.keys(actions);
