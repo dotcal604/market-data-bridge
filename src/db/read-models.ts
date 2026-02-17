@@ -133,7 +133,6 @@ export class ReadModelStore {
       } else {
         // Case 2 & 4: Closing short position or flipping to long
         const closingQty = Math.min(shares, Math.abs(position.qty));
-        const remainingQty = shares - closingQty;
         
         // Calculate realized P&L on closed portion (for shorts: avgPrice - exitPrice)
         const pnl = closingQty * (position.avgPrice - price);
@@ -161,7 +160,6 @@ export class ReadModelStore {
       } else {
         // Case 2 & 3: Closing long position or flipping to short
         const closingQty = Math.min(shares, position.qty);
-        const remainingQty = shares - closingQty;
         
         // Calculate realized P&L on closed portion (for longs: exitPrice - avgPrice)
         const pnl = closingQty * (price - position.avgPrice);
