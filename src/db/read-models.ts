@@ -38,15 +38,19 @@ export class ReadModelStore {
     regimeConfidence: 0.0,
     riskBreaches: 0,
   };
+  private eventStore: typeof eventStore;
 
-  constructor() {
+  constructor(eventStoreInstance?: typeof eventStore) {
+    // Allow dependency injection for testing, or use singleton by default
+    this.eventStore = eventStoreInstance || eventStore;
+    
     // Subscribe to the Event Store to keep models updated in real-time
-    eventStore.subscribe(this.applyEvent.bind(this));
+    this.eventStore.subscribe(this.applyEvent.bind(this));
     
     // Replay events on startup to restore state
     console.log('Hydrating Read Models from Event Store...');
     const start = performance.now();
-    eventStore.replay();
+    this.eventStore.replay();
     console.log(`Read Models hydrated in ${(performance.now() - start).toFixed(2)}ms`);
   }
 

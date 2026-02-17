@@ -66,15 +66,19 @@ export class EventStore {
   private db: DatabaseType;
   private listeners: ((event: TradingEvent) => void)[] = [];
 
-  constructor(dbPath?: string) {
-    if (!dbPath) {
+  constructor(dbOrPath?: DatabaseType | string) {
+    if (!dbOrPath) {
       const __dirname = path.dirname(fileURLToPath(import.meta.url));
       const dataDir = path.join(__dirname, '../../data');
       if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-      dbPath = path.join(dataDir, 'events.db');
+      const dbPath = path.join(dataDir, 'events.db');
+      this.db = new Database(dbPath);
+    } else if (typeof dbOrPath === 'string') {
+      this.db = new Database(dbOrPath);
+    } else {
+      this.db = dbOrPath;
     }
-
-    this.db = new Database(dbPath);
+    
     this.initialize();
   }
 
