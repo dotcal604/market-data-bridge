@@ -1,13 +1,16 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { useEnsembleWeights } from "@/lib/hooks/use-evals";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { ModelAvatar } from "@/components/shared/model-avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { WeightSliders } from "@/components/weights/weight-sliders";
 import { SimulateResults } from "@/components/weights/simulate-results";
 import { WeightHistory } from "@/components/weights/weight-history";
+import { ArrowRight } from "lucide-react";
 
 export default function WeightsPage() {
   const { data, isLoading } = useEnsembleWeights();
@@ -32,11 +35,19 @@ export default function WeightsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Ensemble Weights</h1>
-        <p className="text-sm text-muted-foreground">
-          Adjust model weights, simulate impact, and view history
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Ensemble Weights</h1>
+          <p className="text-sm text-muted-foreground">
+            Adjust model weights, simulate impact, and view history
+          </p>
+        </div>
+        <Link href="/weights/tune">
+          <Button variant="outline" size="sm">
+            Tune Weights
+            <ArrowRight className="h-4 w-4 ml-1" />
+          </Button>
+        </Link>
       </div>
 
       {/* Current weights hero cards */}
