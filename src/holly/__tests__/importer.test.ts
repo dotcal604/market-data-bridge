@@ -278,10 +278,11 @@ describe("Holly Alert CSV Importer", () => {
       expect(rows[0]).toHaveProperty("entry_price", 170.5);
     });
 
-    it("handles commas in numbers", () => {
+    it("handles commas in quoted numbers", () => {
+      // In CSV, commas inside values must be quoted to avoid being treated as delimiters
       const csv = makeCSV(
         "Time,Symbol,Entry Price",
-        ["2024-03-15 09:45:00,AAPL,1,170.50"]
+        ['2024-03-15 09:45:00,AAPL,"1,170.50"']
       );
       importHollyAlerts(csv);
 
