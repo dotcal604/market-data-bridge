@@ -1,13 +1,17 @@
 "use client";
 
 import { useEvalStats, useEvalHistory } from "@/lib/hooks/use-evals";
+import { useHollyStats } from "@/lib/hooks/use-holly";
 import { StatsCards } from "@/components/dashboard/stats-cards";
 import { RecentEvalsMini } from "@/components/dashboard/recent-evals-mini";
+import { HollyStats } from "@/components/dashboard/holly-stats";
+import { HollyAlerts } from "@/components/dashboard/holly-alerts";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function DashboardPage() {
   const stats = useEvalStats();
   const history = useEvalHistory(10);
+  const hollyStatsQuery = useHollyStats();
 
   return (
     <div className="space-y-6">
@@ -44,6 +48,19 @@ export default function DashboardPage() {
           <p className="text-sm text-muted-foreground">No evaluations yet</p>
         )}
       </div>
+
+      {/* Holly AI Alerts Section - Only show if data is available */}
+      {hollyStatsQuery.data && hollyStatsQuery.data.total_alerts > 0 && (
+        <>
+          <div className="pt-4">
+            <h2 className="mb-3 text-lg font-semibold">Holly AI Alerts</h2>
+          </div>
+
+          <HollyStats />
+
+          <HollyAlerts limit={10} />
+        </>
+      )}
     </div>
   );
 }
