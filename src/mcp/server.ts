@@ -74,6 +74,7 @@ import {
 } from "../db/database.js";
 import { computeDriftReport } from "../eval/drift.js";
 import { getRecentDriftAlerts } from "../eval/drift-alerts.js";
+import { computeEdgeReport, runWalkForward } from "../eval/edge-analytics.js";
 import { importTraderSyncCSV } from "../tradersync/importer.js";
 import { importHollyAlerts } from "../holly/importer.js";
 import { isAutoEvalEnabled, setAutoEvalEnabled, getAutoEvalStatus } from "../holly/auto-eval.js";
@@ -2093,6 +2094,52 @@ export function createMcpServer(): McpServer {
       try {
         const alerts = getRecentDriftAlerts(limit ?? 50);
         return { content: [{ type: "text", text: JSON.stringify({ count: alerts.length, alerts }, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: edge_report ---
+  server.tool(
+    "edge_report",
+    "Full edge analytics report: rolling Sharpe/Sortino, win rate, profit factor, max drawdown, expectancy, composite edge score, feature attribution (which features predict winners), and optional walk-forward validation (proves out-of-sample edge vs luck).",
+    {
+      days: z.number().int().positive().optional().describe("Lookback period in days (default: 90)"),
+      rolling_window: z.number().int().positive().optional().describe("Rolling window size in trades (default: 20)"),
+      include_walk_forward: z.boolean().optional().describe("Include walk-forward validation (default: true, slower)"),
+    },
+    async (params) => {
+      try {
+        const report = computeEdgeReport({
+          days: params.days,
+          rollingWindow: params.rolling_window,
+          includeWalkForward: params.include_walk_forward,
+        });
+        return { content: [{ type: "text", text: JSON.stringify(report, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: walk_forward ---
+  server.tool(
+    "walk_forward",
+    "Walk-forward backtest: slides a train/test window across historical evaluations with outcomes, optimizes ensemble weights on train window via grid search, tests on out-of-sample window. Reports per-window win rate, avg R, Sharpe, and aggregate edge stability / decay detection.",
+    {
+      days: z.number().int().positive().optional().describe("Lookback period in days (default: 180)"),
+      train_size: z.number().int().positive().optional().describe("Training window size in trades (default: 30)"),
+      test_size: z.number().int().positive().optional().describe("Test window size in trades (default: 10)"),
+    },
+    async (params) => {
+      try {
+        const result = runWalkForward({
+          days: params.days,
+          trainSize: params.train_size,
+          testSize: params.test_size,
+        });
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       } catch (e: any) {
         return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
       }

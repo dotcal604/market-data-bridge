@@ -19,6 +19,7 @@ import {
   Server,
   Shield,
   Zap,
+  Crosshair,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -35,6 +36,7 @@ const NAV_ITEMS = [
   { href: "/signals", label: "Signals", icon: Zap },
   { href: "/model-stats", label: "Model Stats", icon: BarChart3 },
   { href: "/drift", label: "Drift Monitor", icon: Activity },
+  { href: "/edge", label: "Edge Analytics", icon: Crosshair },
   { href: "/weights", label: "Weights", icon: SlidersHorizontal },
   { href: "/orders", label: "Orders", icon: ShoppingCart },
   { href: "/account", label: "Account", icon: Wallet },

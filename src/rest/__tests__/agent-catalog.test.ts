@@ -20,6 +20,7 @@ describe("Action Catalog", () => {
         "collab_read",
         "collab_stats",
         "drift_report",
+        "edge_report",
         "executions_history",
         "flatten_positions",
         "get_account_snapshot_stream",
@@ -100,6 +101,7 @@ describe("Action Catalog", () => {
         "tradersync_stats",
         "tradersync_trades",
         "tune_risk_params",
+        "walk_forward",
         "unsubscribe_account_updates",
         "unsubscribe_real_time_bars",
         "update_risk_config",
@@ -108,8 +110,8 @@ describe("Action Catalog", () => {
       expect(catalogKeys).toEqual(expectedActions);
     });
 
-    it("has exactly 94 actions", () => {
-      expect(Object.keys(actionsMeta)).toHaveLength(94);
+    it("has exactly 96 actions", () => {
+      expect(Object.keys(actionsMeta)).toHaveLength(96);
     });
 
     it("every action has a non-empty description", () => {
@@ -280,7 +282,7 @@ describe("Action Catalog", () => {
 
     it("returns an object with all action metadata", () => {
       const catalog = getActionCatalog();
-      expect(Object.keys(catalog)).toHaveLength(94);
+      expect(Object.keys(catalog)).toHaveLength(96);
       
       for (const [action, meta] of Object.entries(catalog)) {
         expect(meta).toHaveProperty("description");

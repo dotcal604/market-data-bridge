@@ -137,6 +137,10 @@ Yahoo (always available): get_quote, get_historical_bars, get_financials, get_ea
 - simulate_weights — { claude, gpt4o, gemini, k?, days?, symbol? } — simulate ensemble weights against historical evaluations
 - drift_report — no params — rolling model accuracy (last 50/20/10), calibration error by score decile, regime-shift detection
 
+### Edge Analytics
+- edge_report — { days?, rolling_window?, include_walk_forward? } — full edge report: rolling Sharpe/Sortino, win rate, profit factor, max drawdown, expectancy, composite edge score (0-100), feature attribution (which features predict winners), walk-forward validation (out-of-sample edge proof)
+- walk_forward — { days?, train_size?, test_size? } — walk-forward backtest: optimizes ensemble weights on train window, tests on out-of-sample window; reports per-window metrics and aggregate edge stability / decay detection
+
 ### Holly AI Alerts (Trade Ideas integration)
 - holly_import — { csv } — import Trade Ideas Holly AI alert CSV content (auto-detects columns from header)
 - holly_alerts — { symbol?, strategy?, since?, limit? } — query imported Holly alerts. limit default 100.

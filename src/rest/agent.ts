@@ -37,6 +37,7 @@ import { calculatePositionSize } from "../ibkr/risk.js";
 import { tuneRiskParams } from "../eval/risk-tuning.js";
 import { computeDriftReport } from "../eval/drift.js";
 import { checkDriftAlerts, getRecentDriftAlerts } from "../eval/drift-alerts.js";
+import { computeEdgeReport, runWalkForward } from "../eval/edge-analytics.js";
 import { computeEnsembleWithWeights } from "../eval/ensemble/scorer.js";
 import { getWeights } from "../eval/ensemble/weights.js";
 import type { ModelEvaluation } from "../eval/models/types.js";
@@ -306,6 +307,18 @@ const actions: Record<string, ActionHandler> = {
     return { count: alerts.length, alerts };
   },
 
+  // ── Edge Analytics ──
+  edge_report: async (p) => computeEdgeReport({
+    days: num(p, "days", 90),
+    rollingWindow: num(p, "rolling_window", 20),
+    includeWalkForward: bool(p, "include_walk_forward", true),
+  }),
+  walk_forward: async (p) => runWalkForward({
+    days: num(p, "days", 180),
+    trainSize: num(p, "train_size", 30),
+    testSize: num(p, "test_size", 10),
+  }),
+
   // ── Flatten Config ──
   get_flatten_config: async () => getFlattenConfig(),
   set_flatten_enabled: async (p) => { setFlattenEnabled(bool(p, "enabled")); return { enabled: bool(p, "enabled") }; },
@@ -493,6 +506,8 @@ export const actionsMeta: Record<string, ActionMeta> = {
   record_outcome: { description: "Record outcome for an evaluation", params: ["evaluation_id", "trade_taken", "decision_type?", "confidence_rating?", "rule_followed?", "setup_type?", "actual_entry_price?", "actual_exit_price?", "r_multiple?", "exit_reason?", "notes?"] },
   simulate_weights: { description: "Simulate ensemble weights against historical evaluations", params: ["claude", "gpt4o", "gemini", "k?", "days?", "symbol?"] },
   drift_report: { description: "Get model drift report (accuracy, calibration, regime shifts)" },
+  edge_report: { description: "Full edge analytics: rolling Sharpe/Sortino, win rate, profit factor, feature attribution, walk-forward validation", params: ["days?", "rolling_window?", "include_walk_forward?"] },
+  walk_forward: { description: "Walk-forward backtest: train/test split with weight optimization, proves out-of-sample edge vs luck", params: ["days?", "train_size?", "test_size?"] },
 
   // Flatten Config
   get_flatten_config: { description: "Get EOD auto-flatten configuration" },
