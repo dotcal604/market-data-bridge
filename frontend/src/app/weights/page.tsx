@@ -2,19 +2,30 @@
 
 import { useEnsembleWeights } from "@/lib/hooks/use-evals";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { ModelAvatar } from "@/components/shared/model-avatar";
 import { Skeleton } from "@/components/ui/skeleton";
+import Link from "next/link";
+import { Settings } from "lucide-react";
 
 export default function WeightsPage() {
   const { data, isLoading } = useEnsembleWeights();
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Ensemble Weights</h1>
-        <p className="text-sm text-muted-foreground">
-          Current model weights used for ensemble scoring
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Ensemble Weights</h1>
+          <p className="text-sm text-muted-foreground">
+            Current model weights used for ensemble scoring
+          </p>
+        </div>
+        <Link href="/weights/tune">
+          <Button variant="outline" size="sm">
+            <Settings className="mr-2 h-4 w-4" />
+            Tune Weights
+          </Button>
+        </Link>
       </div>
 
       {isLoading ? (

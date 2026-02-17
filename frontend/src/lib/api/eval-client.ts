@@ -85,4 +85,22 @@ export const evalClient = {
       models: string[];
     }>(`${BASE}/model-agreement`);
   },
+
+  simulateWeights(weights: { claude: number; gpt4o: number; gemini: number; k?: number }) {
+    return fetchJson<{
+      action: string;
+      result: {
+        simulated_weights: { claude: number; gpt4o: number; gemini: number; k: number };
+        evaluations_count: number;
+        average_score_delta: number;
+      };
+    }>("/api/agent", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "simulate_weights",
+        ...weights,
+      }),
+    });
+  },
 };
