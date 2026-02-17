@@ -3,6 +3,8 @@
 import { useEvalStats, useEvalHistory } from "@/lib/hooks/use-evals";
 import { StatsCards } from "@/components/dashboard/stats-cards";
 import { RecentEvalsMini } from "@/components/dashboard/recent-evals-mini";
+import { HollyStats } from "@/components/dashboard/holly-stats";
+import { HollyAlerts } from "@/components/dashboard/holly-alerts";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function DashboardPage() {
@@ -43,6 +45,15 @@ export default function DashboardPage() {
         ) : (
           <p className="text-sm text-muted-foreground">No evaluations yet</p>
         )}
+      </div>
+
+      <div>
+        <h2 className="mb-3 text-lg font-semibold">Holly AI Alerts</h2>
+        <HollyStats />
+      </div>
+
+      <div>
+        <HollyAlerts />
       </div>
     </div>
   );
