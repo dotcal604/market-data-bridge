@@ -164,6 +164,72 @@ npm test src/ibkr/__tests__/orders.test.ts
 - No mocking of SQLite — use in-memory DB for tests
 - Use Vitest for all tests
 
+## CRITICAL: Read Before You Write
+
+**Before writing ANY code**, you MUST read the actual source files you are integrating with. Do NOT guess function signatures, export names, or type definitions.
+
+### Mandatory Workflow
+1. **Read the module under test** — check every `export` to know the actual public API
+2. **Read the types file** — use the actual interface/type names, not invented ones
+3. **Read one existing test** in the same directory for patterns (imports, mocks, setup)
+4. **Only then write code** — importing exactly what exists
+
+### Common Mistakes to Avoid
+- ❌ Importing `simulateTrailingStop` when the actual export is `runTrailingStopSimulation`
+- ❌ Assuming a function returns `{ result }` when it actually returns `{ trades, stats }`
+- ❌ Hardcoding action counts (e.g., `toHaveLength(115)`) — use `toBeGreaterThanOrEqual(100)` for catalog tests
+- ❌ Creating duplicate modules that already exist under a different name
+- ❌ Adding new actions to `agent.ts` without checking the existing action list first
+
+### Agent Catalog Test Rules
+- `src/rest/__tests__/agent-catalog.test.ts` uses **dynamic count assertions** (`toBeGreaterThanOrEqual(100)`)
+- When adding new actions: add action names to the `expectedActions` sorted array
+- NEVER use hardcoded counts like `toHaveLength(117)` — this causes merge conflicts
+
+### Key Module Exports Reference
+
+#### Holly Trade Analysis (`src/holly/`)
+```typescript
+// trailing-stop-optimizer.ts — PUBLIC API:
+export function getDefaultParamSets(): TrailingStopParams[]
+export function runTrailingStopSimulation(opts): OptimizationResult
+export function runFullOptimization(opts): OptimizationResult[]
+export function runPerStrategyOptimization(opts): StrategyOptimization[]
+export function getOptimizationSummary(opts): string
+// NOTE: simulateTrailingExit() is INTERNAL — not exported
+
+// exit-autopsy.ts — PUBLIC API:
+export function runExitAutopsy(opts): ExitAutopsyReport
+// Types: ExitAutopsyReport, StrategyProfile, ExitArchetype
+
+// trade-importer.ts — PUBLIC API:
+export function importHollyTrades(csv: string): ImportResult
+export function queryHollyTrades(opts): HollyTrade[]
+export function getHollyTradeStats(): TradeStats
+
+// backtester.ts — PUBLIC API:
+export function runHollyBacktest(opts): BacktestResult
+export function getStrategyBreakdown(opts): StrategyBreakdown[]
+
+// predictor.ts — PUBLIC API:
+export function getHollyPredictorStatus(): PredictorStatus
+export function scanSymbol(opts): ScanResult
+export function scanBatch(opts): ScanResult[]
+export function getCandidates(opts): Candidate[]
+export function refreshProfiles(opts): void
+```
+
+#### Orchestrator (`src/orchestrator.ts`)
+```typescript
+export function multiModelScore(symbol: string, features?: Record<string, number>): Promise<MultiModelResult>
+export function multiModelConsensus(scores: ModelScore[]): ConsensusResult
+```
+
+#### Agent Actions (`src/rest/agent.ts`)
+- Current count: 119+ actions (growing)
+- All actions registered in `actions` object AND `actionsMeta` catalog
+- When adding actions: add to BOTH objects + update `gpt-instructions.ts`
+
 ## What NOT to Do
 
 - ❌ Do not use `console.log` — use Pino logger
