@@ -1,278 +1,415 @@
-# IBKR Market Bridge — User Guide
+# Market Data Bridge — User Guide
 
-*For traders, analysts, and information workers who want to ask AI assistants about their Interactive Brokers portfolio and market data.*
+*For traders using AI assistants (Claude, ChatGPT) to monitor markets, analyze setups, and execute trades through Interactive Brokers.*
 
 ---
 
 ## What This Is
 
-IBKR Market Bridge connects your Interactive Brokers account to AI assistants like **ChatGPT** and **Claude**. Once it's running, you can ask questions in plain English and get live answers pulled directly from your brokerage account and real-time market feeds.
+Market Data Bridge connects your Interactive Brokers account to AI assistants. It provides:
 
-**What you can do:**
-- Get stock and option prices
-- Pull historical price charts
-- Check your portfolio positions and balances
-- See your daily profit and loss
-- Look up option chains (available strikes and expirations)
-- Search for ticker symbols
-
-**What it cannot do:**
-- Place, modify, or cancel orders
-- Change any account settings
-- Access banking or funding information
-- Stream prices continuously (each question is a fresh snapshot)
-
-The bridge is **read-only by design**. It can look at data but it cannot touch anything.
-
----
-
-## Before You Start
-
-You need three things running on your computer:
-
-1. **TWS (Trader Workstation)** — open and logged in to your IBKR account
-2. **The bridge** — a small background program that someone on your team has already installed
-3. **An AI assistant** — either Claude Desktop or a ChatGPT custom GPT that's been configured to talk to the bridge
-
-If the bridge and TWS are already running (check with your tech team), you can skip straight to [Asking Questions](#asking-questions).
+- **Market data** — real-time quotes, historical bars, options chains, news, screeners, fundamentals
+- **Trade execution** — place, modify, and cancel orders through AI conversation
+- **Portfolio monitoring** — account balances, positions, P&L, risk exposure
+- **3-model evaluation engine** — Claude, GPT-4o, and Gemini score trade setups as an ensemble
+- **Holly AI integration** — import Trade Ideas Holly alerts, analyze patterns, optimize exits
+- **Risk management** — session guardrails, position sizing, daily loss limits
+- **Trade journaling** — record reasoning, outcomes, and performance analytics
+- **Dashboard** — Next.js web UI at `http://localhost:3001` for visual review
 
 ---
 
 ## Starting Up
 
-### Step 1: Open TWS
+### Prerequisites
 
-Launch Trader Workstation and log in as you normally would. Wait until the main screen loads and you see market data.
+1. **TWS or IB Gateway** — open and logged in (API connections enabled)
+2. **The bridge** — Node.js backend process
+3. **AI assistant** — Claude Desktop (MCP) or ChatGPT (REST API)
 
-### Step 2: Start the Bridge
+### Start the Bridge
 
-Open a command prompt or terminal and run:
+```bash
+cd market-data-bridge
 
-```
-cd "C:\Users\dotca\Downloads\Claude Code - Market API"
-node build/index.js --mode rest
+# Both MCP + REST (default)
+npm start
+
+# REST only (for ChatGPT)
+npm start -- --mode rest
+
+# MCP only (for Claude Desktop)
+npm start -- --mode mcp
+
+# Paper trading (port 7497)
+npm run start:paper
 ```
 
 You should see:
 ```
-[IBKR Bridge] Starting in rest mode...
-[IBKR Bridge] Connected to TWS/Gateway
-[REST] Server listening on http://localhost:3000
+[market-bridge] REST server listening on http://localhost:3000
+[market-bridge] Connected to TWS on 127.0.0.1:7497
 ```
 
-> **If you see a warning** about not connecting — that's okay. Make sure TWS is fully loaded and logged in. The bridge retries automatically every few seconds.
+### Start the Dashboard (optional)
 
-Leave this window open. Minimizing it is fine.
+```bash
+cd frontend
+npm run dev
+```
 
-### Step 3: Open Your AI Assistant
-
-- **Claude Desktop:** Just open it. If it's been set up for you, the IBKR tools are already available.
-- **ChatGPT:** Open the custom GPT named "IBKR Market Data" (or whatever your team named it). If you're using ChatGPT, someone also needs to start the ngrok tunnel — ask your tech team if you're not sure.
-
----
-
-## Asking Questions
-
-You don't need to learn any special commands. Just ask naturally. The AI figures out which data to pull.
-
-### Stock Prices
-
-> **"What's the current price of Apple?"**
-
-The AI will return the bid, ask, last traded price, today's open/high/low, yesterday's close, and volume.
-
-> **"Give me quotes for AAPL, MSFT, and GOOGL."**
-
-It will look up each one. Some assistants do these in sequence; it takes a few seconds per ticker.
-
-> **"How is SPY trading right now?"**
-
-Works for ETFs exactly the same way.
-
-**After hours note:** Outside of market hours (9:30 AM–4:00 PM ET on weekdays), the bid, ask, and last fields will be empty. You'll still see the closing price from the most recent session.
-
-### Historical Prices
-
-> **"Show me AAPL's price history for the last 30 days."**
-
-Returns daily open/high/low/close/volume bars — similar to what you'd see on a chart.
-
-> **"Get me 5-minute bars for TSLA from the last week."**
-
-You can ask for different time intervals:
-- **Bar sizes:** 1 minute, 5 minutes, 15 minutes, 1 hour, 1 day
-- **Lookback periods:** days (e.g., "5 days"), weeks ("2 weeks"), months ("6 months"), or years ("1 year")
-
-> **"What was MSFT's price action over the last 3 months in hourly bars?"**
-
-The AI will translate your natural language into the right parameters.
-
-**Tip:** Shorter bar sizes with longer lookback periods generate a lot of data. "1-minute bars for 1 year" would be enormous. Keep it reasonable — daily bars for months, or minute bars for a few days.
-
-### Options
-
-> **"What option expirations are available for AAPL?"**
-
-Returns all available expiration dates and strike prices. This list can be long for popular stocks.
-
-> **"What's the price of the AAPL March 2026 220 call?"**
-
-Returns bid/ask/last for that specific option contract. You need to know (or ask for) the expiration date, strike, and whether it's a call or put.
-
-> **"Show me the options chain for SPY, then get the quote on the closest at-the-money put expiring this Friday."**
-
-You can chain requests. The AI will first pull the chain to find available strikes, then look up the specific contract.
-
-### Account & Portfolio
-
-> **"What's my account balance?"**
-
-Returns your net liquidation value, cash, buying power, margin requirements, and excess liquidity.
-
-> **"What positions do I have?"**
-
-Lists every position — symbol, quantity, and average cost basis. Shows both long and short positions.
-
-> **"How am I doing today?"**
-
-Returns your daily P&L (profit and loss), broken into realized (closed trades) and unrealized (open positions).
-
-> **"What's my buying power and margin usage?"**
-
-The account summary includes both.
-
-### Symbol Lookup
-
-> **"Search for companies with 'solar' in the name."**
-
-Returns matching ticker symbols, their exchanges, and what derivatives are available.
-
-> **"What's the ticker for Berkshire Hathaway?"**
-
-Useful when you know the company name but not the symbol.
-
-> **"Look up contract details for NVDA."**
-
-Returns the full contract specification: exchange, industry classification, minimum tick size, and trading hours.
+Opens at `http://localhost:3001`.
 
 ---
 
-## Understanding the Responses
+## Feature Guide
 
-### Quote Fields Explained
+### 1. Market Data
 
-| Field | What It Means |
-|---|---|
-| **Bid** | The highest price someone is currently willing to pay |
-| **Ask** | The lowest price someone is currently willing to sell at |
-| **Last** | The most recent trade price |
-| **Open** | The first trade of today's session |
-| **High** | The highest trade today |
-| **Low** | The lowest trade today |
-| **Close** | Yesterday's closing price (or the most recent close if the market is shut) |
-| **Volume** | Total shares traded today |
+Ask your AI assistant naturally — it routes to the right tool automatically.
 
-**Spread** = Ask minus Bid. A tighter spread generally means more liquid.
-
-### Account Fields Explained
-
-| Field | What It Means |
-|---|---|
-| **Net Liquidation** | What your account is worth right now if you closed everything |
-| **Total Cash Value** | Cash in the account (not invested) |
-| **Settled Cash** | Cash that has cleared (available for withdrawal) |
-| **Buying Power** | How much you could spend on new positions (accounts for margin) |
-| **Gross Position Value** | Total market value of all your holdings |
-| **Maintenance Margin** | The minimum equity you must maintain to keep your positions |
-| **Excess Liquidity** | How much cushion you have above maintenance margin |
-| **Available Funds** | Funds available for new trades |
-
-### P&L Fields Explained
-
-| Field | What It Means |
-|---|---|
-| **Daily P&L** | Total profit or loss for today (realized + unrealized) |
-| **Unrealized P&L** | Gain/loss on positions you still hold (paper profit) |
-| **Realized P&L** | Gain/loss on positions you closed today |
-
----
-
-## Tips and Best Practices
-
-### Be Specific with Symbols
-
-- Use standard ticker symbols: **AAPL**, **MSFT**, **SPY**, **QQQ**
-- For options, specify all four parts: underlying, expiration, strike, and call/put
-- If you're not sure of a ticker, use the search feature first
-
-### Timing Matters
-
-- **During market hours** (9:30 AM–4:00 PM ET): You get live bid/ask/last/volume
-- **Pre-market / after hours**: Most fields will be null; only the previous close is available
-- **Weekends and holidays**: Same as after hours — close prices only
-
-### Multiple Questions
-
-You can ask follow-up questions in the same conversation:
-
+**Quotes and prices:**
 > "What's AAPL trading at?"
-> *[gets quote]*
-> "And what about its options chain?"
-> *[gets chain]*
-> "Get me the quote on the March 280 call."
-> *[gets option quote]*
+> "Get me quotes for AAPL, MSFT, and GOOGL."
+> "Show me SPY's last 30 days of daily bars."
+> "5-minute bars for TSLA from today."
 
-The AI remembers context within the conversation.
+**Options:**
+> "What option expirations are available for AAPL?"
+> "Price the AAPL March 2026 220 call."
+> "Show me the full options chain for SPY."
 
-### When Things Say "null"
+**Research:**
+> "What are the top gainers today?"
+> "Get me financials for NVDA."
+> "What's the analyst consensus on MSFT?"
+> "Show me recent news for TSLA."
+> "Search for companies with 'solar' in the name."
 
-A `null` value means the data wasn't available at the time of the request. Common reasons:
-
-- Market is closed (bid/ask/last will be null)
-- No market data subscription for that exchange
-- The symbol doesn't trade on the expected exchange
-
-The `close` field is almost always populated, even after hours.
-
-### Data Freshness
-
-Every response is a **fresh snapshot** from TWS at the moment you ask. There's no caching — if you ask for AAPL twice in a row, it makes two separate requests and may return slightly different prices.
+**Data sources:** IBKR real-time when connected, Yahoo Finance as automatic fallback. Historical bars, fundamentals, screeners, and news always come from Yahoo (no IBKR subscription needed).
 
 ---
 
-## What to Do If Something Goes Wrong
+### 2. Account and Portfolio
 
-| What Happened | What to Do |
-|---|---|
-| AI says it can't connect or tools aren't available | Check that the bridge is still running (look for the terminal window). Restart it if needed. |
-| All data comes back null | Check that TWS is open and logged in. The bridge may have lost its connection. |
-| You get an error about a symbol not found | Double-check the ticker symbol. Use the search feature to find the right one. |
-| ChatGPT says it can't reach the server | The ngrok tunnel probably stopped. Ask your tech team to restart it. |
-| Claude doesn't show IBKR tools | Claude Desktop may need a restart. Quit fully (File > Quit) and relaunch. |
-| Prices seem delayed | Paper trading accounts show 15–20 minute delayed data. This is an IBKR limitation, not a bug. |
-| "Request timed out" error | TWS might be overloaded with requests. Wait a few seconds and try again. |
-| Historical data request fails | Try a shorter time range or larger bar size. Very granular requests (1-minute bars over months) can hit IBKR's rate limits. |
+> "What's my account summary?"
+> "What positions do I have?"
+> "How's my P&L today?"
+> "What's my portfolio exposure breakdown?"
 
-If issues persist, contact whoever set up the bridge — they can check the technical logs.
+**Portfolio analytics** go beyond basic account data:
+
+> "Run a stress test — what happens if the market drops 5%?"
+> "Show me my portfolio exposure by sector."
+> "What's my beta-weighted exposure?"
+
+The **exposure** report shows gross/net exposure, % of equity deployed, largest position, sector breakdown, and portfolio heat score.
 
 ---
 
-## Quick Reference Card
+### 3. Order Execution
+
+The bridge can place, modify, and cancel orders through IBKR.
+
+**Single orders:**
+> "Buy 100 shares of AAPL at market."
+> "Place a limit buy for 50 MSFT at $420."
+> "Sell 200 SPY with a stop at $580."
+
+**Bracket orders (entry + take profit + stop loss):**
+> "Buy 100 AAPL at market, take profit at $250, stop loss at $230."
+
+**Advanced brackets** support trailing stops, adaptive algos, and OCA groups:
+> "Buy 100 AAPL at market with a 2% trailing stop and take profit at $260."
+
+**Order management:**
+> "What are my open orders?"
+> "Cancel order 47."
+> "Modify order 52 — change the limit to $425."
+> "Cancel all open orders."
+> "Flatten all positions." *(closes everything with market orders)*
+
+**Supported order types:** MKT, LMT, STP, STP LMT, TRAIL, TRAIL LIMIT, REL, MIT, MOC, LOC, PEG MID.
+
+---
+
+### 4. Risk Management
+
+#### Session Guardrails
+
+The session risk gate tracks your trading day and enforces limits:
+
+> "What's my session state?"
+> "Lock my session — I'm stepping away."
+> "Unlock my session."
+> "Reset session counters."
+
+**Automatic protections:**
+- Daily loss limit (locks session when exceeded)
+- Consecutive loss cooldown
+- Trade count limits
+- Manual lock/unlock
+
+#### Position Sizing
+
+> "Size a position for AAPL — entry at $240, stop at $235."
+
+Returns the maximum safe position size based on:
+- Account equity and buying power
+- Risk per trade (default 1% of net liquidation)
+- Maximum capital concentration (default 10%)
+- Volatility regime adjustment
+
+#### Risk Configuration
+
+> "Show me the risk config."
+> "Tune risk parameters from my last 100 trades."
+
+Auto-tuning uses half-Kelly sizing on your actual trade outcomes.
+
+---
+
+### 5. Evaluation Engine (3-Model Ensemble)
+
+The eval engine collects independent trade setup scores from three AI models and combines them into a weighted ensemble score.
+
+> "Score AAPL as a trade setup."
+> "Run multi-model consensus on MSFT."
+
+Each evaluation returns:
+- **Per-model scores** (Claude, GPT-4o, Gemini) on a 0–100 scale
+- **Ensemble score** — weighted average with disagreement penalty
+- **Should-trade verdict** — whether the setup passes the score threshold
+- **Model reasoning** — key drivers, risk factors, and uncertainties from each model
+
+#### Weight Tuning
+
+Model weights control how much each model contributes to the ensemble:
+
+> "Simulate weights: Claude 0.5, GPT 0.3, Gemini 0.2."
+> "Show me the weight history."
+
+The **Weight Tuner** page in the dashboard lets you adjust sliders and see simulated impact before applying changes. Auto-tune optimizes weights from your outcome history.
+
+#### Drift Detection
+
+> "Show me the drift report."
+> "Any drift alerts?"
+
+Monitors model accuracy over rolling windows, calibration error by score decile, and regime-shift detection. Alerts fire when metrics fall below thresholds.
+
+#### Outcome Tracking
+
+After trades close, record the outcome to build your performance dataset:
+
+> "Record outcome for evaluation abc123 — trade taken, R-multiple 1.5, exited at target."
+
+Outcomes feed into edge analytics, weight tuning, and drift detection.
+
+---
+
+### 6. Edge Analytics
+
+> "Show me my edge report."
+> "Run walk-forward validation."
+
+The edge report includes:
+- **Rolling Sharpe and Sortino ratios**
+- **Win rate and profit factor**
+- **Maximum drawdown**
+- **Expectancy per trade**
+- **Feature attribution** — which setup features predict winners
+- **Walk-forward validation** — out-of-sample proof that your edge isn't just luck
+
+---
+
+### 7. Holly AI Integration
+
+For traders using Trade Ideas Holly AI alerts. Import alerts and trades, then analyze patterns and optimize exits.
+
+#### Alert Import
+
+Holly alerts can be imported from CSV files (exported from Trade Ideas):
+
+> "Import these Holly alerts." *(paste CSV content)*
+> "Show me Holly alerts for today."
+> "What Holly symbols are active?"
+
+The bridge also supports a **file watcher** that auto-imports new alerts from Trade Ideas' Alert Logging CSV file (configure `HOLLY_WATCH_PATH` in `.env`).
+
+#### Auto-Eval Pipeline
+
+When enabled, incoming Holly alerts are automatically scored through the 3-model ensemble:
+
+> "Enable auto-eval."
+> "Show me the signal feed."
+> "What's the auto-eval status?"
+
+The **Signals** page in the dashboard shows a live feed of evaluated alerts with ensemble scores and should-trade verdicts.
+
+#### Predictor and Rule Extraction
+
+> "What's the Holly predictor status?"
+> "Scan AAPL against Holly profiles."
+> "Show me the top pre-alert candidates."
+> "Extract Holly alert rules."
+> "Backtest extracted rules."
+> "Break down Holly strategies."
+
+The predictor learns feature profiles from historical alerts and scans new symbols for matches using z-score analysis. Rule extraction reverse-engineers trigger conditions using Cohen's d effect size.
+
+#### Trade Import and Exit Analysis
+
+> "Show me Holly trade stats."
+> "Run the exit autopsy."
+
+Import Holly trade history (with MFE/MAE/giveback metrics computed automatically) to analyze:
+- **Strategy leaderboard** — expectancy, Sharpe, profit factor per strategy
+- **MFE/MAE profiles** — how much winners give back before exit
+- **Exit policy recommendations** — early peaker vs late grower vs bleeder archetypes
+- **Time-of-day performance** — when each strategy works best
+
+#### Trailing Stop Optimization
+
+> "Show me the trailing stop summary."
+> "Optimize trailing stops per strategy."
+> "What trailing stop parameters are available?"
+
+Runs 19 different trailing stop strategies (fixed-%, ATR-based, time-decay, MFE-escalation, breakeven+trail) against historical trade data and ranks them by P&L improvement.
+
+---
+
+### 8. Trade Journal
+
+> "Create a journal entry for AAPL — breakout setup, high confidence, following rules."
+> "Show me my recent journal entries."
+> "Update journal entry 15 with outcome: hit target, +1.5R."
+
+Journal entries track:
+- Pre-trade reasoning and setup type (breakout, pullback, reversal, gap fill, momentum)
+- Confidence rating (1–3)
+- Whether you followed your own rules
+- Post-trade notes and outcome tags
+- Market context (SPY price, VIX level)
+
+---
+
+### 9. AI Collaboration Channel
+
+A shared messaging channel between Claude, ChatGPT, and the user:
+
+> "Read the latest collab messages."
+> "Post to collab: AAPL looks strong above 240, watching for pullback entry."
+> "Show collab stats."
+
+Use it for multi-AI analysis handoffs — have one AI analyze the setup, another review the risk, and coordinate through the channel.
+
+---
+
+### 10. Dashboard Pages
+
+The Next.js dashboard at `http://localhost:3001` provides visual interfaces:
+
+| Page | What It Shows |
+|------|---------------|
+| **/** | Overview dashboard with ensemble stats, recent evals, Holly alerts |
+| **/market** | Symbol search, quotes, price charts, company info, news |
+| **/account** | Account summary, positions, flatten controls |
+| **/orders** | Place orders, view open/completed orders |
+| **/executions** | Trade execution history with fills and commission |
+| **/screener** | Stock screeners (7 types) with sortable results |
+| **/evals** | 3-model ensemble scores, trigger new evals, calibration curves |
+| **/session** | Session risk gate state, position sizer, risk config |
+| **/weights** | Ensemble weight management and history |
+| **/weights/tune** | Interactive weight tuner with live simulation |
+| **/drift** | Model accuracy rolling windows, calibration error, regime detection |
+| **/edge** | Sharpe/Sortino curves, equity curve, feature attribution |
+| **/journal** | Trade journal entries with reasoning and outcomes |
+| **/signals** | Auto-evaluated Holly alerts with ensemble scores |
+| **/collab** | AI collaboration channel message feed |
+| **/holly/autopsy** | Holly exit analysis, strategy leaderboard, MFE/MAE scatter |
+| **/holly/performance** | Trailing stop optimization, per-strategy performance |
+| **/status** | System status, IBKR connection, market session |
+
+---
+
+## Configuration
+
+Key environment variables in `.env`:
+
+```bash
+# IBKR connection (paper: 7497, live: 7496)
+IBKR_HOST=127.0.0.1
+IBKR_PORT=7497
+IBKR_CLIENT_ID=0
+
+# REST API
+REST_PORT=3000
+
+# AI model keys (for eval engine)
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+GEMINI_API_KEY=AIza...
+
+# Holly file watcher (optional)
+HOLLY_WATCH_PATH=C:\Users\you\Documents\TradeIdeasPro\alerts.csv
+HOLLY_POLL_INTERVAL_MS=5000
+
+# Auto-eval pipeline (off by default)
+AUTO_EVAL_ENABLED=false
+
+# Drift alerts
+DRIFT_ALERTS_ENABLED=true
+DRIFT_ACCURACY_THRESHOLD=0.55
+
+# Divoom display (optional)
+DIVOOM_ENABLED=false
+DIVOOM_DEVICE_IP=192.168.1.x
+```
+
+---
+
+## Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| AI says tools aren't available | Check bridge is running. For Claude, restart Claude Desktop. |
+| All data returns null | Check TWS is logged in. Bridge retries connection automatically. |
+| Symbol not found | Use the search feature first. Check ticker is correct. |
+| ChatGPT can't reach server | ngrok tunnel may have stopped. Restart it. |
+| Prices seem delayed | Paper accounts have 15–20 min delay (IBKR limitation). |
+| Order rejected | Check risk gate session state. May be locked or in cooldown. |
+| Eval returns no score | Check that API keys are set for all three models in `.env`. |
+| Holly watcher not importing | Verify `HOLLY_WATCH_PATH` points to the correct CSV file. |
+| Dashboard won't load | Run `cd frontend && npm run dev`. Check port 3001 is free. |
+
+---
+
+## Quick Reference
 
 | You Want To... | Say Something Like... |
 |---|---|
-| Get a stock price | "What's AAPL trading at?" |
-| Compare prices | "Get me quotes for AAPL, MSFT, and GOOGL" |
-| See a price chart | "Show me SPY's last 30 days of prices" |
-| Get intraday data | "5-minute bars for TSLA from today" |
-| Find option expirations | "What options are available for AAPL?" |
-| Price an option | "AAPL March 2026 220 call — what's the bid/ask?" |
-| Check your balance | "What's my account summary?" |
-| See your positions | "What am I holding right now?" |
-| Check today's P&L | "How's my P&L today?" |
-| Look up a ticker | "Search for companies with 'energy' in the name" |
-| Get contract info | "Tell me about the NVDA contract" |
-| Check connection | "Is the IBKR connection working?" |
+| Get a quote | "What's AAPL trading at?" |
+| Historical bars | "Show me SPY's last 30 days" |
+| Options chain | "What options are available for AAPL?" |
+| Account summary | "What's my account balance?" |
+| Check positions | "What am I holding?" |
+| Today's P&L | "How's my P&L today?" |
+| Place an order | "Buy 100 AAPL at market" |
+| Bracket order | "Buy 100 AAPL, TP at $250, SL at $230" |
+| Cancel orders | "Cancel all open orders" |
+| Flatten everything | "Flatten all positions" |
+| Score a setup | "Score AAPL as a trade setup" |
+| Position size | "Size a position: AAPL entry $240, stop $235" |
+| Session state | "What's my session state?" |
+| Edge analytics | "Show me my edge report" |
+| Holly alerts | "Show me today's Holly alerts" |
+| Exit analysis | "Run the Holly exit autopsy" |
+| Journal entry | "Create a journal entry for AAPL" |
+| Collab message | "Post to collab: watching AAPL breakout" |
+| Trailing stops | "Optimize trailing stops per strategy" |
+| Drift check | "Any drift alerts?" |
+| Stress test | "What happens if the market drops 5%?" |
 
 ---
 
@@ -281,15 +418,17 @@ If issues persist, contact whoever set up the bridge — they can check the tech
 | Term | Definition |
 |---|---|
 | **TWS** | Trader Workstation — IBKR's desktop trading application |
-| **IB Gateway** | A lightweight, headless alternative to TWS (same data, no GUI) |
-| **Bridge** | This software — the middleman between TWS and your AI assistant |
-| **MCP** | Model Context Protocol — the way Claude connects to external tools |
-| **REST API** | The web interface ChatGPT uses to talk to the bridge |
-| **ngrok** | A tunneling service that gives the bridge a public web address so ChatGPT can reach it |
-| **Snapshot** | A one-time data pull (vs. streaming, which pushes updates continuously) |
-| **Net Liquidation** | Your total account value — cash plus the market value of all positions |
-| **Buying Power** | How much you can invest, accounting for margin rules |
-| **OHLCV** | Open, High, Low, Close, Volume — the standard fields in a price bar |
-| **conId** | IBKR's unique numeric identifier for a specific tradable instrument |
-| **Bid/Ask Spread** | The gap between the best buy and best sell price; tighter = more liquid |
-| **Paper Account** | A simulated IBKR account for practice; uses delayed market data |
+| **IB Gateway** | Lightweight headless alternative to TWS |
+| **Bridge** | This software — connects TWS to AI assistants |
+| **MCP** | Model Context Protocol — how Claude connects to external tools |
+| **Ensemble** | Weighted combination of scores from 3 AI models |
+| **Eval** | A scored trade setup evaluation from the 3-model engine |
+| **R-multiple** | Trade outcome as a multiple of initial risk (1R = risked amount) |
+| **Holly AI** | Trade Ideas' AI alert system that flags trade setups |
+| **MFE / MAE** | Maximum Favorable / Adverse Excursion — best and worst price during a trade |
+| **Giveback** | How much of MFE was surrendered before exit |
+| **Drift** | When model performance degrades over time |
+| **Risk gate** | Pre-trade checks that block orders violating risk rules |
+| **Flatten** | Close all positions and cancel all orders |
+| **Paper account** | Simulated IBKR account for practice (delayed data) |
+| **Walk-forward** | Out-of-sample validation that slides a train/test window across history |

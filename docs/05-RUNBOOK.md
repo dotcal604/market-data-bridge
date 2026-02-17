@@ -215,7 +215,7 @@ Common error codes emitted by TWS through the API:
 2. Wait for TWS to fully initialize (data farms connected)
 3. Start the bridge:
    ```bash
-   cd "C:\Users\dotca\Downloads\Claude Code - Market API"
+   cd market-data-bridge
    node build/index.js --mode rest   # or --mode mcp, or no flag for both
    ```
 4. Verify: `curl http://localhost:3000/api/status`
@@ -289,7 +289,6 @@ tail -f bridge.log
 | No persistent URL (ngrok free) | ChatGPT GPT needs URL update on each ngrok restart | Use ngrok paid tier or Cloudflare Tunnel |
 | No REST authentication | Anyone with network access to port 3000 can query account data | Only expose via authenticated tunnel; keep on localhost otherwise |
 | Single account | Bridge reads the first account returned by TWS | For multi-account, would need code modification |
-| No streaming | Each quote is a snapshot request | Request quotes as needed; no WebSocket push |
-| No write operations | Cannot place/modify/cancel orders | By design — safety constraint |
+| WebSocket is dashboard-only | Real-time bars stream to the Next.js UI; MCP/REST use snapshots | Subscribe to real-time bars via API for streaming data |
 | TWS rate limits | ~50 simultaneous mktdata, ~60 historical / 10 min | Space out requests; reduce bar count for historical |
 | Paper account delayed data | 15–20 minute delay on quotes | Use live account for real-time, or accept delay for testing |

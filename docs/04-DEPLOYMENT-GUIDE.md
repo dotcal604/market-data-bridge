@@ -6,8 +6,8 @@
 
 | Requirement | Minimum | Notes |
 |---|---|---|
-| **Node.js** | 18.0+ | Verify: `node --version` |
-| **npm** | 9.0+ | Ships with Node.js |
+| **Node.js** | 22.0+ | Verify: `node --version` |
+| **npm** | 10.0+ | Ships with Node.js |
 | **TWS or IB Gateway** | Latest stable | Download from [IBKR](https://www.interactivebrokers.com/en/trading/tws.php) |
 | **IBKR Account** | Any (paper or live) | Paper accounts receive delayed data |
 | **ngrok** (optional) | Free tier | Required only for ChatGPT integration |
@@ -30,7 +30,7 @@ Before the bridge can connect, TWS (or IB Gateway) must have API access enabled.
    - IB Gateway Paper: `4002`
    - IB Gateway Live: `4001`
 6. (Recommended) Check: **"Allow connections from localhost only"**
-7. (Optional) Uncheck: **"Read-Only API"** — not required since the bridge is read-only by design, but won't cause issues either way
+7. **Uncheck: "Read-Only API"** — required for order execution. If left checked, the bridge can only read data but cannot place, modify, or cancel orders
 8. Click **Apply** then **OK**
 
 ### 2.2 Trusted IP Addresses
@@ -45,7 +45,7 @@ If TWS prompts to accept an incoming API connection:
 
 ```bash
 # Clone or copy the project
-cd "C:\Users\dotca\Downloads\Claude Code - Market API"
+cd market-data-bridge
 
 # Install dependencies
 npm install
@@ -83,6 +83,28 @@ IBKR_CLIENT_ID=0           # Must be unique across all API connections to this T
 
 # REST API
 REST_PORT=3000             # Local HTTP port
+
+# AI model keys (for eval engine — all three required for ensemble scoring)
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+GEMINI_API_KEY=AIza...
+
+# Holly AI file watcher (optional — auto-imports from Trade Ideas alert CSV)
+HOLLY_WATCH_PATH=          # e.g., C:\Users\you\Documents\TradeIdeasPro\alerts.csv
+HOLLY_POLL_INTERVAL_MS=5000
+
+# Auto-eval pipeline (off by default)
+AUTO_EVAL_ENABLED=false
+AUTO_EVAL_MAX_CONCURRENT=3
+
+# Drift detection
+DRIFT_ALERTS_ENABLED=true
+DRIFT_ACCURACY_THRESHOLD=0.55
+DRIFT_CALIBRATION_THRESHOLD=0.15
+
+# Divoom display (optional)
+DIVOOM_ENABLED=false
+DIVOOM_DEVICE_IP=
 ```
 
 ### Port Quick Reference
@@ -131,7 +153,7 @@ Add the `mcpServers` key:
   "mcpServers": {
     "ibkr": {
       "command": "node",
-      "args": ["C:/Users/dotca/Downloads/Claude Code - Market API/build/index.js", "--mode", "mcp"]
+      "args": ["C:/Users/dotca/source/market-data-bridge/build/index.js", "--mode", "mcp"]
     }
   }
 }
@@ -154,7 +176,7 @@ Ask Claude: *"Check my IBKR connection status"* — it should invoke `connection
 ## 7. Claude Code Integration
 
 ```bash
-claude mcp add ibkr -- node "C:/Users/dotca/Downloads/Claude Code - Market API/build/index.js" --mode mcp
+claude mcp add ibkr -- node "C:/Users/dotca/source/market-data-bridge/build/index.js" --mode mcp
 ```
 
 Or add manually to `.mcp.json` in any project:
@@ -164,7 +186,7 @@ Or add manually to `.mcp.json` in any project:
   "mcpServers": {
     "ibkr": {
       "command": "node",
-      "args": ["C:/Users/dotca/Downloads/Claude Code - Market API/build/index.js", "--mode", "mcp"]
+      "args": ["C:/Users/dotca/source/market-data-bridge/build/index.js", "--mode", "mcp"]
     }
   }
 }
@@ -198,7 +220,7 @@ Open two terminals:
 
 **Terminal 1 — Bridge:**
 ```bash
-cd "C:\Users\dotca\Downloads\Claude Code - Market API"
+cd market-data-bridge
 node build/index.js --mode rest
 ```
 
@@ -260,7 +282,7 @@ After deployment, verify each component:
 ### Start as Background Process (Windows)
 
 ```powershell
-Start-Process -NoNewWindow -FilePath "node" -ArgumentList "build/index.js","--mode","rest" -WorkingDirectory "C:\Users\dotca\Downloads\Claude Code - Market API"
+Start-Process -NoNewWindow -FilePath "node" -ArgumentList "build/index.js","--mode","rest" -WorkingDirectory "C:\Users\dotca\source\market-data-bridge"
 ```
 
 ### Check If Running
@@ -297,5 +319,5 @@ Opens a browser UI to interactively test all MCP tools.
 | **Market hours** | Real-time bid/ask/last data is only available during market hours. Outside hours, these fields will be `null`; `close` will contain the last closing price. |
 | **Data subscriptions** | IBKR requires market data subscriptions for real-time quotes. Without subscriptions, you may get delayed data or errors. Paper accounts include delayed data by default. |
 | **Rate limits** | TWS imposes a limit of ~50 simultaneous market data requests and ~60 historical data requests per 10 minutes. The bridge does not enforce client-side rate limiting. |
-| **Memory** | The bridge holds no persistent state or cache. Memory usage is minimal (~50–80 MB). |
+| **Memory** | The bridge uses SQLite for persistent state (evaluations, orders, journal, etc.). Memory usage is typically 50–120 MB. |
 | **Logs** | All diagnostic output goes to `stderr`. REST responses go to `stdout` (or the TCP socket). MCP protocol messages go to `stdout`. |
