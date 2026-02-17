@@ -1,3 +1,5 @@
+import type { OptionsChainData } from "./types";
+
 const API_BASE = "/api";
 
 async function fetchJSON<T>(url: string): Promise<T> {
@@ -8,8 +10,6 @@ async function fetchJSON<T>(url: string): Promise<T> {
   }
   return res.json();
 }
-
-import type { OptionsChainData } from "./types";
 
 export const optionsClient = {
   async getOptionsChain(symbol: string, expiration?: string): Promise<OptionsChainData> {
