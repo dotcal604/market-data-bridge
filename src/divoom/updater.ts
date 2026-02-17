@@ -35,12 +35,36 @@ async function fetchPnLData(): Promise<PnLData> {
 
   try {
     const pnl = await getPnL();
+
+    // Calculate win rate from today's executions
+    const { queryExecutions } = await import("../db/database.js");
+    const today = new Date().toISOString().split("T")[0];
+    const todaysExecs = queryExecutions({ limit: 1000 }) as Array<Record<string, unknown>>;
+    
+    // Group by correlation_id to count trades (not individual executions)
+    const tradeMap = new Map<string, number>();
+    for (const exec of todaysExecs) {
+      const timestamp = String(exec.timestamp ?? "");
+      if (!timestamp.startsWith(today)) continue;
+      
+      const correlationId = String(exec.correlation_id ?? "");
+      const pnl = Number(exec.realized_pnl ?? 0);
+      if (correlationId && pnl !== 0) {
+        tradeMap.set(correlationId, (tradeMap.get(correlationId) ?? 0) + pnl);
+      }
+    }
+
+    const trades = Array.from(tradeMap.values());
+    const winningTrades = trades.filter((pnl) => pnl > 0).length;
+    const tradeCount = trades.length;
+    const winRate = tradeCount > 0 ? winningTrades / tradeCount : 0;
+
     return {
       realizedPnL: pnl.realizedPnL ?? 0,
       unrealizedPnL: pnl.unrealizedPnL ?? 0,
       totalPnL: pnl.dailyPnL ?? 0,
-      winRate: 0, // TODO: Calculate from executions
-      tradeCount: 0, // TODO: Calculate from executions
+      winRate,
+      tradeCount,
     };
   } catch (err) {
     log.error({ err }, "Failed to fetch P&L");
@@ -58,8 +82,34 @@ async function fetchPnLData(): Promise<PnLData> {
  * Fetch current positions
  */
 async function fetchPositions(): Promise<Position[]> {
-  // TODO: Implement position fetching from IBKR or DB
-  return [];
+  if (!isConnected()) {
+    return [];
+  }
+
+  try {
+    const { getPositions } = await import("../ibkr/account.js");
+    const positions = await getPositions();
+    
+    // Get current prices for unrealized P&L calculation
+    const positionsWithPnL: Position[] = [];
+    for (const pos of positions) {
+      const currentPrice = pos.avgCost; // Use avgCost as fallback if no market price
+      const unrealizedPnL = (currentPrice - pos.avgCost) * pos.position;
+      
+      positionsWithPnL.push({
+        symbol: pos.symbol,
+        quantity: pos.position,
+        avgPrice: pos.avgCost,
+        currentPrice,
+        unrealizedPnL,
+      });
+    }
+    
+    return positionsWithPnL;
+  } catch (err) {
+    log.error({ err }, "Failed to fetch positions");
+    return [];
+  }
 }
 
 /**
