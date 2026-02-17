@@ -5,6 +5,10 @@ let ib: IBApi | null = null;
 let connected = false;
 let nextReqId = 1;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let twsVersion: number | null = null;
+
+/** Minimum TWS server version we expect. Below this we log a warning. */
+const MIN_TWS_VERSION = 163; // TWS 10.30 reports server version 163
 
 /**
  * Deterministic clientId based on transport mode to prevent collisions.
@@ -54,7 +58,11 @@ export function getIB(): IBApi {
     ib.on(EventName.connected, () => {
       connected = true;
       clientIdRetries = 0;
-      console.error(`[IBKR] Connected to TWS/Gateway (clientId=${currentClientId}, mode=${accountMode()}, port=${config.ibkr.port})`);
+      twsVersion = ib!.serverVersion ?? null;
+      console.error(`[IBKR] Connected to TWS/Gateway (clientId=${currentClientId}, mode=${accountMode()}, port=${config.ibkr.port}, serverVersion=${twsVersion})`);
+      if (twsVersion !== null && twsVersion < MIN_TWS_VERSION) {
+        console.error(`[IBKR] WARNING: TWS server version ${twsVersion} is below minimum ${MIN_TWS_VERSION} (TWS 10.30). Some features may not work correctly.`);
+      }
       if (onReconnectCallback) {
         try { onReconnectCallback(); } catch (e: any) {
           console.error(`[IBKR] Reconnect callback error: ${e.message}`);
@@ -68,6 +76,7 @@ export function getIB(): IBApi {
 
     ib.on(EventName.disconnected, () => {
       connected = false;
+      twsVersion = null;
       console.error("[IBKR] Disconnected from TWS/Gateway");
       scheduleReconnect();
     });
@@ -105,6 +114,7 @@ function destroyIB(): void {
     }
     ib = null;
     connected = false;
+    twsVersion = null;
   }
 }
 
@@ -168,6 +178,11 @@ export function isConnected(): boolean {
   return connected;
 }
 
+/** Returns the TWS server version, or null if not connected. */
+export function getTwsVersion(): number | null {
+  return twsVersion;
+}
+
 /** Derive account mode from port convention: 7497/4002 = paper, 7496/4001 = live */
 function accountMode(): "paper" | "live" | "unknown" {
   const p = config.ibkr.port;
@@ -183,5 +198,6 @@ export function getConnectionStatus() {
     port: config.ibkr.port,
     clientId: currentClientId,
     mode: accountMode(),
+    twsVersion,
   };
 }

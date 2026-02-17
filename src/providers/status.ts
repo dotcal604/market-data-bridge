@@ -35,6 +35,7 @@ export function getStatus() {
       host: ibkr.host,
       port: ibkr.port,
       clientId: ibkr.clientId,
+      twsVersion: ibkr.twsVersion,
       note: ibkr.connected
         ? `Account data available (${ibkr.mode})`
         : "Start TWS/Gateway for account data (positions, PnL)",

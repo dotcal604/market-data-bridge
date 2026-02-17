@@ -32,6 +32,13 @@ export interface DashboardData {
   hollyAlert?: { symbol: string; strategy: string; entryPrice: number };
   spy: number;
   qqq: number;
+  recentTrade?: {
+    symbol: string;
+    quantity: number;
+    price: number;
+    side: "BUY" | "SELL";
+    timestamp: string;
+  };
 }
 
 /**
@@ -185,6 +192,24 @@ export class DivoomDisplay {
         text: `Holly: ${data.hollyAlert.symbol} @${data.hollyAlert.entryPrice.toFixed(2)}`,
         y: 64,
         color: "#FF00FF",
+      });
+    }
+
+    // Line 6: Recent trade (if present)
+    if (data.recentTrade) {
+      const tradeColor = data.recentTrade.side === "BUY" ? "#00FF00" : "#FF0000";
+      const side = data.recentTrade.side.padEnd(4, " ");
+      const time = new Date(data.recentTrade.timestamp).toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      const tradeText = `${side} ${data.recentTrade.quantity} ${
+        data.recentTrade.symbol
+      } @${data.recentTrade.price.toFixed(2)} ${time}`;
+      lines.push({
+        text: tradeText,
+        y: 80,
+        color: tradeColor,
       });
     }
 
