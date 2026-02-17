@@ -7,6 +7,7 @@ import { checkDriftAlerts } from "./eval/drift-alerts.js";
 import { pruneInbox } from "./inbox/store.js";
 import { config } from "./config.js";
 import { checkTunnelHealth } from "./ops/tunnel-monitor.js";
+import { sampleAvailability, pruneOldSamples, SAMPLE_INTERVAL_MS } from "./ops/availability.js";
 import { logger } from "./logging.js";
 
 const log = logger.child({ subsystem: "scheduler" });
@@ -15,6 +16,7 @@ let snapshotTimer: ReturnType<typeof setInterval> | null = null;
 let flattenTimer: ReturnType<typeof setInterval> | null = null;
 let pruneTimer: ReturnType<typeof setInterval> | null = null;
 let tunnelCheckTimer: ReturnType<typeof setInterval> | null = null;
+let availabilityTimer: ReturnType<typeof setInterval> | null = null;
 let flattenFiredToday = "";
 let lastPruneDate = "";
 
@@ -311,6 +313,21 @@ export function startScheduler(intervalMs: number = DEFAULT_INTERVAL_MS) {
     }, 30_000);
     log.info({ intervalMin: TUNNEL_CHECK_MS / 60_000 }, "Tunnel health monitor armed — checking every 5 min");
   }
+
+  // Start availability sampling (30s interval — continuous SLA tracking)
+  if (!availabilityTimer) {
+    availabilityTimer = setInterval(() => {
+      sampleAvailability().catch((err) => log.error({ err }, "Availability sampling error (swallowed)"));
+    }, SAMPLE_INTERVAL_MS);
+    // Take initial sample immediately
+    sampleAvailability().catch((err) => log.error({ err }, "Initial availability sample error (swallowed)"));
+    log.info({ intervalSec: SAMPLE_INTERVAL_MS / 1000 }, "Availability sampling armed — tracking uptime every 30s");
+
+    // Prune old samples once per hour
+    setInterval(() => {
+      try { pruneOldSamples(); } catch (err) { log.error({ err }, "Availability prune error (swallowed)"); }
+    }, 60 * 60 * 1000); // 1 hour
+  }
 }
 
 export function stopScheduler() {
@@ -333,6 +350,10 @@ export function stopScheduler() {
   if (tunnelCheckTimer) {
     clearInterval(tunnelCheckTimer);
     tunnelCheckTimer = null;
+  }
+  if (availabilityTimer) {
+    clearInterval(availabilityTimer);
+    availabilityTimer = null;
   }
   log.info("Scheduler stopped");
 }
