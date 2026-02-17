@@ -111,19 +111,19 @@ async function main() {
     closeDb();
     process.exit(0);
   };
-  process.on("SIGINT", shutdown);
-  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", () => { shutdown().catch((e) => logger.error({ err: e }, "Shutdown error")); });
+  process.on("SIGTERM", () => { shutdown().catch((e) => logger.error({ err: e }, "Shutdown error")); });
 
   // Catch unhandled async rejections — log and shut down cleanly
   process.on("unhandledRejection", (reason, promise) => {
     logger.error({ reason, promise }, "Unhandled promise rejection — shutting down");
-    shutdown();
+    shutdown().catch((e) => logger.error({ err: e }, "Shutdown error"));
   });
 
   // Catch uncaught sync exceptions
   process.on("uncaughtException", (err) => {
     logger.fatal({ err }, "Uncaught exception — shutting down");
-    shutdown();
+    shutdown().catch((e) => logger.error({ err: e }, "Shutdown error"));
   });
 }
 

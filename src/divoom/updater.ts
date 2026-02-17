@@ -90,18 +90,17 @@ async function fetchPositions(): Promise<Position[]> {
     const { getPositions } = await import("../ibkr/account.js");
     const positions = await getPositions();
     
-    // Get current prices for unrealized P&L calculation
+    // Note: IBKR getPositions() doesn't return current market price
+    // To get unrealized P&L, we'd need to fetch quotes for each position
+    // For the Divoom display, we show position count rather than individual P&L
     const positionsWithPnL: Position[] = [];
     for (const pos of positions) {
-      const currentPrice = pos.avgCost; // Use avgCost as fallback if no market price
-      const unrealizedPnL = (currentPrice - pos.avgCost) * pos.position;
-      
       positionsWithPnL.push({
         symbol: pos.symbol,
         quantity: pos.position,
         avgPrice: pos.avgCost,
-        currentPrice,
-        unrealizedPnL,
+        currentPrice: pos.avgCost, // No market price available from getPositions
+        unrealizedPnL: 0, // Would need to fetch quotes to calculate
       });
     }
     
