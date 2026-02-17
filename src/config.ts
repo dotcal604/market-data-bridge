@@ -44,4 +44,9 @@ export const config = {
     refreshIntervalMs: parseInt(process.env.DIVOOM_REFRESH_MS ?? "10000", 10),
     brightness: parseInt(process.env.DIVOOM_BRIGHTNESS ?? "80", 10),
   },
+  gemini: {
+    apiKey: process.env.GOOGLE_AI_API_KEY ?? "",
+    model: process.env.GEMINI_MODEL ?? "gemini-2.0-flash",
+    timeoutMs: parseInt(process.env.GEMINI_TIMEOUT_MS ?? "10000", 10),
+  },
 };

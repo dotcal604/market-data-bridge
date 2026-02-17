@@ -29,6 +29,9 @@ describe("validateConfig", () => {
         enabled: true,
       },
       autoEval: { enabled: false, dedupWindowMin: 5, maxConcurrent: 3 },
+      orchestrator: { weights: { gpt: 0.4, gemini: 0.3, claude: 0.3 }, requiredAgreement: 0.6 },
+      divoom: { enabled: false, deviceIp: "", refreshIntervalMs: 10000, brightness: 80 },
+      gemini: { apiKey: "", model: "gemini-2.0-flash", timeoutMs: 10000 },
     };
 
     const result = validateConfig(validConfig);
@@ -440,5 +443,54 @@ describe("validateConfig", () => {
       autoEval: { enabled: false, dedupWindowMin: 5, maxConcurrent: 3 },
     };
     expect(validateConfig(validMaxClientId).errors).toEqual([]);
+  });
+
+  // Gemini timeout validation tests
+  it("should return error when gemini.timeoutMs is zero", () => {
+    const config = {
+      ibkr: { host: "127.0.0.1", port: 7496, clientId: 0, maxClientIdRetries: 5, orderTimeoutMs: 10000, executionTimeoutMs: 15000 },
+      rest: { port: 3000, apiKey: "secure-api-key-16+" },
+      holly: { watchPath: "", pollIntervalMs: 5000 },
+      drift: { accuracyThreshold: 0.55, calibrationThreshold: 0.15, enabled: true },
+      autoEval: { enabled: false, dedupWindowMin: 5, maxConcurrent: 3 },
+      orchestrator: { weights: { gpt: 0.4, gemini: 0.3, claude: 0.3 }, requiredAgreement: 0.6 },
+      divoom: { enabled: false, deviceIp: "", refreshIntervalMs: 10000, brightness: 80 },
+      gemini: { apiKey: "", model: "gemini-2.0-flash", timeoutMs: 0 },
+    };
+
+    const result = validateConfig(config);
+    expect(result.errors).toContain("gemini.timeoutMs must be positive, got 0");
+  });
+
+  it("should return error when gemini.timeoutMs is negative", () => {
+    const config = {
+      ibkr: { host: "127.0.0.1", port: 7496, clientId: 0, maxClientIdRetries: 5, orderTimeoutMs: 10000, executionTimeoutMs: 15000 },
+      rest: { port: 3000, apiKey: "secure-api-key-16+" },
+      holly: { watchPath: "", pollIntervalMs: 5000 },
+      drift: { accuracyThreshold: 0.55, calibrationThreshold: 0.15, enabled: true },
+      autoEval: { enabled: false, dedupWindowMin: 5, maxConcurrent: 3 },
+      orchestrator: { weights: { gpt: 0.4, gemini: 0.3, claude: 0.3 }, requiredAgreement: 0.6 },
+      divoom: { enabled: false, deviceIp: "", refreshIntervalMs: 10000, brightness: 80 },
+      gemini: { apiKey: "", model: "gemini-2.0-flash", timeoutMs: -1000 },
+    };
+
+    const result = validateConfig(config);
+    expect(result.errors).toContain("gemini.timeoutMs must be positive, got -1000");
+  });
+
+  it("should pass validation when gemini.timeoutMs is positive", () => {
+    const config = {
+      ibkr: { host: "127.0.0.1", port: 7496, clientId: 0, maxClientIdRetries: 5, orderTimeoutMs: 10000, executionTimeoutMs: 15000 },
+      rest: { port: 3000, apiKey: "secure-api-key-16+" },
+      holly: { watchPath: "", pollIntervalMs: 5000 },
+      drift: { accuracyThreshold: 0.55, calibrationThreshold: 0.15, enabled: true },
+      autoEval: { enabled: false, dedupWindowMin: 5, maxConcurrent: 3 },
+      orchestrator: { weights: { gpt: 0.4, gemini: 0.3, claude: 0.3 }, requiredAgreement: 0.6 },
+      divoom: { enabled: false, deviceIp: "", refreshIntervalMs: 10000, brightness: 80 },
+      gemini: { apiKey: "", model: "gemini-2.0-flash", timeoutMs: 10000 },
+    };
+
+    const result = validateConfig(config);
+    expect(result.errors).toEqual([]);
   });
 });

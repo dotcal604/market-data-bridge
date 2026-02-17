@@ -1,5 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { z } from "zod";
+import { config } from "../config.js";
 import { logger } from "../logging.js";
 
 const log = logger.child({ module: "providers/gemini" });
@@ -20,13 +21,13 @@ let geminiClient: GoogleGenAI | null = null;
 
 function getGeminiClient(): GoogleGenAI {
   if (!geminiClient) {
-    geminiClient = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_API_KEY ?? "" });
+    geminiClient = new GoogleGenAI({ apiKey: config.gemini.apiKey });
   }
   return geminiClient;
 }
 
 export async function getGeminiTradeScore(symbol: string, features: Record<string, unknown>): Promise<GeminiTradeScore> {
-  if (!process.env.GOOGLE_AI_API_KEY) {
+  if (!config.gemini.apiKey) {
     throw new Error("GOOGLE_AI_API_KEY is not configured");
   }
 
@@ -37,7 +38,7 @@ export async function getGeminiTradeScore(symbol: string, features: Record<strin
   ].join("\n");
 
   const response = await getGeminiClient().models.generateContent({
-    model: process.env.GEMINI_MODEL ?? "gemini-2.5-flash",
+    model: config.gemini.model,
     contents: prompt,
     config: {
       temperature: 0,
