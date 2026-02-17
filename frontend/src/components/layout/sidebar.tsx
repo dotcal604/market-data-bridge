@@ -21,6 +21,7 @@ import {
   Zap,
   Crosshair,
   Microscope,
+  DollarSign,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -28,6 +29,7 @@ const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/status", label: "Status", icon: Server },
   { href: "/market", label: "Market Data", icon: TrendingUp },
+  { href: "/market/options", label: "Options Chain", icon: DollarSign },
   { href: "/screener", label: "Screener", icon: Filter },
   { href: "/evals", label: "Evaluations", icon: History, children: [
     { href: "/evals/compare", label: "Compare", icon: GitCompare },
