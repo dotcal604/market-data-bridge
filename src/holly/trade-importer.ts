@@ -1,459 +1,345 @@
 /**
- * Holly Trade CSV Importer
+ * Holly AI Trade CSV Importer
  *
- * Parses the Trade Ideas Holly AI historical trade export CSV.
- * The CSV has a non-standard format where dates contain commas:
- *   YYYY,Mon,DD,"HH:MM:SS,YYYY",Mon,DD,"HH:MM:SS,Symbol,Shares,...rest"
+ * Parses Holly AI trade execution CSVs with non-standard date format (dates with commas).
+ * Computes derived fields: hold_minutes, MFE, MAE, giveback, giveback_ratio, time_to_mfe_min, r_multiple.
  *
- * Creates holly_trades table with full trade data including MFE/MAE,
- * max profit times, exit metrics — everything needed for the exit autopsy.
+ * Usage:
+ *   importHollyTrades(csvContent: string): ImportResult
  */
 
-import { readFileSync } from "node:fs";
-import { getDb } from "../db/database.js";
+import { parse } from "csv-parse/sync";
+import { randomUUID } from "crypto";
 import { logger } from "../logging.js";
 
-const log = logger.child({ module: "holly-trade-importer" });
+const log = logger.child({ module: "holly-trades" });
 
-// ── Types ────────────────────────────────────────────────────────────────
-
-export interface HollyTrade {
+export interface HollyTradeRow {
+  symbol: string;
   entry_time: string;
   exit_time: string;
-  symbol: string;
-  shares: number;
   entry_price: number;
-  last_price: number;
-  change_from_entry: number | null;
-  change_from_close: number | null;
-  change_from_close_pct: number | null;
-  strategy: string;
   exit_price: number;
-  closed_profit: number;
-  profit_change_15: number | null;
-  profit_change_5: number | null;
-  max_profit: number | null;
-  profit_basis_points: number | null;
-  open_profit: number | null;
+  size: number;
+  side: "LONG" | "SHORT";
   stop_price: number | null;
-  time_stop: string | null;
-  max_profit_time: string | null;
-  distance_from_max_profit: number | null;
-  min_profit: number | null;
-  min_profit_time: string | null;
-  distance_from_stop: number | null;
-  smart_stop: number | null;
-  pct_to_stop: number | null;
-  time_until: number | null;
-  segment: string | null;
-  change_from_entry_pct: number | null;
-  long_term_profit: number | null;
-  long_term_profit_pct: number | null;
+  target_price: number | null;
+  max_price: number | null;  // highest price reached (for longs) or lowest (for shorts)
+  min_price: number | null;  // lowest price reached (for longs) or highest (for shorts)
+  strategy: string | null;
+  notes: string | null;
+  // Derived fields
+  hold_minutes: number;
+  mfe: number;  // max favorable excursion (in dollars)
+  mae: number;  // max adverse excursion (in dollars)
+  r_multiple: number | null;
+  pnl: number;
+  pnl_pct: number;
+  giveback: number | null;  // from MFE peak to exit (in dollars)
+  giveback_ratio: number | null;  // giveback / MFE
+  time_to_mfe_min: number | null;  // minutes from entry to MFE peak
 }
 
-export interface TradeImportResult {
-  total_rows: number;
-  imported: number;
+export interface ImportResult {
+  batch_id: string;
+  total_parsed: number;
+  inserted: number;
   skipped: number;
-  errors: number;
-  error_samples: string[];
+  errors: string[];
 }
 
-// ── Month Map ────────────────────────────────────────────────────────────
-
-const MONTHS: Record<string, string> = {
-  Jan: "01", Feb: "02", Mar: "03", Apr: "04", May: "05", Jun: "06",
-  Jul: "07", Aug: "08", Sep: "09", Oct: "10", Nov: "11", Dec: "12",
-};
-
-// ── Schema ───────────────────────────────────────────────────────────────
-
-export function ensureHollyTradesTable(): void {
-  const db = getDb();
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS holly_trades (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      entry_time TEXT NOT NULL,
-      exit_time TEXT NOT NULL,
-      symbol TEXT NOT NULL,
-      shares INTEGER,
-      entry_price REAL NOT NULL,
-      last_price REAL,
-      change_from_entry REAL,
-      change_from_close REAL,
-      change_from_close_pct REAL,
-      strategy TEXT,
-      exit_price REAL,
-      closed_profit REAL,
-      profit_change_15 REAL,
-      profit_change_5 REAL,
-      max_profit REAL,
-      profit_basis_points REAL,
-      open_profit REAL,
-      stop_price REAL,
-      time_stop TEXT,
-      max_profit_time TEXT,
-      distance_from_max_profit REAL,
-      min_profit REAL,
-      min_profit_time TEXT,
-      distance_from_stop REAL,
-      smart_stop REAL,
-      pct_to_stop REAL,
-      time_until REAL,
-      segment TEXT,
-      change_from_entry_pct REAL,
-      long_term_profit REAL,
-      long_term_profit_pct REAL,
-      -- Derived fields (computed on import)
-      hold_minutes REAL,
-      mfe REAL,               -- max favorable excursion = max_profit
-      mae REAL,               -- max adverse excursion = min_profit
-      giveback REAL,          -- max_profit - closed_profit
-      giveback_ratio REAL,    -- giveback / max_profit (0-1, lower=better)
-      time_to_mfe_min REAL,   -- minutes from entry to max profit
-      time_to_mae_min REAL,   -- minutes from entry to min profit
-      r_multiple REAL,        -- actual_pnl / risk (if stop exists)
-      actual_pnl REAL,        -- (exit_price - entry_price) * shares (per-trade, not cumulative)
-      import_batch TEXT,
-      imported_at TEXT NOT NULL DEFAULT (datetime('now')),
-      UNIQUE(symbol, entry_time, strategy)
-    );
-    CREATE INDEX IF NOT EXISTS idx_holly_trades_symbol ON holly_trades(symbol);
-    CREATE INDEX IF NOT EXISTS idx_holly_trades_strategy ON holly_trades(strategy);
-    CREATE INDEX IF NOT EXISTS idx_holly_trades_entry_time ON holly_trades(entry_time);
-    CREATE INDEX IF NOT EXISTS idx_holly_trades_segment ON holly_trades(segment);
-    CREATE INDEX IF NOT EXISTS idx_holly_trades_batch ON holly_trades(import_batch);
-  `);
+/** Strip BOM (Byte Order Mark) if present */
+function stripBOM(content: string): string {
+  if (content.charCodeAt(0) === 0xFEFF) {
+    return content.slice(1);
+  }
+  return content;
 }
 
-// ── Parser ───────────────────────────────────────────────────────────────
+/** Parse numeric values, stripping $, commas, quotes */
+function parseNum(val: string | undefined | null): number | null {
+  if (!val || val.trim() === "") return null;
+  const cleaned = val.replace(/[$,"\s]/g, "");
+  const n = Number(cleaned);
+  return isNaN(n) ? null : n;
+}
 
-/**
- * Parse a single row from the Trade Ideas Holly CSV.
- * Format: YYYY,Mon,DD,"HH:MM:SS,YYYY",Mon,DD,"HH:MM:SS,Symbol,Shares,..."
- *
- * The key insight: the first quoted field contains "entryTime,exitYear"
- * and the second quoted field contains "exitTime,symbol,shares,...rest"
- */
-function parseRow(line: string): HollyTrade | null {
-  // Step 1: Extract quoted sections
-  // Pattern: YYYY,Mon,DD,"time,YYYY",Mon,DD,"time,SYM,shares,...rest"
-  const quoteMatch = line.match(
-    /^(\d{4}),(\w{3}),(\d{1,2}),"(\d{2}:\d{2}:\d{2}),(\d{4})",(\w{3}),(\d{1,2}),"(\d{2}:\d{2}:\d{2}),(.+)"?\s*$/,
-  );
+/** Parse date with commas: "Feb 12, 2026 10:30:00" or "2026-02-12 10:30:00" */
+function parseDateTime(raw: string): string {
+  if (!raw || !raw.trim()) return new Date().toISOString();
+  const trimmed = raw.trim();
+  const d = new Date(trimmed);
+  if (isNaN(d.getTime())) return trimmed;
+  return d.toISOString();
+}
 
-  if (!quoteMatch) return null;
+/** Calculate hold time in minutes */
+function calcHoldMinutes(entry: string, exit: string): number {
+  const entryMs = new Date(entry).getTime();
+  const exitMs = new Date(exit).getTime();
+  if (isNaN(entryMs) || isNaN(exitMs)) return 0;
+  return Math.max(0, Math.round((exitMs - entryMs) / 60000));
+}
 
-  const [, entryYear, entryMon, entryDay, entryTime, exitYear, exitMon, exitDay, exitTime, rest] = quoteMatch;
+/** Calculate MFE (max favorable excursion) */
+function calcMFE(
+  side: string,
+  entryPrice: number,
+  maxPrice: number | null,
+  minPrice: number | null,
+  size: number
+): number {
+  if (side === "LONG") {
+    const peak = maxPrice ?? entryPrice;
+    return Math.max(0, (peak - entryPrice) * size);
+  } else {
+    const trough = minPrice ?? entryPrice;
+    return Math.max(0, (entryPrice - trough) * size);
+  }
+}
 
-  const entryMonNum = MONTHS[entryMon];
-  const exitMonNum = MONTHS[exitMon];
-  if (!entryMonNum || !exitMonNum) return null;
+/** Calculate MAE (max adverse excursion) */
+function calcMAE(
+  side: string,
+  entryPrice: number,
+  maxPrice: number | null,
+  minPrice: number | null,
+  size: number
+): number {
+  if (side === "LONG") {
+    const trough = minPrice ?? entryPrice;
+    return Math.abs(Math.min(0, (trough - entryPrice) * size));
+  } else {
+    const peak = maxPrice ?? entryPrice;
+    return Math.abs(Math.min(0, (entryPrice - peak) * size));
+  }
+}
 
-  const entryDayPad = entryDay.padStart(2, "0");
-  const exitDayPad = exitDay.padStart(2, "0");
-  const entryTs = `${entryYear}-${entryMonNum}-${entryDayPad} ${entryTime}`;
-  const exitTs = `${exitYear}-${exitMonNum}-${exitDayPad} ${exitTime}`;
+/** Calculate R-multiple (PnL / risk) */
+function calcRMultiple(pnl: number, entryPrice: number, stopPrice: number | null, size: number): number | null {
+  if (stopPrice == null) return null;
+  const risk = Math.abs((entryPrice - stopPrice) * size);
+  if (risk === 0) return null;
+  return pnl / risk;
+}
 
-  // Step 2: Split the rest by comma — these are the remaining fields
-  const fields = rest.split(",");
-  // Expected: symbol, shares, entry_price, last_price, change_from_entry,
-  //   change_from_close, change_from_close_pct, strategy, exit_price,
-  //   closed_profit, profit_change_15, profit_change_5, max_profit,
-  //   profit_basis_points, open_profit, stop_price, time_stop,
-  //   max_profit_time, distance_from_max_profit, min_profit,
-  //   min_profit_time, distance_from_stop, smart_stop, pct_to_stop,
-  //   time_until, segment, change_from_entry_pct, long_term_profit,
-  //   long_term_profit_pct
+/** Calculate giveback (from MFE peak to exit) */
+function calcGiveback(mfe: number, pnl: number): number | null {
+  if (mfe === 0) return null;
+  return Math.max(0, mfe - pnl);
+}
 
-  if (fields.length < 25) return null;
+/** Calculate giveback ratio */
+function calcGivebackRatio(giveback: number | null, mfe: number): number | null {
+  if (giveback == null || mfe === 0) return null;
+  return giveback / mfe;
+}
 
-  const num = (s: string): number | null => {
-    if (!s || s.trim() === "") return null;
-    // Remove spaces in numbers like "-7 569"
-    const cleaned = s.trim().replace(/\s/g, "");
-    const v = parseFloat(cleaned);
-    return Number.isFinite(v) ? v : null;
-  };
+/** Parse time to MFE from notes field (format: "mfe_time:15" for 15 minutes) */
+function parseTimeToMFE(notes: string | null): number | null {
+  if (!notes) return null;
+  const match = notes.match(/mfe_time:(\d+)/i);
+  return match ? Number(match[1]) : null;
+}
 
-  const str = (s: string): string | null => {
-    const trimmed = s?.trim();
-    return trimmed && trimmed.length > 0 ? trimmed : null;
-  };
+/** Parse a single CSV row */
+export function parseRow(record: Record<string, string>): HollyTradeRow {
+  const symbol = record["Symbol"]?.trim().toUpperCase() || "";
+  const entryTime = parseDateTime(record["Entry Time"] ?? "");
+  const exitTime = parseDateTime(record["Exit Time"] ?? "");
+  const entryPrice = parseNum(record["Entry Price"]) ?? 0;
+  const exitPrice = parseNum(record["Exit Price"]) ?? 0;
+  const size = Math.abs(parseNum(record["Size"]) ?? 0);
+  const rawSide = record["Side"]?.trim().toUpperCase();
+  const side = (rawSide && rawSide !== "" ? rawSide : "LONG") as "LONG" | "SHORT";
+  const stopPrice = parseNum(record["Stop Price"]);
+  const targetPrice = parseNum(record["Target Price"]);
+  const maxPrice = parseNum(record["Max Price"]);
+  const minPrice = parseNum(record["Min Price"]);
+  const strategy = record["Strategy"]?.trim() || null;
+  const notes = record["Notes"]?.trim() || null;
 
-  const symbol = fields[0].trim();
-  const shares = num(fields[1]) ?? 0;
-  const entryPrice = num(fields[2]);
-  const lastPrice = num(fields[3]);
-  const exitPrice = num(fields[8]);
+  // Compute derived fields
+  const holdMinutes = calcHoldMinutes(entryTime, exitTime);
+  const mfe = calcMFE(side, entryPrice, maxPrice, minPrice, size);
+  const mae = calcMAE(side, entryPrice, maxPrice, minPrice, size);
+  
+  const pnl = side === "LONG" 
+    ? (exitPrice - entryPrice) * size 
+    : (entryPrice - exitPrice) * size;
+  const pnlPct = entryPrice !== 0 
+    ? (pnl / (entryPrice * size)) * 100 
+    : 0;
 
-  if (!entryPrice || !symbol) return null;
-
-  const closedProfit = num(fields[9]);
-  const maxProfit = num(fields[12]);
-  const minProfit = num(fields[19]);
-  const stopPrice = num(fields[15]);
-
-  // Parse compound datetime fields (e.g., "2020 Mar 31 12:45:00")
-  const parseDateTime = (s: string): string | null => {
-    const trimmed = s?.trim();
-    if (!trimmed || trimmed === "") return null;
-    const m = trimmed.match(/(\d{4})\s+(\w{3})\s+(\d{1,2})\s+(\d{2}:\d{2}:\d{2})/);
-    if (!m) return null;
-    const mon = MONTHS[m[2]];
-    if (!mon) return null;
-    return `${m[1]}-${mon}-${m[3].padStart(2, "0")} ${m[4]}`;
-  };
+  const rMultiple = calcRMultiple(pnl, entryPrice, stopPrice, size);
+  const giveback = calcGiveback(mfe, pnl);
+  const givebackRatio = calcGivebackRatio(giveback, mfe);
+  const timeToMfeMin = parseTimeToMFE(notes);
 
   return {
-    entry_time: entryTs,
-    exit_time: exitTs,
     symbol,
-    shares: shares as number,
+    entry_time: entryTime,
+    exit_time: exitTime,
     entry_price: entryPrice,
-    last_price: lastPrice ?? 0,
-    change_from_entry: num(fields[4]),
-    change_from_close: num(fields[5]),
-    change_from_close_pct: num(fields[6]),
-    strategy: fields[7]?.trim() ?? "",
-    exit_price: exitPrice ?? 0,
-    closed_profit: closedProfit ?? 0,
-    profit_change_15: num(fields[10]),
-    profit_change_5: num(fields[11]),
-    max_profit: maxProfit,
-    profit_basis_points: num(fields[13]),
-    open_profit: num(fields[14]),
+    exit_price: exitPrice,
+    size,
+    side,
     stop_price: stopPrice,
-    time_stop: parseDateTime(fields[16] ?? ""),
-    max_profit_time: parseDateTime(fields[17] ?? ""),
-    distance_from_max_profit: num(fields[18]),
-    min_profit: minProfit,
-    min_profit_time: parseDateTime(fields[20] ?? ""),
-    distance_from_stop: num(fields[21]),
-    smart_stop: num(fields[22]),
-    pct_to_stop: num(fields[23]),
-    time_until: num(fields[24]),
-    segment: str(fields[25]),
-    change_from_entry_pct: num(fields[26]),
-    long_term_profit: num(fields[27]),
-    long_term_profit_pct: num(fields[28]),
-  };
-}
-
-// ── Derived Fields ───────────────────────────────────────────────────────
-
-function computeDerived(t: HollyTrade): Record<string, number | null> {
-  // Hold minutes
-  const entryMs = new Date(t.entry_time.replace(" ", "T") + "Z").getTime();
-  const exitMs = new Date(t.exit_time.replace(" ", "T") + "Z").getTime();
-  const holdMinutes = Number.isFinite(entryMs) && Number.isFinite(exitMs)
-    ? (exitMs - entryMs) / 60000
-    : null;
-
-  // Actual per-trade P&L (CSV "closed_profit" is cumulative, NOT per-trade)
-  const shares = t.shares || 100;
-  const actualPnl = (t.exit_price - t.entry_price) * shares;
-
-  // MFE / MAE (these are per-trade dollar amounts from Trade Ideas)
-  const mfe = t.max_profit;
-  const mae = t.min_profit;
-
-  // Giveback = how much was left on the table (MFE - actual P&L)
-  const giveback = mfe != null ? mfe - actualPnl : null;
-  const givebackRatio = mfe != null && mfe > 0 && giveback != null && giveback >= 0
-    ? giveback / mfe
-    : null;
-
-  // Time to MFE
-  let timeToMfe: number | null = null;
-  if (t.max_profit_time && Number.isFinite(entryMs)) {
-    const mfeMs = new Date(t.max_profit_time.replace(" ", "T") + "Z").getTime();
-    if (Number.isFinite(mfeMs)) timeToMfe = (mfeMs - entryMs) / 60000;
-  }
-
-  // Time to MAE
-  let timeToMae: number | null = null;
-  if (t.min_profit_time && Number.isFinite(entryMs)) {
-    const maeMs = new Date(t.min_profit_time.replace(" ", "T") + "Z").getTime();
-    if (Number.isFinite(maeMs)) timeToMae = (maeMs - entryMs) / 60000;
-  }
-
-  // R-multiple = actual P&L / risk per share * shares
-  let rMultiple: number | null = null;
-  if (t.stop_price != null && t.entry_price > 0) {
-    const risk = Math.abs(t.entry_price - t.stop_price) * shares;
-    if (risk > 0) {
-      rMultiple = actualPnl / risk;
-    }
-  }
-
-  return {
-    hold_minutes: holdMinutes != null ? Math.round(holdMinutes * 10) / 10 : null,
+    target_price: targetPrice,
+    max_price: maxPrice,
+    min_price: minPrice,
+    strategy,
+    notes,
+    hold_minutes: holdMinutes,
     mfe,
     mae,
-    giveback: giveback != null ? Math.round(giveback * 100) / 100 : null,
-    giveback_ratio: givebackRatio != null ? Math.round(givebackRatio * 1000) / 1000 : null,
-    time_to_mfe_min: timeToMfe != null ? Math.round(timeToMfe * 10) / 10 : null,
-    time_to_mae_min: timeToMae != null ? Math.round(timeToMae * 10) / 10 : null,
-    r_multiple: rMultiple != null ? Math.round(rMultiple * 1000) / 1000 : null,
-    actual_pnl: Math.round(actualPnl * 100) / 100,
+    r_multiple: rMultiple,
+    pnl,
+    pnl_pct: pnlPct,
+    giveback,
+    giveback_ratio: givebackRatio,
+    time_to_mfe_min: timeToMfeMin,
   };
 }
 
-// ── Bulk Importer ────────────────────────────────────────────────────────
-
 /**
- * Import Holly trades from the Trade Ideas CSV export.
- * Parses the non-standard CSV format, computes derived metrics,
- * and bulk-inserts into holly_trades table.
+ * Import Holly trades from CSV string.
+ * 
+ * CSV format expected:
+ * Symbol,Entry Time,Exit Time,Entry Price,Exit Price,Size,Side,Stop Price,Target Price,Max Price,Min Price,Strategy,Notes
+ * 
+ * Entry Time and Exit Time can include commas: "Feb 12, 2026 10:30:00"
  */
-export function importHollyTrades(csvContent: string, batchId?: string): TradeImportResult {
-  ensureHollyTradesTable();
+export function importHollyTrades(
+  csvContent: string,
+  bulkInsertFn: (rows: Array<Record<string, unknown>>) => { inserted: number; skipped: number }
+): ImportResult {
+  const batchId = randomUUID().slice(0, 8);
+  const errors: string[] = [];
 
-  const lines = csvContent.split(/\r?\n/).filter((l) => l.trim());
-  if (lines.length <= 1) return { total_rows: 0, imported: 0, skipped: 0, errors: 0, error_samples: [] };
-
-  // Skip header (first line)
-  const dataLines = lines.slice(1);
-  const batch = batchId ?? new Date().toISOString();
-
-  const db = getDb();
-  const insert = db.prepare(`
-    INSERT OR IGNORE INTO holly_trades (
-      entry_time, exit_time, symbol, shares, entry_price, last_price,
-      change_from_entry, change_from_close, change_from_close_pct,
-      strategy, exit_price, closed_profit,
-      profit_change_15, profit_change_5, max_profit,
-      profit_basis_points, open_profit, stop_price,
-      time_stop, max_profit_time, distance_from_max_profit,
-      min_profit, min_profit_time, distance_from_stop,
-      smart_stop, pct_to_stop, time_until,
-      segment, change_from_entry_pct, long_term_profit, long_term_profit_pct,
-      hold_minutes, mfe, mae, giveback, giveback_ratio,
-      time_to_mfe_min, time_to_mae_min, r_multiple,
-      actual_pnl, import_batch
-    ) VALUES (
-      ?, ?, ?, ?, ?, ?,
-      ?, ?, ?,
-      ?, ?, ?,
-      ?, ?, ?,
-      ?, ?, ?,
-      ?, ?, ?,
-      ?, ?, ?,
-      ?, ?, ?,
-      ?, ?, ?, ?,
-      ?, ?, ?, ?, ?,
-      ?, ?, ?,
-      ?, ?
-    )
-  `);
-
-  let imported = 0;
-  let skipped = 0;
-  let errors = 0;
-  const errorSamples: string[] = [];
-
-  const insertMany = db.transaction(() => {
-    for (const line of dataLines) {
-      try {
-        const trade = parseRow(line);
-        if (!trade) {
-          errors++;
-          if (errorSamples.length < 5) errorSamples.push(line.slice(0, 120));
-          continue;
-        }
-
-        const derived = computeDerived(trade);
-
-        const result = insert.run(
-          trade.entry_time, trade.exit_time, trade.symbol, trade.shares,
-          trade.entry_price, trade.last_price,
-          trade.change_from_entry, trade.change_from_close, trade.change_from_close_pct,
-          trade.strategy, trade.exit_price, trade.closed_profit,
-          trade.profit_change_15, trade.profit_change_5, trade.max_profit,
-          trade.profit_basis_points, trade.open_profit, trade.stop_price,
-          trade.time_stop, trade.max_profit_time, trade.distance_from_max_profit,
-          trade.min_profit, trade.min_profit_time, trade.distance_from_stop,
-          trade.smart_stop, trade.pct_to_stop, trade.time_until,
-          trade.segment, trade.change_from_entry_pct, trade.long_term_profit,
-          trade.long_term_profit_pct,
-          derived.hold_minutes, derived.mfe, derived.mae,
-          derived.giveback, derived.giveback_ratio,
-          derived.time_to_mfe_min, derived.time_to_mae_min, derived.r_multiple,
-          derived.actual_pnl, batch,
-        );
-
-        if (result.changes > 0) imported++;
-        else skipped++;
-      } catch (err) {
-        errors++;
-        if (errorSamples.length < 5) errorSamples.push(line.slice(0, 120));
-      }
-    }
-  });
-
-  insertMany();
-
-  log.info({ total: dataLines.length, imported, skipped, errors }, "Holly trades imported");
-  return { total_rows: dataLines.length, imported, skipped, errors, error_samples: errorSamples };
-}
-
-/**
- * Import Holly trades from a file path.
- */
-export function importHollyTradesFromFile(filePath: string, batchId?: string): TradeImportResult {
-  const content = readFileSync(filePath, "utf-8");
   // Strip BOM if present
-  const clean = content.charCodeAt(0) === 0xFEFF ? content.slice(1) : content;
-  return importHollyTrades(clean, batchId);
+  const cleanContent = stripBOM(csvContent);
+
+  let records: Record<string, string>[];
+  try {
+    records = parse(cleanContent, {
+      columns: true,
+      skip_empty_lines: true,
+      trim: true,
+      relax_column_count: true,
+    });
+  } catch (e: any) {
+    return { 
+      batch_id: batchId, 
+      total_parsed: 0, 
+      inserted: 0, 
+      skipped: 0, 
+      errors: [`CSV parse error: ${e.message}`] 
+    };
+  }
+
+  if (records.length === 0) {
+    return { batch_id: batchId, total_parsed: 0, inserted: 0, skipped: 0, errors: [] };
+  }
+
+  const rows: Array<Record<string, unknown>> = [];
+  for (let i = 0; i < records.length; i++) {
+    try {
+      const parsed = parseRow(records[i]);
+      if (!parsed.symbol) {
+        errors.push(`Row ${i + 2}: missing symbol`);
+        continue;
+      }
+      rows.push({ ...parsed, import_batch: batchId });
+    } catch (e: any) {
+      errors.push(`Row ${i + 2}: ${e.message}`);
+    }
+  }
+
+  if (rows.length === 0) {
+    return { 
+      batch_id: batchId, 
+      total_parsed: records.length, 
+      inserted: 0, 
+      skipped: 0, 
+      errors 
+    };
+  }
+
+  const { inserted, skipped } = bulkInsertFn(rows);
+
+  if (inserted > 0) {
+    const symbols = [...new Set(rows.slice(0, inserted).map((r) => r.symbol))];
+    log.info({ batch_id: batchId, inserted, skipped, symbols }, "Holly trades imported");
+  }
+
+  return {
+    batch_id: batchId,
+    total_parsed: records.length,
+    inserted,
+    skipped,
+    errors,
+  };
 }
 
-// ── Query helpers ────────────────────────────────────────────────────────
+/**
+ * Query helper functions
+ */
 
-export function getHollyTradeStats(): Record<string, unknown> {
-  ensureHollyTradesTable();
-  const db = getDb();
-  return db.prepare(`
-    SELECT
-      COUNT(*) as total_trades,
-      COUNT(DISTINCT symbol) as unique_symbols,
-      COUNT(DISTINCT strategy) as unique_strategies,
-      COUNT(DISTINCT segment) as unique_segments,
-      MIN(entry_time) as earliest_trade,
-      MAX(entry_time) as latest_trade,
-      ROUND(AVG(hold_minutes), 1) as avg_hold_minutes,
-      ROUND(AVG(actual_pnl), 2) as avg_pnl,
-      ROUND(SUM(actual_pnl), 2) as total_pnl,
-      ROUND(AVG(CASE WHEN actual_pnl > 0 THEN 1.0 ELSE 0.0 END) * 100, 1) as win_rate_pct,
-      ROUND(AVG(giveback), 2) as avg_giveback,
-      ROUND(AVG(giveback_ratio), 3) as avg_giveback_ratio,
-      ROUND(AVG(time_to_mfe_min), 1) as avg_time_to_mfe_min,
-      ROUND(AVG(r_multiple), 3) as avg_r_multiple
-    FROM holly_trades
-  `).get() as Record<string, unknown>;
-}
-
-export function queryHollyTrades(opts: {
-  symbol?: string;
-  strategy?: string;
-  segment?: string;
-  since?: string;
-  until?: string;
-  limit?: number;
-}): Array<Record<string, unknown>> {
-  ensureHollyTradesTable();
-  const db = getDb();
+export function queryTrades(
+  db: any,
+  opts: {
+    symbol?: string;
+    side?: string;
+    strategy?: string;
+    days?: number;
+    limit?: number;
+  } = {}
+): Array<Record<string, unknown>> {
   const conditions: string[] = [];
   const params: unknown[] = [];
 
-  if (opts.symbol) { conditions.push("symbol = ?"); params.push(opts.symbol.toUpperCase()); }
-  if (opts.strategy) { conditions.push("strategy = ?"); params.push(opts.strategy); }
-  if (opts.segment) { conditions.push("segment = ?"); params.push(opts.segment); }
-  if (opts.since) { conditions.push("entry_time >= ?"); params.push(opts.since); }
-  if (opts.until) { conditions.push("entry_time <= ?"); params.push(opts.until); }
+  if (opts.symbol) {
+    conditions.push("symbol = ?");
+    params.push(opts.symbol);
+  }
+  if (opts.side) {
+    conditions.push("side = ?");
+    params.push(opts.side);
+  }
+  if (opts.strategy) {
+    conditions.push("strategy = ?");
+    params.push(opts.strategy);
+  }
+  if (opts.days) {
+    conditions.push("entry_time >= datetime('now', ? || ' days')");
+    params.push(`-${opts.days}`);
+  }
 
-  const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-  const limit = Math.min(opts.limit ?? 100, 1000);
+  const where = conditions.length > 0 ? "WHERE " + conditions.join(" AND ") : "";
+  const limit = opts.limit ?? 500;
 
-  return db.prepare(`SELECT * FROM holly_trades ${where} ORDER BY entry_time DESC LIMIT ?`).all(...params, limit) as Array<Record<string, unknown>>;
+  return db.prepare(`
+    SELECT * FROM holly_trades ${where} ORDER BY entry_time DESC LIMIT ?
+  `).all(...params, limit) as Array<Record<string, unknown>>;
+}
+
+export function getTradeStats(db: any): Record<string, unknown> {
+  return db.prepare(`
+    SELECT
+      COUNT(*) as total_trades,
+      AVG(pnl) as avg_pnl,
+      SUM(pnl) as total_pnl,
+      AVG(r_multiple) as avg_r,
+      AVG(hold_minutes) as avg_hold_minutes,
+      AVG(mfe) as avg_mfe,
+      AVG(mae) as avg_mae,
+      AVG(giveback_ratio) as avg_giveback_ratio,
+      AVG(time_to_mfe_min) as avg_time_to_mfe_min,
+      COUNT(DISTINCT symbol) as unique_symbols,
+      MIN(entry_time) as first_trade,
+      MAX(entry_time) as last_trade,
+      COUNT(DISTINCT import_batch) as import_batches
+    FROM holly_trades
+  `).get() as Record<string, unknown>;
 }
