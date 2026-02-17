@@ -29,9 +29,9 @@ export function wsBroadcast(channel: string, data: unknown): void {
   if (_broadcast) _broadcast(channel, data);
 }
 const HEARTBEAT_INTERVAL_MS = 30_000;
-const VALID_CHANNELS = new Set(["positions", "orders", "account", "executions", "signals"]);
+const VALID_CHANNELS = new Set(["positions", "orders", "account", "executions", "signals", "status"]);
 
-type ChannelName = "positions" | "orders" | "account" | "executions" | "signals";
+type ChannelName = "positions" | "orders" | "account" | "executions" | "signals" | "status";
 
 interface AuthMessage { type: "auth"; apiKey: string }
 interface SubscribeMessage { type: "subscribe"; channel: string }
@@ -107,7 +107,39 @@ export function initWebSocket(httpServer: HttpServer): void {
   onReconnect(() => {
     ibkrBound = false;
     bindIBKR();
+    // Broadcast connection status on reconnect
+    broadcast("status", {
+      ibkr_connected: true,
+      timestamp: new Date().toISOString(),
+    });
   });
+
+  // ── Bind IBKR connection status listeners ──
+  // These must be bound outside bindIBKR() as they need to work when disconnected
+  let statusBound = false;
+  function bindStatusListeners(): void {
+    if (statusBound) return;
+    try {
+      const ib = getIB();
+      ib.on(EventName.connected, () => {
+        broadcast("status", {
+          ibkr_connected: true,
+          timestamp: new Date().toISOString(),
+        });
+      });
+      ib.on(EventName.disconnected, () => {
+        broadcast("status", {
+          ibkr_connected: false,
+          timestamp: new Date().toISOString(),
+        });
+      });
+      statusBound = true;
+      logWs.info("IBKR status listeners bound to WebSocket broadcast");
+    } catch (err) {
+      logWs.warn({ err }, "Failed to bind IBKR status listeners");
+    }
+  }
+  bindStatusListeners();
 
   // ── WebSocket connection handling ──
   wss.on("connection", (socket: AuthenticatedWebSocket) => {
@@ -136,6 +168,20 @@ export function initWebSocket(httpServer: HttpServer): void {
         }
         socket.isAuthenticated = true;
         socket.send(JSON.stringify({ type: "auth", ok: true }));
+        
+        // Auto-subscribe to status channel
+        const channels = subscriptions.get(socket);
+        if (channels) {
+          channels.add("status");
+          // Send initial status
+          socket.send(JSON.stringify({
+            channel: "status",
+            data: {
+              ibkr_connected: isConnected(),
+              timestamp: new Date().toISOString(),
+            },
+          }));
+        }
         return;
       }
 
