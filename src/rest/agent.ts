@@ -36,6 +36,7 @@ import { checkRisk, getSessionState, recordTradeResult, lockSession, unlockSessi
 import { calculatePositionSize } from "../ibkr/risk.js";
 import { tuneRiskParams } from "../eval/risk-tuning.js";
 import { computeDriftReport } from "../eval/drift.js";
+import { checkDriftAlerts, getRecentDriftAlerts } from "../eval/drift-alerts.js";
 import { computeEnsembleWithWeights } from "../eval/ensemble/scorer.js";
 import { getWeights } from "../eval/ensemble/weights.js";
 import type { ModelEvaluation } from "../eval/models/types.js";
@@ -294,6 +295,15 @@ const actions: Record<string, ActionHandler> = {
   },
 
   drift_report: async () => computeDriftReport(),
+  drift_check: async () => {
+    const report = computeDriftReport();
+    const alerts = checkDriftAlerts(report);
+    return { report, alerts };
+  },
+  drift_alerts: async (p) => {
+    const alerts = getRecentDriftAlerts(num(p, "limit", 50));
+    return { count: alerts.length, alerts };
+  },
 
   // ── Flatten Config ──
   get_flatten_config: async () => getFlattenConfig(),

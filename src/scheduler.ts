@@ -3,6 +3,7 @@ import { getAccountSummary, getPositions } from "./ibkr/account.js";
 import { flattenAllPositions } from "./ibkr/orders.js";
 import { insertAccountSnapshot, insertPositionSnapshot } from "./db/database.js";
 import { computeDriftReport, type DriftReport } from "./eval/drift.js";
+import { checkDriftAlerts } from "./eval/drift-alerts.js";
 import { logger } from "./logging.js";
 
 const log = logger.child({ subsystem: "scheduler" });
@@ -71,6 +72,9 @@ function checkDrift() {
     const report: DriftReport = computeDriftReport();
     const prev = lastDriftState;
 
+    // Check for alerts based on thresholds
+    const alerts = checkDriftAlerts(report);
+
     // Log on first run or state change
     if (!prev) {
       log.info(
@@ -89,6 +93,7 @@ function checkDrift() {
           overall_accuracy: report.overall_accuracy,
           shifted_models: shiftedModels,
           recommendation: report.recommendation,
+          alerts: alerts.length,
         },
         `DRIFT ALERT: Regime shift detected — ${shiftedModels.length} model(s) degrading`,
       );
@@ -103,6 +108,14 @@ function checkDrift() {
       log.info(
         { prev_accuracy: prev.overall_accuracy, accuracy: report.overall_accuracy, direction },
         `Model accuracy ${direction}: ${prev.overall_accuracy} → ${report.overall_accuracy}`,
+      );
+    }
+
+    // Log alerts if any were generated
+    if (alerts.length > 0) {
+      log.warn(
+        { alert_count: alerts.length, alerts: alerts.map((a) => ({ type: a.alert_type, model: a.model_id, value: a.metric_value })) },
+        `Drift alerts generated: ${alerts.length} threshold(s) breached`,
       );
     }
 

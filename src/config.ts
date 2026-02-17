@@ -20,4 +20,9 @@ export const config = {
     watchPath: process.env.HOLLY_WATCH_PATH ?? "",
     pollIntervalMs: parseInt(process.env.HOLLY_POLL_INTERVAL_MS ?? "5000", 10),
   },
+  drift: {
+    accuracyThreshold: parseFloat(process.env.DRIFT_ACCURACY_THRESHOLD ?? "0.55"),
+    calibrationThreshold: parseFloat(process.env.DRIFT_CALIBRATION_THRESHOLD ?? "0.15"),
+    enabled: (process.env.DRIFT_ALERTS_ENABLED ?? "true") !== "false",
+  },
 };
