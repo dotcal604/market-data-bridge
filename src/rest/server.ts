@@ -137,128 +137,134 @@ process.on("unhandledRejection", (reason) => {
   logRest.error({ reason }, "Unhandled rejection — keeping server alive");
 });
 
+export function createApp(): express.Express {
+  const app = express();
+
+  app.use(cors());
+  app.use(express.json());
+
+  // Request logging
+  app.use(requestLogger);
+
+  // Serve public routes (unauthenticated)
+  app.use(publicRouter);
+
+  // Serve OpenAPI agent spec (unauthenticated)
+  app.get("/openapi-agent.json", (_req, res) => { res.json(openApiAgentSpec); });
+
+  // Health check (unauthenticated)
+  app.get("/", (_req, res) => {
+    res.json({
+      name: "market-data-bridge",
+      version: "3.0.0",
+      docs: "/openapi.json",
+      api: "/api/status",
+      mcp: "/mcp",
+    });
+  });
+
+  // GET /health — detailed health check (unauthenticated)
+  app.get("/health", (_req, res) => {
+    const health = {
+      status: "ok" as "ok" | "degraded",
+      uptime_seconds: Math.floor((Date.now() - startTime) / 1000),
+      ibkr_connected: isConnected(),
+      db_writable: isDbWritable(),
+      rest_server: true,
+      mcp_sessions: mcpSessions.size,
+      timestamp: new Date().toISOString(),
+    };
+    if (!health.ibkr_connected || !health.db_writable) {
+      health.status = "degraded";
+    }
+    res.json(health);
+  });
+
+  // ── MCP Streamable HTTP endpoint (for ChatGPT MCP connector) ──
+  // POST /mcp — JSON-RPC requests (initialize, tool calls, etc.)
+  app.post("/mcp", apiKeyAuth, async (req: Request, res: Response) => {
+    const sessionId = req.headers["mcp-session-id"] as string | undefined;
+    let transport = sessionId ? mcpSessions.get(sessionId) : undefined;
+
+    if (transport) {
+      // Existing session — refresh TTL and forward request
+      touchSession(sessionId!);
+      await transport.handleRequest(req, res, req.body);
+      return;
+    }
+
+    // New session — create transport + MCP server
+    const newTransport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: () => randomUUID(),
+      onsessioninitialized: (id: string) => {
+        mcpSessions.set(id, newTransport);
+        touchSession(id);
+        logRest.info({ sessionId: id, total: mcpSessions.size }, "MCP session created");
+      },
+      onsessionclosed: (id: string) => {
+        mcpSessions.delete(id);
+        const timer = sessionTimers.get(id);
+        if (timer) clearTimeout(timer);
+        sessionTimers.delete(id);
+        logRest.info({ sessionId: id, total: mcpSessions.size }, "MCP session closed");
+      },
+    });
+
+    const server = createMcpServer();
+    await server.connect(newTransport);
+    await newTransport.handleRequest(req, res, req.body);
+  });
+
+  // GET /mcp — SSE stream for server-to-client notifications
+  app.get("/mcp", apiKeyAuth, async (req: Request, res: Response) => {
+    const sessionId = req.headers["mcp-session-id"] as string | undefined;
+    if (!sessionId || !mcpSessions.has(sessionId)) {
+      res.status(400).json({ error: "Invalid or missing Mcp-Session-Id header" });
+      return;
+    }
+    touchSession(sessionId);
+    const transport = mcpSessions.get(sessionId)!;
+    await transport.handleRequest(req, res);
+  });
+
+  // DELETE /mcp — close a session
+  app.delete("/mcp", apiKeyAuth, async (req: Request, res: Response) => {
+    const sessionId = req.headers["mcp-session-id"] as string | undefined;
+    if (!sessionId || !mcpSessions.has(sessionId)) {
+      res.status(400).json({ error: "Invalid or missing Mcp-Session-Id header" });
+      return;
+    }
+    const transport = mcpSessions.get(sessionId)!;
+    await transport.handleRequest(req, res);
+  });
+
+  // Agent dispatcher — single endpoint for ChatGPT Actions (no 30-op limit)
+  app.post("/api/agent", apiKeyAuth, globalLimiter, (req, res) => { void handleAgentRequest(req, res); });
+  
+  // Agent action catalog — GET endpoint for action metadata
+  app.get("/api/agent/catalog", apiKeyAuth, globalLimiter, (_req, res) => {
+    res.json(getActionCatalog());
+  });
+
+  // Mount API routes with rate limiting (authenticated)
+  app.use("/api", apiKeyAuth, globalLimiter, router);
+
+  // Mount eval router (under /api/eval, inside auth)
+  app.use("/api/eval", apiKeyAuth, evalLimiter, evalRouter);
+
+  // Apply stricter rate limits to order and collab routes
+  app.use("/api/order", orderLimiter);
+  app.use("/api/orders", orderLimiter);
+  app.use("/api/collab", collabLimiter);
+
+  configureFrontendStaticHosting(app);
+  
+  return app;
+}
+
 export function startRestServer(): Promise<void> {
   return new Promise((resolve) => {
-    const app = express();
-
-    app.use(cors());
-    app.use(express.json());
-
-    // Request logging
-    app.use(requestLogger);
-
-    // Serve public routes (unauthenticated)
-    app.use(publicRouter);
-
-    // Serve OpenAPI agent spec (unauthenticated)
-    app.get("/openapi-agent.json", (_req, res) => { res.json(openApiAgentSpec); });
-
-    // Health check (unauthenticated)
-    app.get("/", (_req, res) => {
-      res.json({
-        name: "market-data-bridge",
-        version: "3.0.0",
-        docs: "/openapi.json",
-        api: "/api/status",
-        mcp: "/mcp",
-      });
-    });
-
-    // GET /health — detailed health check (unauthenticated)
-    app.get("/health", (_req, res) => {
-      const health = {
-        status: "ok" as "ok" | "degraded",
-        uptime_seconds: Math.floor((Date.now() - startTime) / 1000),
-        ibkr_connected: isConnected(),
-        db_writable: isDbWritable(),
-        rest_server: true,
-        mcp_sessions: mcpSessions.size,
-        timestamp: new Date().toISOString(),
-      };
-      if (!health.ibkr_connected || !health.db_writable) {
-        health.status = "degraded";
-      }
-      res.json(health);
-    });
-
-    // ── MCP Streamable HTTP endpoint (for ChatGPT MCP connector) ──
-    // POST /mcp — JSON-RPC requests (initialize, tool calls, etc.)
-    app.post("/mcp", apiKeyAuth, async (req: Request, res: Response) => {
-      const sessionId = req.headers["mcp-session-id"] as string | undefined;
-      let transport = sessionId ? mcpSessions.get(sessionId) : undefined;
-
-      if (transport) {
-        // Existing session — refresh TTL and forward request
-        touchSession(sessionId!);
-        await transport.handleRequest(req, res, req.body);
-        return;
-      }
-
-      // New session — create transport + MCP server
-      const newTransport = new StreamableHTTPServerTransport({
-        sessionIdGenerator: () => randomUUID(),
-        onsessioninitialized: (id: string) => {
-          mcpSessions.set(id, newTransport);
-          touchSession(id);
-          logRest.info({ sessionId: id, total: mcpSessions.size }, "MCP session created");
-        },
-        onsessionclosed: (id: string) => {
-          mcpSessions.delete(id);
-          const timer = sessionTimers.get(id);
-          if (timer) clearTimeout(timer);
-          sessionTimers.delete(id);
-          logRest.info({ sessionId: id, total: mcpSessions.size }, "MCP session closed");
-        },
-      });
-
-      const server = createMcpServer();
-      await server.connect(newTransport);
-      await newTransport.handleRequest(req, res, req.body);
-    });
-
-    // GET /mcp — SSE stream for server-to-client notifications
-    app.get("/mcp", apiKeyAuth, async (req: Request, res: Response) => {
-      const sessionId = req.headers["mcp-session-id"] as string | undefined;
-      if (!sessionId || !mcpSessions.has(sessionId)) {
-        res.status(400).json({ error: "Invalid or missing Mcp-Session-Id header" });
-        return;
-      }
-      touchSession(sessionId);
-      const transport = mcpSessions.get(sessionId)!;
-      await transport.handleRequest(req, res);
-    });
-
-    // DELETE /mcp — close a session
-    app.delete("/mcp", apiKeyAuth, async (req: Request, res: Response) => {
-      const sessionId = req.headers["mcp-session-id"] as string | undefined;
-      if (!sessionId || !mcpSessions.has(sessionId)) {
-        res.status(400).json({ error: "Invalid or missing Mcp-Session-Id header" });
-        return;
-      }
-      const transport = mcpSessions.get(sessionId)!;
-      await transport.handleRequest(req, res);
-    });
-
-    // Agent dispatcher — single endpoint for ChatGPT Actions (no 30-op limit)
-    app.post("/api/agent", apiKeyAuth, globalLimiter, (req, res) => { void handleAgentRequest(req, res); });
-    
-    // Agent action catalog — GET endpoint for action metadata
-    app.get("/api/agent/catalog", apiKeyAuth, globalLimiter, (_req, res) => {
-      res.json(getActionCatalog());
-    });
-
-    // Mount API routes with rate limiting (authenticated)
-    app.use("/api", apiKeyAuth, globalLimiter, router);
-
-    // Mount eval router (under /api/eval, inside auth)
-    app.use("/api/eval", apiKeyAuth, evalLimiter, evalRouter);
-
-    // Apply stricter rate limits to order and collab routes
-    app.use("/api/order", orderLimiter);
-    app.use("/api/orders", orderLimiter);
-    app.use("/api/collab", collabLimiter);
-
-    configureFrontendStaticHosting(app);
+    const app = createApp();
 
     const httpServer = app.listen(config.rest.port, () => {
       logRest.info({ port: config.rest.port }, "REST server listening");

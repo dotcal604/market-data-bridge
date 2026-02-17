@@ -71,7 +71,7 @@ function qs(val: unknown, fallback: string): string {
 
 /** Validate a stock/index symbol — alphanumeric, dots, hyphens, carets, max 20 chars */
 const SYMBOL_RE = /^[A-Za-z0-9.\-^=%]{1,20}$/;
-function validateSymbol(symbol: string): string | null {
+export function validateSymbol(symbol: string): string | null {
   if (!symbol || !SYMBOL_RE.test(symbol)) {
     return "Invalid symbol: must be 1-20 alphanumeric characters";
   }

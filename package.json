@@ -1,7 +1,7 @@
 {
   "name": "market-data-bridge",
   "version": "3.0.0",
-  "description": "Market data bridge for ChatGPT and Claude \u2014 Yahoo Finance + Finviz + IBKR account \u2014 MCP server + REST API + 3-model eval engine",
+  "description": "Market data bridge for ChatGPT and Claude — Yahoo Finance + Finviz + IBKR account — MCP server + REST API + 3-model eval engine",
   "type": "module",
   "main": "build/index.js",
   "scripts": {
@@ -48,11 +48,13 @@
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/node": "^22.12.0",
+    "@types/supertest": "^6.0.3",
     "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "^4.0.18",
     "@vitest/ui": "^4.0.18",
     "concurrently": "^9.2.1",
     "cross-env": "^10.1.0",
+    "supertest": "^7.2.2",
     "typescript": "^5.7.3",
     "vitest": "^4.0.18"
   }
