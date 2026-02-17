@@ -19,6 +19,11 @@ export interface ValidationResult {
  * - Holly watch path exists if set
  * - Drift thresholds are in valid range (0-1)
  * - REST port and IBKR port don't conflict
+ * - autoEval.maxConcurrent is in valid range (1-20)
+ * - autoEval.dedupWindowMin is positive
+ * - ibkr.orderTimeoutMs is positive
+ * - ibkr.executionTimeoutMs is positive and >= orderTimeoutMs
+ * - ibkr.clientId is in valid range (0-32)
  * 
  * @param cfg - Configuration object from config.ts
  * @returns ValidationResult with arrays of error and warning messages
@@ -60,6 +65,36 @@ export function validateConfig(cfg: typeof config): ValidationResult {
   // Validate drift calibration threshold
   if (!isValidThreshold(cfg.drift.calibrationThreshold)) {
     errors.push(`Drift calibration threshold must be between 0 and 1, got ${cfg.drift.calibrationThreshold}`);
+  }
+
+  // Validate autoEval.maxConcurrent
+  if (!Number.isInteger(cfg.autoEval.maxConcurrent) || cfg.autoEval.maxConcurrent < 1 || cfg.autoEval.maxConcurrent > 20) {
+    errors.push(`autoEval.maxConcurrent must be between 1 and 20, got ${cfg.autoEval.maxConcurrent}`);
+  }
+
+  // Validate autoEval.dedupWindowMin
+  if (!Number.isInteger(cfg.autoEval.dedupWindowMin) || cfg.autoEval.dedupWindowMin <= 0) {
+    errors.push(`autoEval.dedupWindowMin must be positive, got ${cfg.autoEval.dedupWindowMin}`);
+  }
+
+  // Validate ibkr.orderTimeoutMs
+  if (!Number.isInteger(cfg.ibkr.orderTimeoutMs) || cfg.ibkr.orderTimeoutMs <= 0) {
+    errors.push(`ibkr.orderTimeoutMs must be positive, got ${cfg.ibkr.orderTimeoutMs}`);
+  }
+
+  // Validate ibkr.executionTimeoutMs
+  if (!Number.isInteger(cfg.ibkr.executionTimeoutMs) || cfg.ibkr.executionTimeoutMs <= 0) {
+    errors.push(`ibkr.executionTimeoutMs must be positive, got ${cfg.ibkr.executionTimeoutMs}`);
+  }
+
+  // Validate executionTimeoutMs >= orderTimeoutMs
+  if (cfg.ibkr.executionTimeoutMs < cfg.ibkr.orderTimeoutMs) {
+    errors.push(`ibkr.executionTimeoutMs (${cfg.ibkr.executionTimeoutMs}) must be >= ibkr.orderTimeoutMs (${cfg.ibkr.orderTimeoutMs})`);
+  }
+
+  // Validate ibkr.clientId
+  if (!Number.isInteger(cfg.ibkr.clientId) || cfg.ibkr.clientId < 0 || cfg.ibkr.clientId > 32) {
+    errors.push(`ibkr.clientId must be between 0 and 32, got ${cfg.ibkr.clientId}`);
   }
 
   return { errors, warnings };
