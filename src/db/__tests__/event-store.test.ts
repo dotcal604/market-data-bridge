@@ -652,4 +652,445 @@ describe('EventStore', () => {
       expect(result).toBe(1); // NORMAL = 1
     });
   });
+
+  describe('Edge Cases and Error Handling', () => {
+    it('should handle empty payload gracefully', () => {
+      const event: TradingEvent = {
+        type: 'OrderPlaced',
+        payload: {
+          orderId: 'order-empty',
+          symbol: '',
+          side: 'BUY',
+          quantity: 0,
+          orderType: 'MKT',
+          strategyId: '',
+          timestamp: Date.now(),
+        },
+      };
+
+      eventStore.publish(event);
+
+      const orderEvents = eventStore.getEventsForOrder('order-empty');
+      expect(orderEvents).toHaveLength(1);
+      expect(orderEvents[0].payload.symbol).toBe('');
+      expect(orderEvents[0].payload.quantity).toBe(0);
+    });
+
+    it('should handle very large event payloads', () => {
+      const largePayload: TradingEvent = {
+        type: 'OrderPlaced',
+        payload: {
+          orderId: 'order-large',
+          symbol: 'A'.repeat(1000), // Very long symbol
+          side: 'BUY',
+          quantity: Number.MAX_SAFE_INTEGER,
+          orderType: 'MKT',
+          strategyId: 'strat-1',
+          timestamp: Date.now(),
+        },
+      };
+
+      eventStore.publish(largePayload);
+
+      const orderEvents = eventStore.getEventsForOrder('order-large');
+      expect(orderEvents).toHaveLength(1);
+      expect(orderEvents[0].payload.symbol).toHaveLength(1000);
+      expect(orderEvents[0].payload.quantity).toBe(Number.MAX_SAFE_INTEGER);
+    });
+
+    it('should handle special characters in payload', () => {
+      const event: TradingEvent = {
+        type: 'OrderPlaced',
+        payload: {
+          orderId: 'order-special-"quotes"',
+          symbol: "AAPL'TEST",
+          side: 'BUY',
+          quantity: 100,
+          orderType: 'MKT',
+          strategyId: 'strat-"1"',
+          timestamp: Date.now(),
+        },
+      };
+
+      eventStore.publish(event);
+
+      const orderEvents = eventStore.getEventsForOrder('order-special-"quotes"');
+      expect(orderEvents).toHaveLength(1);
+      expect(orderEvents[0].payload.symbol).toBe("AAPL'TEST");
+      expect(orderEvents[0].payload.strategyId).toBe('strat-"1"');
+    });
+
+    it('should handle events with missing timestamp gracefully', () => {
+      const event: any = {
+        type: 'OrderPlaced',
+        payload: {
+          orderId: 'order-no-ts',
+          symbol: 'AAPL',
+          side: 'BUY',
+          quantity: 100,
+          orderType: 'MKT',
+          strategyId: 'strat-1',
+          // No timestamp field
+        },
+      };
+
+      const beforePublish = Date.now();
+      eventStore.publish(event);
+      const afterPublish = Date.now();
+
+      const orderEvents = eventStore.getEventsForOrder('order-no-ts');
+      expect(orderEvents).toHaveLength(1);
+      // Should use Date.now() if no timestamp in payload
+      expect(orderEvents[0].timestamp).toBeGreaterThanOrEqual(beforePublish);
+      expect(orderEvents[0].timestamp).toBeLessThanOrEqual(afterPublish);
+    });
+
+    it('should handle negative timestamps', () => {
+      const event: TradingEvent = {
+        type: 'OrderPlaced',
+        payload: {
+          orderId: 'order-negative-ts',
+          symbol: 'AAPL',
+          side: 'BUY',
+          quantity: 100,
+          orderType: 'MKT',
+          strategyId: 'strat-1',
+          timestamp: -1000,
+        },
+      };
+
+      eventStore.publish(event);
+
+      const orderEvents = eventStore.getEventsForOrder('order-negative-ts');
+      expect(orderEvents).toHaveLength(1);
+      expect(orderEvents[0].timestamp).toBe(-1000);
+    });
+
+    it('should handle zero timestamp (treated as falsy, uses Date.now())', () => {
+      const event: TradingEvent = {
+        type: 'OrderPlaced',
+        payload: {
+          orderId: 'order-zero-ts',
+          symbol: 'AAPL',
+          side: 'BUY',
+          quantity: 100,
+          orderType: 'MKT',
+          strategyId: 'strat-1',
+          timestamp: 0,
+        },
+      };
+
+      const beforePublish = Date.now();
+      eventStore.publish(event);
+      const afterPublish = Date.now();
+
+      const orderEvents = eventStore.getEventsForOrder('order-zero-ts');
+      expect(orderEvents).toHaveLength(1);
+      // Zero is treated as falsy, so Date.now() is used instead
+      expect(orderEvents[0].timestamp).toBeGreaterThanOrEqual(beforePublish);
+      expect(orderEvents[0].timestamp).toBeLessThanOrEqual(afterPublish);
+    });
+
+    it('should handle fractional prices in execution events', () => {
+      const event: TradingEvent = {
+        type: 'ExecutionReceived',
+        payload: {
+          execId: 'exec-fraction',
+          orderId: 'order-123',
+          symbol: 'AAPL',
+          side: 'BUY',
+          lastShares: 100,
+          lastPrice: 123.456789,
+          timestamp: Date.now(),
+        },
+      };
+
+      eventStore.publish(event);
+
+      const db = (eventStore as any).db as DatabaseType;
+      const stmt = db.prepare("SELECT * FROM events WHERE json_extract(payload, '$.execId') = ?");
+      const rows = stmt.all('exec-fraction');
+      
+      expect(rows).toHaveLength(1);
+      const stored = rows[0] as any;
+      const payload = JSON.parse(stored.payload);
+      expect(payload.lastPrice).toBe(123.456789);
+    });
+
+    it('should handle getEventsForOrder with SQL injection attempt', () => {
+      const maliciousOrderId = "' OR '1'='1";
+      
+      const orderEvents = eventStore.getEventsForOrder(maliciousOrderId);
+      
+      // Should return empty array, not all events
+      expect(orderEvents).toHaveLength(0);
+    });
+
+    it('should handle getEventsForOrder with null/undefined orderIds', () => {
+      const orderEvents1 = eventStore.getEventsForOrder(null as any);
+      const orderEvents2 = eventStore.getEventsForOrder(undefined as any);
+      
+      // Should not throw and should return empty arrays
+      expect(orderEvents1).toHaveLength(0);
+      expect(orderEvents2).toHaveLength(0);
+    });
+
+    it('should handle rapid sequential publishes without data loss', () => {
+      const eventCount = 100;
+      const orderIdPrefix = 'rapid-order-';
+
+      for (let i = 0; i < eventCount; i++) {
+        const event: TradingEvent = {
+          type: 'OrderPlaced',
+          payload: {
+            orderId: `${orderIdPrefix}${i}`,
+            symbol: 'AAPL',
+            side: 'BUY',
+            quantity: 100,
+            orderType: 'MKT',
+            strategyId: 'strat-1',
+            timestamp: Date.now() + i,
+          },
+        };
+        eventStore.publish(event);
+      }
+
+      // Verify all events were stored
+      const db = (eventStore as any).db as DatabaseType;
+      const stmt = db.prepare("SELECT COUNT(*) as count FROM events WHERE json_extract(payload, '$.orderId') LIKE ?");
+      const result = stmt.get(`${orderIdPrefix}%`) as any;
+      expect(result.count).toBe(eventCount);
+    });
+
+    it('should maintain data integrity with nested JSON in payload', () => {
+      const event: TradingEvent = {
+        type: 'RiskLimitBreached',
+        payload: {
+          ruleId: 'nested-data',
+          currentValue: 100,
+          limitValue: 50,
+          timestamp: Date.now(),
+        },
+      };
+
+      eventStore.publish(event);
+
+      const db = (eventStore as any).db as DatabaseType;
+      const stmt = db.prepare("SELECT * FROM events WHERE json_extract(payload, '$.ruleId') = ?");
+      const rows = stmt.all('nested-data');
+      
+      expect(rows).toHaveLength(1);
+      const stored = rows[0] as any;
+      const payload = JSON.parse(stored.payload);
+      expect(payload.ruleId).toBe('nested-data');
+      expect(payload.currentValue).toBe(100);
+    });
+
+    it('should handle Unicode characters in symbol names', () => {
+      const event: TradingEvent = {
+        type: 'OrderPlaced',
+        payload: {
+          orderId: 'unicode-order',
+          symbol: 'AAPL™️中文',
+          side: 'BUY',
+          quantity: 100,
+          orderType: 'MKT',
+          strategyId: 'strat-1',
+          timestamp: Date.now(),
+        },
+      };
+
+      eventStore.publish(event);
+
+      const orderEvents = eventStore.getEventsForOrder('unicode-order');
+      expect(orderEvents).toHaveLength(1);
+      expect(orderEvents[0].payload.symbol).toBe('AAPL™️中文');
+    });
+
+    it('should handle extremely long order IDs', () => {
+      const longOrderId = 'order-' + 'x'.repeat(500);
+      const event: TradingEvent = {
+        type: 'OrderPlaced',
+        payload: {
+          orderId: longOrderId,
+          symbol: 'AAPL',
+          side: 'BUY',
+          quantity: 100,
+          orderType: 'MKT',
+          strategyId: 'strat-1',
+          timestamp: Date.now(),
+        },
+      };
+
+      eventStore.publish(event);
+
+      const orderEvents = eventStore.getEventsForOrder(longOrderId);
+      expect(orderEvents).toHaveLength(1);
+      expect(orderEvents[0].payload.orderId).toBe(longOrderId);
+    });
+  });
+
+  describe('Unsubscribe and Listener Management', () => {
+    it('should not call listeners after they are removed (if unsubscribe implemented)', () => {
+      // Note: Current implementation does not have unsubscribe.
+      // This test documents the expected behavior if it were added.
+      const listener = vi.fn();
+      eventStore.subscribe(listener);
+
+      const event1: TradingEvent = {
+        type: 'OrderPlaced',
+        payload: {
+          orderId: 'order-1',
+          symbol: 'AAPL',
+          side: 'BUY',
+          quantity: 100,
+          orderType: 'MKT',
+          strategyId: 'strat-1',
+          timestamp: Date.now(),
+        },
+      };
+
+      eventStore.publish(event1);
+      expect(listener).toHaveBeenCalledTimes(1);
+
+      // If unsubscribe were implemented:
+      // eventStore.unsubscribe(listener);
+      // eventStore.publish(event1);
+      // expect(listener).toHaveBeenCalledTimes(1); // Still just 1
+    });
+
+    it('should handle duplicate listener subscriptions', () => {
+      const listener = vi.fn();
+      
+      // Subscribe same listener twice
+      eventStore.subscribe(listener);
+      eventStore.subscribe(listener);
+
+      const event: TradingEvent = {
+        type: 'OrderPlaced',
+        payload: {
+          orderId: 'order-dup',
+          symbol: 'AAPL',
+          side: 'BUY',
+          quantity: 100,
+          orderType: 'MKT',
+          strategyId: 'strat-1',
+          timestamp: Date.now(),
+        },
+      };
+
+      eventStore.publish(event);
+
+      // Both subscriptions should fire
+      expect(listener).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('Replay Edge Cases', () => {
+    it('should handle replay when listener throws on specific event', () => {
+      const event1: TradingEvent = {
+        type: 'OrderPlaced',
+        payload: {
+          orderId: 'order-1',
+          symbol: 'AAPL',
+          side: 'BUY',
+          quantity: 100,
+          orderType: 'MKT',
+          strategyId: 'strat-1',
+          timestamp: 1000,
+        },
+      };
+
+      const event2: TradingEvent = {
+        type: 'OrderPlaced',
+        payload: {
+          orderId: 'order-2',
+          symbol: 'TSLA',
+          side: 'SELL',
+          quantity: 50,
+          orderType: 'MKT',
+          strategyId: 'strat-1',
+          timestamp: 2000,
+        },
+      };
+
+      eventStore.publish(event1);
+      eventStore.publish(event2);
+
+      const receivedEvents: TradingEvent[] = [];
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      eventStore.subscribe((event) => {
+        if ((event.payload as any).orderId === 'order-1') {
+          throw new Error('Failed to process order-1');
+        }
+        receivedEvents.push(event);
+      });
+
+      eventStore.replay();
+
+      // Should still receive event2 despite error on event1
+      expect(receivedEvents).toHaveLength(1);
+      expect((receivedEvents[0].payload as any).orderId).toBe('order-2');
+      expect(consoleErrorSpy).toHaveBeenCalled();
+
+      consoleErrorSpy.mockRestore();
+    });
+
+    it('should replay events in correct order even with out-of-order timestamps', () => {
+      const events: TradingEvent[] = [
+        {
+          type: 'OrderPlaced',
+          payload: {
+            orderId: 'order-1',
+            symbol: 'AAPL',
+            side: 'BUY',
+            quantity: 100,
+            orderType: 'MKT',
+            strategyId: 'strat-1',
+            timestamp: 3000, // Latest timestamp
+          },
+        },
+        {
+          type: 'OrderPlaced',
+          payload: {
+            orderId: 'order-2',
+            symbol: 'TSLA',
+            side: 'SELL',
+            quantity: 50,
+            orderType: 'MKT',
+            strategyId: 'strat-1',
+            timestamp: 1000, // Earliest timestamp
+          },
+        },
+        {
+          type: 'OrderPlaced',
+          payload: {
+            orderId: 'order-3',
+            symbol: 'NVDA',
+            side: 'BUY',
+            quantity: 75,
+            orderType: 'MKT',
+            strategyId: 'strat-1',
+            timestamp: 2000, // Middle timestamp
+          },
+        },
+      ];
+
+      events.forEach(event => eventStore.publish(event));
+
+      const replayedEvents: TradingEvent[] = [];
+      eventStore.subscribe(event => {
+        replayedEvents.push(event);
+      });
+
+      eventStore.replay();
+
+      // Should be ordered by insertion (id), not timestamp
+      expect(replayedEvents).toHaveLength(3);
+      expect((replayedEvents[0].payload as any).orderId).toBe('order-1');
+      expect((replayedEvents[1].payload as any).orderId).toBe('order-2');
+      expect((replayedEvents[2].payload as any).orderId).toBe('order-3');
+    });
+  });
 });
