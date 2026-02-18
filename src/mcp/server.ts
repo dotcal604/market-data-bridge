@@ -99,6 +99,28 @@ import { checkDriftAlerts } from "../eval/drift-alerts.js";
 import { upsertRiskConfig } from "../db/database.js";
 import { RISK_CONFIG_DEFAULTS, type RiskConfigParam } from "../db/schema.js";
 import type { ModelEvaluation } from "../eval/models/types.js";
+import { logger } from "../logging.js";
+import { updateMcpSessionActivity } from "../db/database.js";
+
+const log = logger.child({ subsystem: "mcp" });
+
+// Wrap MCP tool handlers with structured error handling
+type ToolHandler<T = any> = (params: T) => Promise<{ content: Array<{ type: "text"; text: string }>; isError?: boolean }>;
+
+function withErrorHandling<T = any>(toolName: string, handler: ToolHandler<T>): ToolHandler<T> {
+  return async (params: T) => {
+    try {
+      const result = await handler(params);
+      return result;
+    } catch (e: any) {
+      log.error({ tool: toolName, params, error: e.message, stack: e.stack }, "MCP tool error");
+      return {
+        content: [{ type: "text", text: `Error in ${toolName}: ${e.message}` }],
+        isError: true,
+      };
+    }
+  };
+}
 
 export function createMcpServer(): McpServer {
   const server = new McpServer({
@@ -111,9 +133,9 @@ export function createMcpServer(): McpServer {
     "get_status",
     "Get bridge status. Returns easternTime, marketSession (pre-market/regular/after-hours/closed), and IBKR connection state. Call this FIRST before any query.",
     {},
-    async () => ({
+    withErrorHandling("get_status", async () => ({
       content: [{ type: "text", text: JSON.stringify(getStatus(), null, 2) }],
-    })
+    }))
   );
 
   // --- Tool: get_quote --- Smart: IBKR real-time first, Yahoo fallback

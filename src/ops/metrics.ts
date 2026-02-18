@@ -2,10 +2,11 @@
  * Central ops metrics collector.
  *
  * Tracks process health, request latency percentiles, error rates,
- * IBKR availability, and incident history. Designed for ITIL-style
+ * IBKR availability, MCP session stats, and incident history. Designed for ITIL-style
  * availability and capacity management.
  */
 import { getConnectionStatus } from "../ibkr/connection.js";
+import { getMcpSessionStats } from "../db/database.js";
 import { logger } from "../logging.js";
 import { dispatchWebhook } from "./webhook.js";
 
@@ -300,6 +301,14 @@ export interface OpsMetrics {
     p99LatencyMs: number;
   };
 
+  // MCP session metrics
+  mcpSessions: {
+    total: number;
+    active: number;
+    avgDurationSeconds: number | null;
+    totalToolCalls: number;
+  };
+
   // Incidents
   incidentCount: number;
   unhandledRejections: number;
@@ -324,6 +333,9 @@ export function getMetrics(): OpsMetrics {
   const avgLatency = durations.length > 0
     ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
     : 0;
+
+  // MCP session stats
+  const mcpStats = getMcpSessionStats();
 
   return {
     startedAt: processStartedAt,
@@ -352,6 +364,13 @@ export function getMetrics(): OpsMetrics {
       p50LatencyMs: computePercentile(durations, 50),
       p95LatencyMs: computePercentile(durations, 95),
       p99LatencyMs: computePercentile(durations, 99),
+    },
+
+    mcpSessions: {
+      total: mcpStats.total,
+      active: mcpStats.active,
+      avgDurationSeconds: mcpStats.avg_duration_seconds,
+      totalToolCalls: mcpStats.total_tool_calls,
     },
 
     incidentCount: incidents.length,

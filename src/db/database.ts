@@ -394,6 +394,20 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_eel_symbol ON eval_execution_links(symbol);
 `);
 
+// ── MCP Session Tracking (for session recovery and metrics) ────────────────
+db.exec(`
+  CREATE TABLE IF NOT EXISTS mcp_sessions (
+    id TEXT PRIMARY KEY,
+    transport TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    last_active TEXT NOT NULL DEFAULT (datetime('now')),
+    tool_calls INTEGER NOT NULL DEFAULT 0,
+    closed_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_mcp_sessions_created ON mcp_sessions(created_at);
+  CREATE INDEX IF NOT EXISTS idx_mcp_sessions_closed ON mcp_sessions(closed_at);
+`);
+
 db.exec(RISK_CONFIG_SCHEMA_SQL);
 
 // ── Column Migrations (safe for existing DBs — silently ignored if column exists) ──
@@ -618,7 +632,31 @@ const stmts = {
   markAllInboxRead: db.prepare(`UPDATE inbox SET read = 1 WHERE read = 0`),
   deleteAllInbox: db.prepare(`DELETE FROM inbox`),
   countInbox: db.prepare(`SELECT COUNT(*) as total, SUM(CASE WHEN read = 0 THEN 1 ELSE 0 END) as unread FROM inbox`),
-  pruneInbox: db.prepare(`DELETE FROM inbox WHERE created_at < datetime('now', '-' || ? || ' days')`),
+pruneInbox: db.prepare(`DELETE FROM inbox WHERE created_at < datetime('now', '-' || ? || ' days')`),
+
+  // MCP Sessions
+  insertMcpSession: db.prepare(`
+    INSERT INTO mcp_sessions (id, transport, created_at, last_active)
+    VALUES (@id, @transport, @created_at, @last_active)
+  `),
+  updateMcpSessionActivity: db.prepare(`
+    UPDATE mcp_sessions SET last_active = @last_active, tool_calls = tool_calls + 1
+    WHERE id = @id
+  `),
+  closeMcpSession: db.prepare(`
+    UPDATE mcp_sessions SET closed_at = @closed_at WHERE id = @id
+  `),
+  getActiveMcpSessions: db.prepare(`
+    SELECT * FROM mcp_sessions WHERE closed_at IS NULL ORDER BY created_at DESC
+  `),
+  getMcpSessionStats: db.prepare(`
+    SELECT
+      COUNT(*) as total,
+      SUM(CASE WHEN closed_at IS NULL THEN 1 ELSE 0 END) as active,
+      AVG(CASE WHEN closed_at IS NOT NULL THEN (julianday(closed_at) - julianday(created_at)) * 86400 ELSE NULL END) as avg_duration_seconds,
+      SUM(tool_calls) as total_tool_calls
+    FROM mcp_sessions
+  `),
 };
 
 // ── Helper Functions ─────────────────────────────────────────────────────
@@ -1773,6 +1811,59 @@ export function insertDriftAlert(
  */
 export function getRecentDriftAlerts(limit: number = 50): DriftAlertRow[] {
   return stmts.getRecentDriftAlerts.all(limit) as DriftAlertRow[];
+}
+
+// ── MCP Session Tracking ──────────────────────────────────────────────────
+
+export interface McpSessionRow {
+  id: string;
+  transport: string;
+  created_at: string;
+  last_active: string;
+  tool_calls: number;
+  closed_at: string | null;
+}
+
+export function insertMcpSession(sessionId: string, transport: string): void {
+  const now = new Date().toISOString();
+  stmts.insertMcpSession.run({
+    id: sessionId,
+    transport,
+    created_at: now,
+    last_active: now,
+  });
+}
+
+export function updateMcpSessionActivity(sessionId: string): void {
+  stmts.updateMcpSessionActivity.run({
+    id: sessionId,
+    last_active: new Date().toISOString(),
+  });
+}
+
+export function closeMcpSession(sessionId: string): void {
+  stmts.closeMcpSession.run({
+    id: sessionId,
+    closed_at: new Date().toISOString(),
+  });
+}
+
+export function getActiveMcpSessions(): McpSessionRow[] {
+  return stmts.getActiveMcpSessions.all() as McpSessionRow[];
+}
+
+export function getMcpSessionStats(): {
+  total: number;
+  active: number;
+  avg_duration_seconds: number | null;
+  total_tool_calls: number;
+} {
+  return stmts.getMcpSessionStats.get() as {
+    total: number;
+    active: number;
+    avg_duration_seconds: number | null;
+    total_tool_calls: number;
+  };
 }
 
 export function isDbWritable(): boolean {
