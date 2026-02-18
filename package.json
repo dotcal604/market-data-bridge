@@ -23,7 +23,12 @@
     "dev:paper": "cross-env IBKR_PORT=7497 concurrently -n api,ui -c blue,magenta \"node build/index.js\" \"cd frontend && npm run dev -- -p 3001\"",
     "dev:live": "cross-env IBKR_PORT=7496 concurrently -n api,ui -c blue,magenta \"node build/index.js\" \"cd frontend && npm run dev -- -p 3001\"",
     "build:all": "npm run build && npm run build:frontend",
-    "start:prod": "npm run build:all && npm start"
+    "start:prod": "npm run build:all && npm start",
+    "ops:check": "node scripts/ops-check.mjs",
+    "ops:check:json": "node scripts/ops-check.mjs --json",
+    "ops:backup": "node scripts/db-backup.mjs",
+    "ops:backup:prune": "node scripts/db-backup.mjs --prune 7",
+    "ops:deploy": "bash scripts/deploy.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.74.0",

@@ -276,6 +276,43 @@ cd frontend && npx tsc --noEmit
 - Do not auto-merge any PR — human review required
 - Do not store API keys in code — `.env` only
 
+## Authority Matrix — Change Control
+
+| File / Area | Owner | Review Required | Paper Test Required |
+|-------------|-------|----------------|-------------------|
+| `src/ibkr/orders.ts`, `orders_impl/*` | Human + Claude Code | Always (human) | Yes |
+| `src/ibkr/risk-gate.ts` | Human + Claude Code | Always (human) | Yes |
+| `src/ibkr/connection.ts` | Claude Code | Always (human) | Yes |
+| `src/db/reconcile.ts` | Claude Code | Always (human) | Yes |
+| `src/rest/agent.ts` (new actions) | Claude Code | Yes | No |
+| `src/ops/*`, `scripts/*`, `scheduler.ts` | Copilot / ops-engineer | Yes (Claude Code) | No |
+| `src/eval/features/*` (new features) | Codex / backend-dev | Yes (Claude Code) | No |
+| `src/__tests__/*` | Codex / test-writer | Yes | No |
+| `frontend/src/components/*` | Codex / frontend-dev | Yes | No |
+| `ecosystem.config.cjs`, `deploy/*` | Copilot / ops-engineer | Yes | No |
+| `.github/agents/*` | Claude Code | Yes | No |
+| `AGENTS.md`, `CLAUDE.md`, `ORCHESTRATION.md` | Claude Code | No (self-maintained) | No |
+
+**Execution-critical files** (top 4 rows) always require:
+1. Human review before merge
+2. Paper account test before production deploy
+3. Crash-mid-request scenario considered
+4. Rollback plan documented in PR
+
+## Definition of Ready / Done by Work Type
+
+### Ops Work (Copilot / ops-engineer)
+**Ready:** Clear problem statement, affected files listed, no execution-logic changes needed.
+**Done:** Script runs clean, no regressions in `npm test`, PM2 restart succeeds.
+
+### Feature Work (Codex / backend-dev / frontend-dev)
+**Ready:** Issue spec with file paths, props/API defined, acceptance criteria listed.
+**Done:** `tsc --noEmit` clean, tests pass, no `console.log`, dark theme verified (frontend).
+
+### Execution-Critical Work (Claude Code + Human)
+**Ready:** Risk assumptions documented, rollback plan, paper-only test plan, crash-mid-request scenario.
+**Done:** Paper account test passes, reconciliation test passes, idempotency verified, human sign-off.
+
 ## Agent-Specific Notes
 
 > All agents (Copilot, Codex) read this `AGENTS.md` file automatically. The conventions above apply to all.

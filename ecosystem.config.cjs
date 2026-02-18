@@ -13,6 +13,14 @@
 //
 // Both simultaneously:
 //   pm2 start ecosystem.config.cjs
+//
+// Log rotation (one-time setup):
+//   pm2 install pm2-logrotate
+//   pm2 set pm2-logrotate:max_size 50M
+//   pm2 set pm2-logrotate:retain 7
+//   pm2 set pm2-logrotate:compress true
+//   pm2 set pm2-logrotate:dateFormat YYYY-MM-DD
+//   pm2 set pm2-logrotate:workerInterval 3600
 
 const sharedConfig = {
   script: "build/index.js",
