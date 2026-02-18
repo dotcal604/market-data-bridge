@@ -992,6 +992,11 @@ export function getRecentOutcomes(limit: number = 20): Array<Record<string, unkn
   return stmts.queryRecentOutcomes.all(limit) as Array<Record<string, unknown>>;
 }
 
+export function getOutcomeCount(): number {
+  const row = stmts.countOutcomes.get() as { n?: number } | undefined;
+  return row?.n ?? 0;
+}
+
 export function getModelOutputsForEval(evaluationId: string): Record<string, unknown>[] {
   return stmts.queryModelOutputsByEval.all(evaluationId) as Record<string, unknown>[];
 }

@@ -7,6 +7,8 @@ export interface GuardrailResult {
   flags: string[];
   trading_window_ok: boolean;
   consecutive_losses: number;
+  insufficient_sample: boolean;
+  sample_size: number;
   model_disagreement_level: "none" | "mild" | "severe";
   regime_shift_detected: boolean;
 }
@@ -19,6 +21,7 @@ export interface GuardrailResult {
 export function runGuardrails(
   ensemble: EnsembleScore,
   getRecentOutcomesFn?: (limit: number) => Array<Record<string, unknown>>,
+  getOutcomeCountFn?: () => number,
   getDriftReportFn?: () => DriftReport | null,
 ): GuardrailResult {
   const flags: string[] = [];
@@ -59,7 +62,22 @@ export function runGuardrails(
     flags.push(`${consecutiveLosses} consecutive losses — consider pausing`);
   }
 
-  // 3. Model disagreement check
+  // 3. Sample-size confidence check
+  let insufficientSample = false;
+  let sampleSize = 0;
+  if (getOutcomeCountFn) {
+    try {
+      sampleSize = getOutcomeCountFn();
+      if (sampleSize < evalConfig.minOutcomesSoft) {
+        flags.push(`insufficient sample: ${sampleSize} trades, metrics unreliable`);
+      }
+      insufficientSample = sampleSize < evalConfig.minOutcomesHard;
+    } catch {
+      // DB might not be initialized yet
+    }
+  }
+
+  // 4. Model disagreement check
   let disagreementLevel: "none" | "mild" | "severe" = "none";
   if (ensemble.score_spread > 30) {
     disagreementLevel = "severe";
@@ -73,7 +91,7 @@ export function runGuardrails(
     flags.push("No majority consensus to trade");
   }
 
-  // 4. Regime shift check
+  // 5. Regime shift check
   let regimeShiftDetected = false;
   if (getDriftReportFn) {
     try {
@@ -89,6 +107,7 @@ export function runGuardrails(
 
   const allowed = tradingWindowOk
     && consecutiveLosses < evalConfig.maxConsecutiveLosses
+    && !insufficientSample
     && !regimeShiftDetected;
 
   return {
@@ -96,6 +115,8 @@ export function runGuardrails(
     flags,
     trading_window_ok: tradingWindowOk,
     consecutive_losses: consecutiveLosses,
+    insufficient_sample: insufficientSample,
+    sample_size: sampleSize,
     model_disagreement_level: disagreementLevel,
     regime_shift_detected: regimeShiftDetected,
   };

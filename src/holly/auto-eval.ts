@@ -20,7 +20,7 @@ import { extractFeatureCols } from "../eval/routes.js";
 import { extractStructuredReasoning } from "../eval/reasoning/extractor.js";
 import {
   insertEvaluation, insertModelOutput, insertEvalReasoning,
-  getRecentOutcomes, hasRecentEvalForSymbol, insertSignal, getHollyAlertsByBatch,
+  getRecentOutcomes, getOutcomeCount, hasRecentEvalForSymbol, insertSignal, getHollyAlertsByBatch,
 } from "../db/database.js";
 import { appendInboxItem } from "../inbox/store.js";
 import type { ImportResult } from "./importer.js";
@@ -199,7 +199,7 @@ async function runSingleEval(
   const ensemble = computeEnsemble(evaluations);
 
   // Step 5: Guardrails
-  const guardrail = runGuardrails(ensemble, getRecentOutcomes, () => computeDriftReport());
+  const guardrail = runGuardrails(ensemble, getRecentOutcomes, getOutcomeCount, () => computeDriftReport());
 
   const totalLatency = Date.now() - totalStart;
 
