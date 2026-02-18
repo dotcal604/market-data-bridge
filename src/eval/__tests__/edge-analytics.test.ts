@@ -118,6 +118,93 @@ describe("edge-analytics", () => {
       });
     });
 
+
+    describe("new risk metrics", () => {
+      it("should compute recovery factor, cvar, skewness, kurtosis, and ulcer index", () => {
+        const rMultiples = [1, -2, 3, -1, 2, -0.5, 0.5, -1.5, 4, -0.2];
+        const mockRows = rMultiples.map((r, i) => ({
+          evaluation_id: `e${i + 1}`,
+          symbol: "AAPL",
+          direction: "long",
+          timestamp: `2024-01-${String(i + 1).padStart(2, "0")}T10:00:00`,
+          ensemble_trade_score: 70,
+          ensemble_should_trade: 1,
+          r_multiple: r,
+          trade_taken: 1,
+          rvol: 1.2,
+          vwap_deviation_pct: 0.3,
+          spread_pct: 0.1,
+          volume_acceleration: 1.1,
+          atr_pct: 2.5,
+          gap_pct: 0.5,
+          range_position_pct: 0.6,
+          price_extension_pct: 1.0,
+          spy_change_pct: 0.2,
+          qqq_change_pct: 0.3,
+          minutes_since_open: 60,
+          volatility_regime: "normal",
+          time_of_day: "morning",
+        }));
+
+        mockDb = {
+          prepare: vi.fn(() => ({
+            all: vi.fn(() => mockRows),
+          })),
+        };
+
+        const report = computeEdgeReport({ days: 90, includeWalkForward: false });
+
+        expect(report.current.recovery_factor).toBe(2.65);
+        expect(report.current.cvar_5).toBe(-2);
+        expect(report.current.skewness).toBe(0.466);
+        expect(report.current.kurtosis).toBe(-0.943);
+        expect(report.current.ulcer_index).toBe(0.673);
+      });
+
+      it("should return stable edge-case values for single-trade and zero-drawdown samples", () => {
+        const mockRows = [
+          {
+            evaluation_id: "e1",
+            symbol: "AAPL",
+            direction: "long",
+            timestamp: "2024-01-01T10:00:00",
+            ensemble_trade_score: 70,
+            ensemble_should_trade: 1,
+            r_multiple: 2,
+            trade_taken: 1,
+            rvol: 1.2,
+            vwap_deviation_pct: 0.3,
+            spread_pct: 0.1,
+            volume_acceleration: 1.1,
+            atr_pct: 2.5,
+            gap_pct: 0.5,
+            range_position_pct: 0.6,
+            price_extension_pct: 1.0,
+            spy_change_pct: 0.2,
+            qqq_change_pct: 0.3,
+            minutes_since_open: 60,
+            volatility_regime: "normal",
+            time_of_day: "morning",
+          },
+        ];
+
+        mockDb = {
+          prepare: vi.fn(() => ({
+            all: vi.fn(() => mockRows),
+          })),
+        };
+
+        const report = computeEdgeReport({ days: 90, includeWalkForward: false });
+
+        expect(report.current.max_drawdown).toBe(0);
+        expect(report.current.recovery_factor).toBe(Infinity);
+        expect(report.current.cvar_5).toBe(2);
+        expect(report.current.skewness).toBe(0);
+        expect(report.current.kurtosis).toBe(0);
+        expect(report.current.ulcer_index).toBe(0);
+      });
+    });
+
     describe("edge score composite", () => {
       it("should calculate edge score with correct component weights", () => {
         const mockRows = Array.from({ length: 50 }, (_, i) => {
