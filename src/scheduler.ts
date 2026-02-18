@@ -17,6 +17,7 @@ let flattenTimer: ReturnType<typeof setInterval> | null = null;
 let pruneTimer: ReturnType<typeof setInterval> | null = null;
 let tunnelCheckTimer: ReturnType<typeof setInterval> | null = null;
 let availabilityTimer: ReturnType<typeof setInterval> | null = null;
+let availabilityPruneTimer: ReturnType<typeof setInterval> | null = null;
 let flattenFiredToday = "";
 let lastPruneDate = "";
 
@@ -324,7 +325,7 @@ export function startScheduler(intervalMs: number = DEFAULT_INTERVAL_MS) {
     log.info({ intervalSec: SAMPLE_INTERVAL_MS / 1000 }, "Availability sampling armed — tracking uptime every 30s");
 
     // Prune old samples once per hour
-    setInterval(() => {
+    availabilityPruneTimer = setInterval(() => {
       try { pruneOldSamples(); } catch (err) { log.error({ err }, "Availability prune error (swallowed)"); }
     }, 60 * 60 * 1000); // 1 hour
   }
@@ -354,6 +355,10 @@ export function stopScheduler() {
   if (availabilityTimer) {
     clearInterval(availabilityTimer);
     availabilityTimer = null;
+  }
+  if (availabilityPruneTimer) {
+    clearInterval(availabilityPruneTimer);
+    availabilityPruneTimer = null;
   }
   log.info("Scheduler stopped");
 }
