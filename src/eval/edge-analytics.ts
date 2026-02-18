@@ -64,6 +64,11 @@ export interface EdgeReport {
     sharpe: number;
     sortino: number;
     max_drawdown: number;
+    recovery_factor: number;
+    cvar_5: number;
+    skewness: number;
+    kurtosis: number;
+    ulcer_index: number;
     profit_factor: number;
     total_trades: number;
     expectancy: number;
@@ -247,7 +252,9 @@ function computeCurrentStats(rows: OutcomeRow[]) {
   if (rows.length === 0) {
     return {
       win_rate: 0, avg_r: 0, sharpe: 0, sortino: 0,
-      max_drawdown: 0, profit_factor: 0, total_trades: 0,
+      max_drawdown: 0, recovery_factor: 0, cvar_5: 0,
+      skewness: 0, kurtosis: 0, ulcer_index: 0,
+      profit_factor: 0, total_trades: 0,
       expectancy: 0, edge_score: 0,
     };
   }
@@ -281,12 +288,33 @@ function computeCurrentStats(rows: OutcomeRow[]) {
 
   // Max drawdown
   let peak = 0, equity = 0, maxDd = 0;
+  const drawdowns: number[] = [];
   for (const r of rows) {
     equity += r.r_multiple;
     if (equity > peak) peak = equity;
     const dd = peak > 0 ? (peak - equity) / peak : 0;
+    drawdowns.push(dd);
     if (dd > maxDd) maxDd = dd;
   }
+
+  // Recovery Factor = net profit / |max drawdown|
+  const netProfit = rows.reduce((s, r) => s + r.r_multiple, 0);
+  const recoveryFactor = maxDd > 0 ? netProfit / Math.abs(maxDd) : netProfit > 0 ? Infinity : 0;
+
+  // CVaR (5%) = mean of bottom 5% returns
+  const sortedReturns = [...returns].sort((a, b) => a - b);
+  const tailCount = Math.max(1, Math.ceil(sortedReturns.length * 0.05));
+  const tailReturns = sortedReturns.slice(0, tailCount);
+  const cvar5 = tailReturns.reduce((s, r) => s + r, 0) / tailReturns.length;
+
+  // Skewness = E[(x-μ)^3] / σ^3 ; Kurtosis(excess) = E[(x-μ)^4] / σ^4 - 3
+  const thirdMoment = returns.reduce((s, r) => s + (r - mean) ** 3, 0) / returns.length;
+  const fourthMoment = returns.reduce((s, r) => s + (r - mean) ** 4, 0) / returns.length;
+  const skewness = stdDev > 0 ? thirdMoment / (stdDev ** 3) : 0;
+  const kurtosis = stdDev > 0 ? (fourthMoment / (stdDev ** 4)) - 3 : 0;
+
+  // Ulcer Index = sqrt(mean(drawdown^2))
+  const ulcerIndex = Math.sqrt(drawdowns.reduce((s, dd) => s + (dd ** 2), 0) / drawdowns.length);
 
   // Edge Score (composite 0-100)
   // Components: win_rate (30%), profit_factor (25%), sharpe (25%), sample_size (20%)
@@ -302,6 +330,11 @@ function computeCurrentStats(rows: OutcomeRow[]) {
     sharpe: round2(sharpe),
     sortino: round2(sortino),
     max_drawdown: round3(maxDd),
+    recovery_factor: round3(recoveryFactor),
+    cvar_5: round3(cvar5),
+    skewness: round3(skewness),
+    kurtosis: round3(kurtosis),
+    ulcer_index: round3(ulcerIndex),
     profit_factor: round2(profitFactor),
     total_trades: rows.length,
     expectancy: round3(expectancy),
