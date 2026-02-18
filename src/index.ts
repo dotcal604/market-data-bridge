@@ -34,9 +34,19 @@ function parseMode(): Mode {
   return "both";
 }
 
+async function sleep(ms: number): Promise<void> {
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
 async function main() {
   const mode = parseMode();
   logger.info({ mode }, "Market Bridge starting");
+
+  if (process.uptime() < 5) {
+    recordIncident("crash_loop", "critical", "Process restarted within 5s — possible crash loop");
+  }
 
   // Validate configuration early
   const validation = validateConfig(config);
@@ -83,6 +93,8 @@ async function main() {
   // that churn in TWS's API Connections panel.
   if (mode !== "mcp") {
     try {
+      logger.info("Delaying IBKR connect by 5s to allow TWS cleanup");
+      await sleep(5_000);
       await connect();
       logger.info("IBKR connected — account data available");
 

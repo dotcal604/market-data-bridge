@@ -86,7 +86,7 @@ import { z } from "zod";
 import { orchestrator, getConsensusVerdict, formatDisagreements, ProviderScoresSchema } from "../orchestrator.js";
 import { applyTrailingStopToOrder, trailingStopRecommendation } from "../holly/trailing-stop-executor.js";
 import { getMetrics, getRecentIncidents, getLastIncident } from "../ops/metrics.js";
-import { getConnectionStatus, getConnectionHealth } from "../ibkr/connection.js";
+import { getConnectionStatus } from "../ibkr/connection.js";
 
 const log = logger.child({ module: "agent" });
 
@@ -733,9 +733,6 @@ const actions: Record<string, ActionHandler> = {
       ibkr_current_streak_seconds: metrics.ibkrCurrentStreakSeconds,
       ibkr_total_disconnects: connStatus.totalDisconnects,
       ibkr_reconnect_attempts: connStatus.reconnectAttempts,
-      ibkr_connection_health: connStatus.connectionHealth,
-      ibkr_heartbeat_p95_ms: connStatus.heartbeatP95Ms,
-      ibkr_last_reconnect_duration_ms: connStatus.lastReconnectDurationMs,
       memory_mb: metrics.memoryMb,
       cpu_percent: metrics.cpuPercent,
       request_error_rate: metrics.requests.errorRate,

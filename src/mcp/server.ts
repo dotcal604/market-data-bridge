@@ -2219,8 +2219,6 @@ export function createMcpServer(): McpServer {
         ibkr_current_streak_seconds: metrics.ibkrCurrentStreakSeconds,
         ibkr_total_disconnects: connStatus.totalDisconnects,
         ibkr_reconnect_attempts: connStatus.reconnectAttempts,
-        ibkr_connection_health: connStatus.connectionHealth,
-        ibkr_heartbeat_p95_ms: connStatus.heartbeatP95Ms,
         memory_mb: metrics.memoryMb,
         cpu_percent: metrics.cpuPercent,
         request_error_rate: metrics.requests.errorRate,
