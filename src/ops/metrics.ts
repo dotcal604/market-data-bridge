@@ -2,11 +2,13 @@
  * Central ops metrics collector.
  *
  * Tracks process health, request latency percentiles, error rates,
- * IBKR availability, MCP session stats, and incident history. Designed for ITIL-style
- * availability and capacity management.
+ * IBKR availability, MCP session stats, tunnel availability, and incident history.
+ * Designed for ITIL-style availability and capacity management.
  */
 import { getConnectionStatus } from "../ibkr/connection.js";
 import { getMcpSessionStats } from "../db/database.js";
+import { getTunnelMetrics } from "./tunnel-monitor.js";
+import { wsBroadcast } from "../ws/server.js";
 import { logger } from "../logging.js";
 import { dispatchWebhook } from "./webhook.js";
 
@@ -196,6 +198,9 @@ export function recordIncident(type: string, severity: Incident["severity"], det
     incidents.splice(0, incidents.length - MAX_INCIDENTS);
   }
 
+  // Broadcast incident to WebSocket clients
+  wsBroadcast("incidents", incident);
+
   if (severity === "critical") {
     log.error({ incident }, `INCIDENT: ${type} — ${detail}`);
   } else if (severity === "warning") {
@@ -289,6 +294,15 @@ export interface OpsMetrics {
   ibkrCurrentStreakSeconds: number | null;
   ibkrConnected: boolean;
 
+  // Tunnel availability
+  tunnelUptimePercent: number;
+  tunnelLastProbeLatencyMs: number;
+  tunnelConsecutiveFailures: number;
+  tunnelRestartAttempts: number;
+  tunnelLastProbeTimestamp: string | null;
+  tunnelUrl: string;
+  tunnelConnected: boolean;
+
   // Request metrics (5-min window)
   requests: {
     total: number;
@@ -318,6 +332,7 @@ export interface OpsMetrics {
 export function getMetrics(): OpsMetrics {
   const mem = process.memoryUsage();
   const connStatus = getConnectionStatus();
+  const tunnelMetrics = getTunnelMetrics();
 
   // Update availability one more time before reporting
   updateIbkrAvailability(connStatus.connected);
@@ -352,6 +367,14 @@ export function getMetrics(): OpsMetrics {
     ibkrReconnectAttempts: connStatus.reconnectAttempts,
     ibkrCurrentStreakSeconds: connStatus.uptimeSinceConnect,
     ibkrConnected: connStatus.connected,
+
+    tunnelUptimePercent: tunnelMetrics.tunnelUptimePercent,
+    tunnelLastProbeLatencyMs: tunnelMetrics.tunnelLastProbeLatencyMs,
+    tunnelConsecutiveFailures: tunnelMetrics.tunnelConsecutiveFailures,
+    tunnelRestartAttempts: tunnelMetrics.tunnelRestartAttempts,
+    tunnelLastProbeTimestamp: tunnelMetrics.tunnelLastProbeTimestamp,
+    tunnelUrl: tunnelMetrics.tunnelUrl,
+    tunnelConnected: tunnelMetrics.tunnelConnected,
 
     requests: {
       total: totalRequestCount,
