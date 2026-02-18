@@ -1,12 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import Database from "better-sqlite3";
-import {
-  insertMcpSession,
-  updateMcpSessionActivity,
-  closeMcpSession,
-  getActiveMcpSessions,
-  getMcpSessionStats,
-} from "../database.js";
 
 describe("MCP Session Tracking", () => {
   let db: Database.Database;
@@ -26,47 +19,6 @@ describe("MCP Session Tracking", () => {
         closed_at TEXT
       );
     `);
-
-    // Prepare statements manually for testing
-    const insertStmt = db.prepare(`
-      INSERT INTO mcp_sessions (id, transport, created_at, last_active)
-      VALUES (@id, @transport, @created_at, @last_active)
-    `);
-
-    const updateStmt = db.prepare(`
-      UPDATE mcp_sessions SET last_active = @last_active, tool_calls = tool_calls + 1
-      WHERE id = @id
-    `);
-
-    const closeStmt = db.prepare(`
-      UPDATE mcp_sessions SET closed_at = @closed_at WHERE id = @id
-    `);
-
-    const activeStmt = db.prepare(`
-      SELECT * FROM mcp_sessions WHERE closed_at IS NULL ORDER BY created_at DESC
-    `);
-
-    const statsStmt = db.prepare(`
-      SELECT
-        COUNT(*) as total,
-        SUM(CASE WHEN closed_at IS NULL THEN 1 ELSE 0 END) as active,
-        AVG(CASE WHEN closed_at IS NOT NULL THEN (julianday(closed_at) - julianday(created_at)) * 86400 ELSE NULL END) as avg_duration_seconds,
-        SUM(tool_calls) as total_tool_calls
-      FROM mcp_sessions
-    `);
-
-    // Mock the stmts object
-    const stmts = {
-      insertMcpSession: insertStmt,
-      updateMcpSessionActivity: updateStmt,
-      closeMcpSession: closeStmt,
-      getActiveMcpSessions: activeStmt,
-      getMcpSessionStats: statsStmt,
-    };
-
-    // Override the db instance used by the functions
-    (global as any).__testDb = db;
-    (global as any).__testStmts = stmts;
   });
 
   it("should insert a new MCP session", () => {
