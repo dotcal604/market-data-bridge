@@ -13,6 +13,7 @@ import { computeMarketAlignment } from "./market-alignment.js";
 import { classifyTimeOfDay, minutesSinceOpen } from "./time-classification.js";
 import { classifyVolatilityRegime } from "./volatility-regime.js";
 import { classifyLiquidity } from "./liquidity.js";
+import { computeTickVelocity } from "./tick-velocity.js";
 import { logger } from "../../logging.js";
 
 export interface ComputeResult {
@@ -57,6 +58,10 @@ export async function computeFeatures(
   const range_position_pct = computeRangePositionPct(last, high, low);
   const volatility_regime = classifyVolatilityRegime(atr_pct);
   const liquidity_bucket = classifyLiquidity(dailyBars, last);
+  
+  const tickData = computeTickVelocity();
+  const tick_velocity = tickData?.velocity ?? null;
+  const tick_acceleration = tickData?.acceleration ?? null;
 
   const marketCtx = await computeMarketAlignment(direction);
 
@@ -81,6 +86,8 @@ export async function computeFeatures(
     price_extension_pct,
     gap_pct,
     range_position_pct,
+    tick_velocity,
+    tick_acceleration,
     volatility_regime,
     liquidity_bucket,
     spy_change_pct: marketCtx.spy_change_pct,

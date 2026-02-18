@@ -19,6 +19,8 @@ export interface FeatureVector {
   price_extension_pct: number;
   gap_pct: number;
   range_position_pct: number;
+  tick_velocity: number | null;
+  tick_acceleration: number | null;
   volatility_regime: "low" | "normal" | "high";
   liquidity_bucket: "small" | "mid" | "large";
   spy_change_pct: number;
