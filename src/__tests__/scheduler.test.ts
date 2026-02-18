@@ -110,11 +110,11 @@ describe("Scheduler", () => {
 
       startScheduler(5 * 60 * 1000); // 5 minutes
 
-      // Should create 3 intervals: snapshot, flatten, drift
-      expect(setIntervalSpy).toHaveBeenCalledTimes(3);
-      
-      // Should create 1 timeout for initial drift check (after 60s)
-      expect(setTimeoutSpy).toHaveBeenCalledTimes(1);
+      // Should create 4 intervals: snapshot, flatten, drift, inbox prune
+      expect(setIntervalSpy).toHaveBeenCalledTimes(4);
+
+      // Should create 2 timeouts: initial drift check (60s) + initial prune check (30s)
+      expect(setTimeoutSpy).toHaveBeenCalledTimes(2);
       expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 60_000);
     });
 
@@ -124,8 +124,8 @@ describe("Scheduler", () => {
       startScheduler();
       stopScheduler();
 
-      // Should clear 3 intervals
-      expect(clearIntervalSpy).toHaveBeenCalledTimes(3);
+      // Should clear 4 intervals: snapshot, flatten, drift, inbox prune
+      expect(clearIntervalSpy).toHaveBeenCalledTimes(4);
     });
 
     it("should not create duplicate timers if startScheduler() called twice", () => {

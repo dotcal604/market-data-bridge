@@ -25,10 +25,14 @@ describe("Action Catalog", () => {
         "divoom_send_text",
         "divoom_set_brightness",
         "divoom_status",
+        "daily_summary",
         "drift_alerts",
         "drift_check",
         "drift_report",
         "edge_report",
+        "eval_outcomes",
+        "eval_reasoning",
+        "eval_stats",
         "executions_history",
         "flatten_positions",
         "get_account_snapshot_stream",
@@ -89,6 +93,8 @@ describe("Action Catalog", () => {
         "holly_trade_stats",
         "holly_trades",
         "holly_exit_autopsy",
+        "inbox_digest",
+        "inbox_prune",
         "inbox_stats",
         "journal_create",
         "journal_get",
@@ -142,6 +148,7 @@ describe("Action Catalog", () => {
         "unsubscribe_account_updates",
         "unsubscribe_real_time_bars",
         "update_risk_config",
+        "weight_history",
       ].sort();
       
       expect(catalogKeys).toEqual(expectedActions);

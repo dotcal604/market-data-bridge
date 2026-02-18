@@ -4,13 +4,17 @@ import { flattenAllPositions } from "./ibkr/orders.js";
 import { insertAccountSnapshot, insertPositionSnapshot } from "./db/database.js";
 import { computeDriftReport, type DriftReport } from "./eval/drift.js";
 import { checkDriftAlerts } from "./eval/drift-alerts.js";
+import { pruneInbox } from "./inbox/store.js";
+import { config } from "./config.js";
 import { logger } from "./logging.js";
 
 const log = logger.child({ subsystem: "scheduler" });
 
 let snapshotTimer: ReturnType<typeof setInterval> | null = null;
 let flattenTimer: ReturnType<typeof setInterval> | null = null;
+let pruneTimer: ReturnType<typeof setInterval> | null = null;
 let flattenFiredToday = "";
+let lastPruneDate = "";
 
 // Check if we're in a market session worth snapshotting (pre-market through after-hours)
 function isMarketActive(): boolean {
@@ -228,6 +232,26 @@ async function checkFlatten() {
   }
 }
 
+// ── Daily Inbox Prune ────────────────────────────────────────────────────
+
+const PRUNE_CHECK_MS = 60 * 60 * 1000; // check every hour
+
+function checkPrune() {
+  const today = getTodayET();
+  if (lastPruneDate === today) return; // already pruned today
+
+  lastPruneDate = today;
+  try {
+    const ttlDays = config.inbox.ttlDays;
+    const result = pruneInbox(ttlDays);
+    if (result.dbPruned > 0 || result.memoryPruned > 0) {
+      log.info({ ttlDays, ...result }, "Daily inbox prune complete");
+    }
+  } catch (e: any) {
+    log.error({ err: e }, "Daily inbox prune failed");
+  }
+}
+
 // ── Scheduler Lifecycle ──────────────────────────────────────────────────
 
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
@@ -264,6 +288,14 @@ export function startScheduler(intervalMs: number = DEFAULT_INTERVAL_MS) {
     }, 60_000);
     log.info({ intervalMin: DRIFT_CHECK_MS / 60_000 }, "Drift monitor armed — checking every 30 min during market hours");
   }
+
+  // Start daily inbox prune (hourly check, fires once per day)
+  if (!pruneTimer) {
+    pruneTimer = setInterval(checkPrune, PRUNE_CHECK_MS);
+    // Run first prune check after 30s (let DB settle)
+    setTimeout(checkPrune, 30_000);
+    log.info({ ttlDays: config.inbox.ttlDays }, "Inbox prune scheduler armed — daily cleanup");
+  }
 }
 
 export function stopScheduler() {
@@ -278,6 +310,10 @@ export function stopScheduler() {
   if (driftTimer) {
     clearInterval(driftTimer);
     driftTimer = null;
+  }
+  if (pruneTimer) {
+    clearInterval(pruneTimer);
+    pruneTimer = null;
   }
   log.info("Scheduler stopped");
 }

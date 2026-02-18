@@ -16,6 +16,7 @@ import {
   markAllInboxItemsRead as dbMarkAllRead,
   clearInboxDb,
   getInboxCounts as dbGetCounts,
+  pruneInboxDb,
   type InboxItemRow,
 } from "../db/database.js";
 import { wsBroadcast } from "../ws/server.js";
@@ -193,4 +194,109 @@ export function getInboxStats(): {
   }
   const unread = items.filter((i) => !i.read).length;
   return { total: items.length, unread, byType };
+}
+
+/**
+ * Prune inbox items older than `days` from both SQLite and in-memory buffer.
+ * Returns count of pruned items.
+ */
+export function pruneInbox(days: number = 7): { dbPruned: number; memoryPruned: number } {
+  // Prune SQLite
+  let dbPruned = 0;
+  try {
+    dbPruned = pruneInboxDb(days);
+  } catch (e: any) {
+    log.error({ err: e }, "Failed to prune inbox DB");
+  }
+
+  // Prune in-memory buffer
+  const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).getTime();
+  const before = items.length;
+  items = items.filter((i) => new Date(i.created_at).getTime() >= cutoff);
+  const memoryPruned = before - items.length;
+
+  if (dbPruned > 0 || memoryPruned > 0) {
+    log.info({ dbPruned, memoryPruned, days }, "Inbox pruned");
+  }
+  return { dbPruned, memoryPruned };
+}
+
+// ── Inbox Digest (time-windowed summary rollup) ──────────────────────────
+
+export interface InboxDigest {
+  window: string;
+  since: string;
+  summary: string;
+  fills: { count: number; totalPnl: number; totalCommission: number; symbols: string[] };
+  signals: { count: number; traded: number; passed: number; symbols: string[] };
+  driftAlerts: { count: number; types: string[] };
+  orderStatus: { count: number; symbols: string[] };
+}
+
+/**
+ * Generate a time-windowed digest of inbox events.
+ * Aggregates fills, signals, drift alerts, and order status into a summary.
+ */
+export function getInboxDigest(hours: number = 24): InboxDigest {
+  const since = new Date(Date.now() - hours * 60 * 60 * 1000);
+  const sinceISO = since.toISOString();
+  const window = hours >= 24 ? `${Math.round(hours / 24)}d` : `${hours}h`;
+
+  const recent = items.filter((i) => new Date(i.created_at).getTime() >= since.getTime());
+
+  // Fills
+  const fills = recent.filter((i) => i.type === "fill");
+  let totalPnl = 0;
+  let totalCommission = 0;
+  const fillSymbols = new Set<string>();
+  for (const f of fills) {
+    totalPnl += (f.body.realized_pnl as number) ?? (f.body.realizedPnL as number) ?? 0;
+    totalCommission += (f.body.commission as number) ?? 0;
+    if (f.symbol) fillSymbols.add(f.symbol);
+  }
+
+  // Signals
+  const signals = recent.filter((i) => i.type === "signal");
+  const traded = signals.filter((s) => s.body.should_trade === true || s.body.traded === true).length;
+  const passed = signals.length - traded;
+  const signalSymbols = new Set<string>();
+  for (const s of signals) { if (s.symbol) signalSymbols.add(s.symbol); }
+
+  // Drift alerts
+  const driftAlerts = recent.filter((i) => i.type === "drift_alert");
+  const alertTypes = new Set<string>();
+  for (const d of driftAlerts) { alertTypes.add((d.body.alert_type as string) ?? "unknown"); }
+
+  // Order status
+  const orderStatus = recent.filter((i) => i.type === "order_status");
+  const orderSymbols = new Set<string>();
+  for (const o of orderStatus) { if (o.symbol) orderSymbols.add(o.symbol); }
+
+  // Build summary string
+  const parts: string[] = [];
+  if (fills.length > 0) {
+    parts.push(`${fills.length} fill${fills.length > 1 ? "s" : ""} (${totalPnl >= 0 ? "+" : ""}$${totalPnl.toFixed(2)} PnL)`);
+  }
+  if (signals.length > 0) {
+    parts.push(`${signals.length} signal${signals.length > 1 ? "s" : ""} (${traded} traded)`);
+  }
+  if (driftAlerts.length > 0) {
+    parts.push(`${driftAlerts.length} drift alert${driftAlerts.length > 1 ? "s" : ""}`);
+  }
+  if (orderStatus.length > 0) {
+    parts.push(`${orderStatus.length} order update${orderStatus.length > 1 ? "s" : ""}`);
+  }
+  const summary = parts.length > 0
+    ? `Last ${window}: ${parts.join(", ")}`
+    : `Last ${window}: No inbox activity`;
+
+  return {
+    window,
+    since: sinceISO,
+    summary,
+    fills: { count: fills.length, totalPnl, totalCommission, symbols: [...fillSymbols] },
+    signals: { count: signals.length, traded, passed, symbols: [...signalSymbols] },
+    driftAlerts: { count: driftAlerts.length, types: [...alertTypes] },
+    orderStatus: { count: orderStatus.length, symbols: [...orderSymbols] },
+  };
 }

@@ -31,7 +31,7 @@ import {
   reqMktDepthExchanges, reqPnLSingleBySymbol, reqSmartComponents,
 } from "../ibkr/data.js";
 import { readMessages, postMessage, clearMessages, getStats } from "../collab/store.js";
-import { readInbox, markRead, markAllRead, clearInbox, getInboxStats } from "../inbox/store.js";
+import { readInbox, markRead, markAllRead, clearInbox, getInboxStats, pruneInbox, getInboxDigest } from "../inbox/store.js";
 import { getGptInstructions } from "./gpt-instructions.js";
 import { checkRisk, getSessionState, recordTradeResult, lockSession, unlockSession, resetSession, getRiskGateConfig } from "../ibkr/risk-gate.js";
 import { calculatePositionSize } from "../ibkr/risk.js";
@@ -53,6 +53,11 @@ import {
   getEvaluationById,
   insertOutcome,
   getEvalsForSimulation,
+  getEvalStats,
+  getEvalOutcomes,
+  getReasoningForEval,
+  getDailySummaries,
+  getWeightHistory,
   getTraderSyncStats,
   getTraderSyncTrades,
   getDb,
@@ -381,6 +386,8 @@ const actions: Record<string, ActionHandler> = {
   },
   clear_inbox: async () => clearInbox(),
   inbox_stats: async () => getInboxStats(),
+  inbox_digest: async (p) => getInboxDigest(num(p, "hours", 24)),
+  inbox_prune: async (p) => pruneInbox(num(p, "days", 7)),
 
   // ── Trade Journal ──
   journal_read: async (p) => queryJournal({ symbol: str(p, "symbol") || undefined, strategy: str(p, "strategy") || undefined, limit: num(p, "limit", 100) }),
@@ -568,6 +575,25 @@ const actions: Record<string, ActionHandler> = {
   recalibration_status: async () => {
     return getRecalibrationStatus();
   },
+
+  // ── Eval Analytics (parity with MCP) ──
+  eval_stats: async () => getEvalStats(),
+  eval_outcomes: async (p) => getEvalOutcomes({
+    limit: num(p, "limit", 500),
+    symbol: str(p, "symbol") || undefined,
+    days: p.days != null ? num(p, "days") : undefined,
+    tradesTakenOnly: p.all ? false : true,
+  }),
+  eval_reasoning: async (p) => {
+    const evalId = str(p, "evaluation_id") || str(p, "evalId");
+    if (!evalId) throw new Error("evaluation_id is required");
+    return getReasoningForEval(evalId);
+  },
+  daily_summary: async (p) => getDailySummaries({
+    date: str(p, "date") || undefined,
+    days: p.days != null ? num(p, "days") : undefined,
+  }),
+  weight_history: async (p) => getWeightHistory(num(p, "limit", 100)),
 
   // ── Multi-model orchestration ──
   multi_model_score: async (p) => {
@@ -879,6 +905,8 @@ export const actionsMeta: Record<string, ActionMeta> = {
   mark_inbox_read: { description: "Mark inbox items as read", params: ["id?", "ids?", "all?"] },
   clear_inbox: { description: "Clear all inbox items" },
   inbox_stats: { description: "Get inbox statistics (total, unread, breakdown by type)" },
+  inbox_digest: { description: "Get time-windowed digest of inbox events (fills, signals, drift alerts). Great for session start summary.", params: ["hours?"] },
+  inbox_prune: { description: "Prune inbox items older than N days from DB and memory", params: ["days?"] },
 
   // Trade Journal
   journal_read: { description: "Read trade journal entries", params: ["symbol?", "strategy?", "limit?"] },
@@ -946,6 +974,11 @@ export const actionsMeta: Record<string, ActionMeta> = {
   auto_eval_toggle: { description: "Enable or disable auto-eval pipeline", params: ["enabled"] },
   auto_link_stats: { description: "Get evaluation-to-execution auto-link statistics and recent links" },
   recalibration_status: { description: "Get Bayesian recalibration status: outcomes since last batch, per-regime weights, state file" },
+  eval_stats: { description: "Get model evaluation statistics: total evaluations, average scores, win rate, model accuracy" },
+  eval_outcomes: { description: "Get evaluations joined with trade outcomes for calibration and analytics", params: ["limit?", "symbol?", "days?", "all?"] },
+  eval_reasoning: { description: "Get structured reasoning for an evaluation: per-model key drivers, risk factors, uncertainties", params: ["evaluation_id"] },
+  daily_summary: { description: "Get daily session summaries: P&L, win rate, avg R, best/worst R per day", params: ["date?", "days?"] },
+  weight_history: { description: "Get history of ensemble weight changes with timestamps and reasons", params: ["limit?"] },
 
   // Multi-model orchestration
   multi_model_score: { description: "Collect weighted scores from GPT, Gemini, and Claude providers", params: ["symbol", "features?"] },

@@ -618,6 +618,7 @@ const stmts = {
   markAllInboxRead: db.prepare(`UPDATE inbox SET read = 1 WHERE read = 0`),
   deleteAllInbox: db.prepare(`DELETE FROM inbox`),
   countInbox: db.prepare(`SELECT COUNT(*) as total, SUM(CASE WHEN read = 0 THEN 1 ELSE 0 END) as unread FROM inbox`),
+  pruneInbox: db.prepare(`DELETE FROM inbox WHERE created_at < datetime('now', '-' || ? || ' days')`),
 };
 
 // ── Helper Functions ─────────────────────────────────────────────────────
@@ -799,6 +800,12 @@ export function clearInboxDb(): number {
 export function getInboxCounts(): { total: number; unread: number } {
   const row = stmts.countInbox.get() as { total: number; unread: number };
   return { total: row.total ?? 0, unread: row.unread ?? 0 };
+}
+
+/** Delete inbox items older than `days` from SQLite. Returns count of pruned rows. */
+export function pruneInboxDb(days: number = 7): number {
+  const info = stmts.pruneInbox.run(days);
+  return info.changes;
 }
 
 export function insertPositionSnapshot(positions: any[], source: string = "reconcile") {

@@ -52,4 +52,7 @@ export const config = {
     model: process.env.GEMINI_MODEL ?? "gemini-2.0-flash",
     timeoutMs: parseInt(process.env.GEMINI_TIMEOUT_MS ?? "10000", 10),
   },
+  inbox: {
+    ttlDays: parseInt(process.env.INBOX_TTL_DAYS ?? "7", 10),
+  },
 };

@@ -93,6 +93,11 @@ import {
 import { computeEnsembleWithWeights } from "../eval/ensemble/scorer.js";
 import { getWeights } from "../eval/ensemble/weights.js";
 import { tuneRiskParams } from "../eval/risk-tuning.js";
+import { getMetrics, getRecentIncidents } from "../ops/metrics.js";
+import { getConnectionStatus } from "../ibkr/connection.js";
+import { checkDriftAlerts } from "../eval/drift-alerts.js";
+import { upsertRiskConfig } from "../db/database.js";
+import { RISK_CONFIG_DEFAULTS, type RiskConfigParam } from "../db/schema.js";
 import type { ModelEvaluation } from "../eval/models/types.js";
 
 export function createMcpServer(): McpServer {
@@ -2176,6 +2181,169 @@ export function createMcpServer(): McpServer {
           isError: true,
         };
       }
+    }
+  );
+
+  // --- Tool: ops_health ---
+  server.tool(
+    "ops_health",
+    "Full ops health dashboard: process metrics, IBKR availability SLA, request latency percentiles, error rates, incidents.",
+    {},
+    async () => ({ content: [{ type: "text", text: JSON.stringify(getMetrics(), null, 2) }] })
+  );
+
+  // --- Tool: ops_incidents ---
+  server.tool(
+    "ops_incidents",
+    "Get recent operational incidents (disconnects, errors, heartbeat timeouts).",
+    { limit: z.number().default(20).describe("Max incidents to return") },
+    async (params) => {
+      const incidents = getRecentIncidents(params.limit);
+      return { content: [{ type: "text", text: JSON.stringify({ count: incidents.length, incidents }, null, 2) }] };
+    }
+  );
+
+  // --- Tool: ops_uptime ---
+  server.tool(
+    "ops_uptime",
+    "Get uptime summary: process uptime, IBKR connection SLA, memory/CPU, error rate.",
+    {},
+    async () => {
+      const connStatus = getConnectionStatus();
+      const metrics = getMetrics();
+      return { content: [{ type: "text", text: JSON.stringify({
+        process_uptime_seconds: metrics.uptimeSeconds,
+        started_at: metrics.startedAt,
+        ibkr_uptime_percent: metrics.ibkrUptimePercent,
+        ibkr_connected: metrics.ibkrConnected,
+        ibkr_current_streak_seconds: metrics.ibkrCurrentStreakSeconds,
+        ibkr_total_disconnects: connStatus.totalDisconnects,
+        ibkr_reconnect_attempts: connStatus.reconnectAttempts,
+        ibkr_connection_health: connStatus.connectionHealth,
+        ibkr_heartbeat_p95_ms: connStatus.heartbeatP95Ms,
+        memory_mb: metrics.memoryMb,
+        cpu_percent: metrics.cpuPercent,
+        request_error_rate: metrics.requests.errorRate,
+        incident_count: metrics.incidentCount,
+        last_incident: metrics.lastIncident,
+      }, null, 2) }] };
+    }
+  );
+
+  // --- Tool: ops_runbook ---
+  server.tool(
+    "ops_runbook",
+    "Get ops runbook procedure for a scenario (crash, disconnect, tunnel, mcp, error, memory, tws, database). Returns symptoms, diagnosis, recovery, prevention.",
+    { scenario: z.string().default("").describe("Scenario: crash, disconnect, tunnel, mcp, error, memory, tws, database") },
+    async (params) => {
+      const scenario = params.scenario.toLowerCase();
+      const runbook: Record<string, { scenario: string; symptoms: string[]; diagnosis: string[]; recovery: string[]; prevention: string[] }> = {
+        crash: {
+          scenario: "Bridge process crash",
+          symptoms: ["pm2 restart count increases", "All tools fail simultaneously", "MCP sessions drop"],
+          diagnosis: ["pm2 status — check restart count and uptime", "pm2 logs market-bridge --lines 100", "curl localhost:3000/health/ready"],
+          recovery: ["pm2 restart market-bridge", "If crash-looping: pm2 stop, fix root cause, pm2 start"],
+          prevention: ["Monitor incident_count in /health/deep"],
+        },
+        disconnect: {
+          scenario: "IBKR disconnect",
+          symptoms: ["Tools return 'IBKR is not connected' errors", "ops_uptime shows ibkr_connected: false"],
+          diagnosis: ["Check TWS/Gateway is running", "Check TWS API Settings: Socket port, Active X", "Look for error 326 (clientId collision)"],
+          recovery: ["Usually auto-recovers via reconnect backoff", "If stuck: pm2 restart market-bridge"],
+          prevention: ["3-strike heartbeat system auto-detects and recovers"],
+        },
+        tunnel: {
+          scenario: "Cloudflare tunnel down",
+          symptoms: ["ChatGPT tools timeout", "localhost works but api.klfh-dot-io.com does not"],
+          diagnosis: ["Check cloudflared process is running", "curl localhost:3000/health — if works, tunnel is the issue"],
+          recovery: ["Start cloudflared: Start-Process cloudflared -ArgumentList 'tunnel','run','market-bridge'", "Or restart service: cloudflared service restart"],
+          prevention: ["Install cloudflared as Windows service for auto-start"],
+        },
+        mcp: {
+          scenario: "MCP transport broken (Claude Desktop)",
+          symptoms: ["Claude Desktop tools all fail", "Bridge otherwise healthy (REST works)"],
+          diagnosis: ["Check Claude Desktop Settings > MCP status", "curl localhost:3000/health/ready"],
+          recovery: ["Restart Claude Desktop", "If bridge crashed too: pm2 restart first"],
+          prevention: ["MCP REST proxy ensures tools work even when direct connection fails"],
+        },
+        error: {
+          scenario: "High error rate",
+          symptoms: ["Intermittent failures", "Some tools work, others fail"],
+          diagnosis: ["curl localhost:3000/health/deep — check errorRate", "pm2 logs market-bridge --lines 200"],
+          recovery: ["Identify failing actions from logs", "pm2 restart as last resort"],
+          prevention: ["Monitor errorRate in /health/deep"],
+        },
+        memory: {
+          scenario: "Memory leak / high memory",
+          symptoms: ["Gradual performance degradation", "rss > 400MB"],
+          diagnosis: ["curl localhost:3000/health/deep — check memoryMb.rss", "pm2 monit"],
+          recovery: ["pm2 restart market-bridge"],
+          prevention: ["Set pm2 max_memory_restart in ecosystem config"],
+        },
+        tws: {
+          scenario: "TWS restart",
+          symptoms: ["All IBKR tools fail simultaneously", "Error 1100 in logs"],
+          diagnosis: ["Check if TWS is running", "ops_incidents — look for ibkr_tws_restart"],
+          recovery: ["Usually auto-recovers: bridge waits 10s then reconnects", "If stuck: pm2 restart"],
+          prevention: ["Configure TWS auto-restart in TWS Settings"],
+        },
+        database: {
+          scenario: "Database corruption",
+          symptoms: ["DB write errors in logs", "db_writable: false"],
+          diagnosis: ["Check disk space", "sqlite3 data/bridge.db 'PRAGMA integrity_check'"],
+          recovery: ["Restore from backup", "Nuclear: delete data/bridge.db and restart"],
+          prevention: ["Regular backups of data/bridge.db"],
+        },
+      };
+
+      if (!scenario) {
+        return { content: [{ type: "text", text: JSON.stringify({ available_scenarios: Object.keys(runbook) }, null, 2) }] };
+      }
+      const match = Object.keys(runbook).find((k) => scenario.includes(k) || k.includes(scenario));
+      if (!match) {
+        return { content: [{ type: "text", text: JSON.stringify({ error: `Unknown scenario '${scenario}'`, available_scenarios: Object.keys(runbook) }, null, 2) }] };
+      }
+      return { content: [{ type: "text", text: JSON.stringify(runbook[match], null, 2) }] };
+    }
+  );
+
+  // --- Tool: drift_check ---
+  server.tool(
+    "drift_check",
+    "Check model drift against thresholds and generate alerts. Runs drift report + alert check in one call.",
+    {},
+    async () => {
+      const report = computeDriftReport();
+      const alerts = checkDriftAlerts(report);
+      return { content: [{ type: "text", text: JSON.stringify({ report, alerts }, null, 2) }] };
+    }
+  );
+
+  // --- Tool: update_risk_config ---
+  server.tool(
+    "update_risk_config",
+    "Update risk configuration parameters (max_position_pct, max_daily_loss_pct, max_concentration_pct, volatility_scalar).",
+    {
+      max_position_pct: z.number().optional().describe("Max position % of equity"),
+      max_daily_loss_pct: z.number().optional().describe("Max daily loss %"),
+      max_concentration_pct: z.number().optional().describe("Max single-position concentration %"),
+      volatility_scalar: z.number().optional().describe("Volatility scaling factor"),
+      source: z.string().default("manual").describe("Source of the change"),
+    },
+    async (params) => {
+      const knownKeys = new Set<RiskConfigParam>(Object.keys(RISK_CONFIG_DEFAULTS) as RiskConfigParam[]);
+      const entries: Array<{ param: RiskConfigParam; value: number; source: string }> = Object.entries(params)
+        .filter((entry): entry is [RiskConfigParam, number] => {
+          const [key, value] = entry;
+          return knownKeys.has(key as RiskConfigParam) && typeof value === "number" && Number.isFinite(value);
+        })
+        .map(([param, value]) => ({ param, value, source: params.source }));
+
+      if (entries.length === 0) {
+        return { content: [{ type: "text", text: JSON.stringify({ updated: 0, config: getRiskGateConfig() }, null, 2) }] };
+      }
+      upsertRiskConfig(entries);
+      return { content: [{ type: "text", text: JSON.stringify({ updated: entries.length, config: getRiskGateConfig() }, null, 2) }] };
     }
   );
 
