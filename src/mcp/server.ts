@@ -18,6 +18,7 @@ import {
   runScreenerWithQuotes,
 } from "../providers/yahoo.js";
 import { isConnected } from "../ibkr/connection.js";
+import { ibkrTool } from "./rest-proxy.js";
 import { getAccountSummary, getPositions, getPnL } from "../ibkr/account.js";
 import { getOpenOrders, getCompletedOrders, getExecutions, placeOrder, placeBracketOrder, placeAdvancedBracket, modifyOrder, cancelOrder, cancelAllOrders, flattenAllPositions, validateOrder } from "../ibkr/orders.js";
 import { setFlattenEnabled, getFlattenConfig } from "../scheduler.js";
@@ -181,37 +182,14 @@ export function createMcpServer(): McpServer {
       type: z.enum(["TRADES", "BID_ASK", "MIDPOINT"]).default("TRADES"),
       count: z.number().int().min(1).max(1000).default(1000),
     },
-    async ({ symbol, startTime, endTime, type, count }) => {
-      try {
-        if (!isConnected()) {
-          return { content: [{ type: "text", text: "Error: IBKR not connected. Start TWS/Gateway for historical tick data." }], isError: true };
-        }
-
+    async ({ symbol, startTime, endTime, type, count }) => ibkrTool(
+      "get_historical_ticks",
+      async () => {
         const ticks = await getHistoricalTicks(symbol.toUpperCase(), startTime, endTime, type, count);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(
-                {
-                  symbol: symbol.toUpperCase(),
-                  startTime,
-                  endTime,
-                  type,
-                  count: ticks.length,
-                  ticks,
-                  source: "ibkr",
-                },
-                null,
-                2
-              ),
-            },
-          ],
-        };
-      } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-      }
-    }
+        return { symbol: symbol.toUpperCase(), startTime, endTime, type, count: ticks.length, ticks, source: "ibkr" };
+      },
+      { symbol, startTime, endTime, type, count },
+    )
   );
 
   // --- Tool: get_stock_details ---
@@ -448,28 +426,7 @@ export function createMcpServer(): McpServer {
     "get_account_summary",
     "Get IBKR account summary: net liquidation, cash, buying power, margin. Requires TWS/Gateway.",
     {},
-    async () => {
-      if (!isConnected()) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(
-                { error: "IBKR not connected. Start TWS/Gateway for account data." },
-                null,
-                2
-              ),
-            },
-          ],
-        };
-      }
-      try {
-        const summary = await getAccountSummary();
-        return { content: [{ type: "text", text: JSON.stringify(summary, null, 2) }] };
-      } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-      }
-    }
+    async () => ibkrTool("get_account_summary", () => getAccountSummary())
   );
 
   // --- Tool: get_positions (IBKR — requires TWS/Gateway) ---
@@ -477,32 +434,10 @@ export function createMcpServer(): McpServer {
     "get_positions",
     "Get all current IBKR positions with symbol, quantity, and average cost. Requires TWS/Gateway.",
     {},
-    async () => {
-      if (!isConnected()) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(
-                { error: "IBKR not connected. Start TWS/Gateway for position data." },
-                null,
-                2
-              ),
-            },
-          ],
-        };
-      }
-      try {
-        const positions = await getPositions();
-        return {
-          content: [
-            { type: "text", text: JSON.stringify({ count: positions.length, positions }, null, 2) },
-          ],
-        };
-      } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-      }
-    }
+    async () => ibkrTool("get_positions", async () => {
+      const positions = await getPositions();
+      return { count: positions.length, positions };
+    })
   );
 
   // --- Tool: get_pnl (IBKR — requires TWS/Gateway) ---
@@ -510,28 +445,7 @@ export function createMcpServer(): McpServer {
     "get_pnl",
     "Get daily profit and loss (daily PnL, unrealized PnL, realized PnL). Requires TWS/Gateway.",
     {},
-    async () => {
-      if (!isConnected()) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(
-                { error: "IBKR not connected. Start TWS/Gateway for PnL data." },
-                null,
-                2
-              ),
-            },
-          ],
-        };
-      }
-      try {
-        const pnl = await getPnL();
-        return { content: [{ type: "text", text: JSON.stringify(pnl, null, 2) }] };
-      } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-      }
-    }
+    async () => ibkrTool("get_pnl", () => getPnL())
   );
 
   // --- Tool: get_news_providers (IBKR — requires TWS/Gateway) ---
@@ -539,32 +453,10 @@ export function createMcpServer(): McpServer {
     "get_news_providers",
     "Get IBKR news providers. Returns provider codes used for historical/news article lookups.",
     {},
-    async () => {
-      if (!isConnected()) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(
-                { error: "IBKR not connected. Start TWS/Gateway for news provider data." },
-                null,
-                2
-              ),
-            },
-          ],
-        };
-      }
-      try {
-        const providers = await reqNewsProviders();
-        return {
-          content: [
-            { type: "text", text: JSON.stringify({ count: providers.length, providers }, null, 2) },
-          ],
-        };
-      } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-      }
-    }
+    async () => ibkrTool("get_news_providers", async () => {
+      const providers = await reqNewsProviders();
+      return { count: providers.length, providers };
+    })
   );
 
   // --- Tool: get_news_article (IBKR — requires TWS/Gateway) ---
@@ -575,28 +467,10 @@ export function createMcpServer(): McpServer {
       providerCode: z.string().describe("News provider code, e.g. BRFG"),
       articleId: z.string().describe("Article ID from historical news results"),
     },
-    async ({ providerCode, articleId }) => {
-      if (!isConnected()) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(
-                { error: "IBKR not connected. Start TWS/Gateway for news articles." },
-                null,
-                2
-              ),
-            },
-          ],
-        };
-      }
-      try {
-        const article = await reqNewsArticle(providerCode, articleId);
-        return { content: [{ type: "text", text: JSON.stringify(article, null, 2) }] };
-      } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-      }
-    }
+    async ({ providerCode, articleId }) => ibkrTool(
+      "get_news_article", () => reqNewsArticle(providerCode, articleId),
+      { providerCode, articleId },
+    )
   );
 
   // --- Tool: get_historical_news (IBKR — requires TWS/Gateway) ---
@@ -612,42 +486,16 @@ export function createMcpServer(): McpServer {
       exchange: z.string().optional().describe("Exchange (default SMART)"),
       currency: z.string().optional().describe("Currency (default USD)"),
     },
-    async ({ symbol, providerCodes, startDateTime, endDateTime, secType, exchange, currency }) => {
-      if (!isConnected()) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(
-                { error: "IBKR not connected. Start TWS/Gateway for historical news." },
-                null,
-                2
-              ),
-            },
-          ],
-        };
-      }
-      try {
+    async ({ symbol, providerCodes, startDateTime, endDateTime, secType, exchange, currency }) => ibkrTool(
+      "get_historical_news",
+      async () => {
         const [contract] = await getContractDetails({ symbol, secType, exchange, currency });
-        if (!contract) {
-          return {
-            content: [{ type: "text", text: JSON.stringify({ error: `No contract found for symbol ${symbol}` }, null, 2) }],
-            isError: true,
-          };
-        }
+        if (!contract) throw new Error(`No contract found for symbol ${symbol}`);
         const headlines = await reqHistoricalNews(contract.conId, providerCodes, startDateTime, endDateTime);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ symbol: symbol.toUpperCase(), conId: contract.conId, count: headlines.length, headlines }, null, 2),
-            },
-          ],
-        };
-      } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-      }
-    }
+        return { symbol: symbol.toUpperCase(), conId: contract.conId, count: headlines.length, headlines };
+      },
+      { symbol, providerCodes, startDateTime, endDateTime, secType, exchange, currency },
+    )
   );
 
   // --- Tool: get_news_bulletins (IBKR — requires TWS/Gateway) ---
@@ -655,32 +503,10 @@ export function createMcpServer(): McpServer {
     "get_news_bulletins",
     "Subscribe to IBKR news bulletins for 3 seconds, then unsubscribe and return collected bulletins.",
     {},
-    async () => {
-      if (!isConnected()) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(
-                { error: "IBKR not connected. Start TWS/Gateway for news bulletins." },
-                null,
-                2
-              ),
-            },
-          ],
-        };
-      }
-      try {
-        const bulletins = await reqNewsBulletins();
-        return {
-          content: [
-            { type: "text", text: JSON.stringify({ count: bulletins.length, bulletins }, null, 2) },
-          ],
-        };
-      } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-      }
-    }
+    async () => ibkrTool("get_news_bulletins", async () => {
+      const bulletins = await reqNewsBulletins();
+      return { count: bulletins.length, bulletins };
+    })
   );
 
   // =====================================================================
@@ -698,15 +524,7 @@ export function createMcpServer(): McpServer {
       whatToShow: z.string().optional().describe("TRADES, MIDPOINT, BID, ASK (default: TRADES)"),
       useRTH: z.boolean().optional().describe("Regular trading hours only (default: true)"),
     },
-    async (params) => {
-      if (!isConnected()) return { content: [{ type: "text", text: JSON.stringify({ error: "IBKR not connected" }) }] };
-      try {
-        const info = subscribeRealTimeBars(params);
-        return { content: [{ type: "text", text: JSON.stringify(info, null, 2) }] };
-      } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-      }
-    }
+    async (params) => ibkrTool("subscribe_real_time_bars", () => Promise.resolve(subscribeRealTimeBars(params)), params)
   );
 
   server.tool(
@@ -740,15 +558,7 @@ export function createMcpServer(): McpServer {
     "subscribe_account_updates",
     "Subscribe to real-time account value and portfolio updates. One account at a time (IBKR limit). Poll with get_account_snapshot.",
     { account: z.string().describe("Account code, e.g. DUA482209") },
-    async ({ account }) => {
-      if (!isConnected()) return { content: [{ type: "text", text: JSON.stringify({ error: "IBKR not connected" }) }] };
-      try {
-        const info = subscribeAccountUpdates(account);
-        return { content: [{ type: "text", text: JSON.stringify(info, null, 2) }] };
-      } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-      }
-    }
+    async ({ account }) => ibkrTool("subscribe_account_updates", () => Promise.resolve(subscribeAccountUpdates(account)), { account })
   );
 
   server.tool(
@@ -776,15 +586,10 @@ export function createMcpServer(): McpServer {
     "get_scanner_parameters",
     "Get IBKR scanner parameters XML (cached 60 min). Lists available scan codes, instruments, locations.",
     {},
-    async () => {
-      if (!isConnected()) return { content: [{ type: "text", text: JSON.stringify({ error: "IBKR not connected" }) }] };
-      try {
-        const xml = await getScannerParameters();
-        return { content: [{ type: "text", text: xml.slice(0, 50000) }] }; // Truncate large XML
-      } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-      }
-    }
+    async () => ibkrTool("get_scanner_parameters", async () => {
+      const xml = await getScannerParameters();
+      return xml.slice(0, 50000);
+    })
   );
 
   server.tool(
@@ -805,68 +610,31 @@ export function createMcpServer(): McpServer {
     "get_pnl_single",
     "Get position-level daily PnL for one symbol using reqPnLSingle.",
     { symbol: z.string().describe("Ticker symbol") },
-    async ({ symbol }) => {
-      if (!isConnected()) {
-        return { content: [{ type: "text", text: JSON.stringify({ error: "IBKR not connected. Start TWS/Gateway for PnL data." }, null, 2) }], isError: true };
-      }
-      try {
-        const data = await reqPnLSingleBySymbol(symbol);
-        return { content: [{ type: "text", text: JSON.stringify({ data }, null, 2) }] };
-      } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-      }
-    }
+    async ({ symbol }) => ibkrTool("get_pnl_single", async () => ({ data: await reqPnLSingleBySymbol(symbol) }), { symbol })
   );
 
   server.tool(
     "search_ibkr_symbols",
     "Search symbols from IBKR contract database using reqMatchingSymbols.",
     { query: z.string().min(1).describe("Search pattern") },
-    async ({ query }) => {
-      if (!isConnected()) {
-        return { content: [{ type: "text", text: JSON.stringify({ error: "IBKR not connected. Start TWS/Gateway for symbol search." }, null, 2) }], isError: true };
-      }
-      try {
-        const results = await reqMatchingSymbols(query);
-        return { content: [{ type: "text", text: JSON.stringify({ data: { count: results.length, results } }, null, 2) }] };
-      } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-      }
-    }
+    async ({ query }) => ibkrTool("search_ibkr_symbols", async () => {
+      const results = await reqMatchingSymbols(query);
+      return { data: { count: results.length, results } };
+    }, { query })
   );
 
   server.tool(
     "set_market_data_type",
     "Set market data mode: 1=live, 2=frozen, 3=delayed, 4=delayed-frozen.",
     { marketDataType: z.number().int().min(1).max(4) },
-    async ({ marketDataType }) => {
-      if (!isConnected()) {
-        return { content: [{ type: "text", text: JSON.stringify({ error: "IBKR not connected. Start TWS/Gateway to set market data type." }, null, 2) }], isError: true };
-      }
-      try {
-        const data = await reqMarketDataType(marketDataType);
-        return { content: [{ type: "text", text: JSON.stringify({ data }, null, 2) }] };
-      } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-      }
-    }
+    async ({ marketDataType }) => ibkrTool("set_market_data_type", async () => ({ data: await reqMarketDataType(marketDataType) }), { marketDataType })
   );
 
   server.tool(
     "set_auto_open_orders",
     "Enable or disable automatic open order binding for clientId 0.",
     { autoBind: z.boolean() },
-    async ({ autoBind }) => {
-      if (!isConnected()) {
-        return { content: [{ type: "text", text: JSON.stringify({ error: "IBKR not connected. Start TWS/Gateway to set auto-open orders." }, null, 2) }], isError: true };
-      }
-      try {
-        const data = await reqAutoOpenOrders(autoBind);
-        return { content: [{ type: "text", text: JSON.stringify({ data }, null, 2) }] };
-      } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-      }
-    }
+    async ({ autoBind }) => ibkrTool("set_auto_open_orders", async () => ({ data: await reqAutoOpenOrders(autoBind) }), { autoBind })
   );
 
   server.tool(
@@ -878,17 +646,9 @@ export function createMcpServer(): McpServer {
       useRTH: z.boolean().optional(),
       formatDate: z.union([z.literal(1), z.literal(2)]).optional(),
     },
-    async ({ symbol, whatToShow, useRTH, formatDate }) => {
-      if (!isConnected()) {
-        return { content: [{ type: "text", text: JSON.stringify({ error: "IBKR not connected. Start TWS/Gateway for head timestamp data." }, null, 2) }], isError: true };
-      }
-      try {
-        const data = await reqHeadTimestampBySymbol({ symbol, whatToShow: whatToShow ?? "TRADES", useRTH: useRTH ?? true, formatDate: formatDate ?? 1 });
-        return { content: [{ type: "text", text: JSON.stringify({ data }, null, 2) }] };
-      } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-      }
-    }
+    async ({ symbol, whatToShow, useRTH, formatDate }) => ibkrTool("get_head_timestamp", async () => ({
+      data: await reqHeadTimestampBySymbol({ symbol, whatToShow: whatToShow ?? "TRADES", useRTH: useRTH ?? true, formatDate: formatDate ?? 1 }),
+    }), { symbol, whatToShow, useRTH, formatDate })
   );
 
   server.tool(
@@ -900,17 +660,9 @@ export function createMcpServer(): McpServer {
       period: z.number().int().positive().optional(),
       periodUnit: z.enum(["S", "D", "W", "M", "Y"]).optional(),
     },
-    async ({ symbol, useRTH, period, periodUnit }) => {
-      if (!isConnected()) {
-        return { content: [{ type: "text", text: JSON.stringify({ error: "IBKR not connected. Start TWS/Gateway for histogram data." }, null, 2) }], isError: true };
-      }
-      try {
-        const data = await reqHistogramDataBySymbol({ symbol, useRTH: useRTH ?? true, period: period ?? 3, periodUnit: periodUnit ?? "D" });
-        return { content: [{ type: "text", text: JSON.stringify({ data }, null, 2) }] };
-      } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-      }
-    }
+    async ({ symbol, useRTH, period, periodUnit }) => ibkrTool("get_histogram_data", async () => ({
+      data: await reqHistogramDataBySymbol({ symbol, useRTH: useRTH ?? true, period: period ?? 3, periodUnit: periodUnit ?? "D" }),
+    }), { symbol, useRTH, period, periodUnit })
   );
 
   server.tool(
@@ -924,17 +676,7 @@ export function createMcpServer(): McpServer {
       optionPrice: z.number().positive(),
       underlyingPrice: z.number().positive(),
     },
-    async (input) => {
-      if (!isConnected()) {
-        return { content: [{ type: "text", text: JSON.stringify({ error: "IBKR not connected. Start TWS/Gateway for option calculations." }, null, 2) }], isError: true };
-      }
-      try {
-        const data = await calculateImpliedVolatility(input);
-        return { content: [{ type: "text", text: JSON.stringify({ data }, null, 2) }] };
-      } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-      }
-    }
+    async (input) => ibkrTool("calculate_implied_volatility", async () => ({ data: await calculateImpliedVolatility(input) }), input)
   );
 
   server.tool(
@@ -948,102 +690,44 @@ export function createMcpServer(): McpServer {
       volatility: z.number().positive(),
       underlyingPrice: z.number().positive(),
     },
-    async (input) => {
-      if (!isConnected()) {
-        return { content: [{ type: "text", text: JSON.stringify({ error: "IBKR not connected. Start TWS/Gateway for option calculations." }, null, 2) }], isError: true };
-      }
-      try {
-        const data = await calculateOptionPrice(input);
-        return { content: [{ type: "text", text: JSON.stringify({ data }, null, 2) }] };
-      } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-      }
-    }
+    async (input) => ibkrTool("calculate_option_price", async () => ({ data: await calculateOptionPrice(input) }), input)
   );
 
   server.tool(
     "get_tws_current_time",
     "Get current TWS server time.",
     {},
-    async () => {
-      if (!isConnected()) {
-        return { content: [{ type: "text", text: JSON.stringify({ error: "IBKR not connected. Start TWS/Gateway for TWS time." }, null, 2) }], isError: true };
-      }
-      try {
-        const data = await reqCurrentTime();
-        return { content: [{ type: "text", text: JSON.stringify({ data }, null, 2) }] };
-      } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-      }
-    }
+    async () => ibkrTool("get_tws_current_time", async () => ({ data: await reqCurrentTime() }))
   );
 
   server.tool(
     "get_market_rule",
     "Get market rule increments by rule id.",
     { ruleId: z.number().int().positive() },
-    async ({ ruleId }) => {
-      if (!isConnected()) {
-        return { content: [{ type: "text", text: JSON.stringify({ error: "IBKR not connected. Start TWS/Gateway for market rule data." }, null, 2) }], isError: true };
-      }
-      try {
-        const data = await reqMarketRule(ruleId);
-        return { content: [{ type: "text", text: JSON.stringify({ data }, null, 2) }] };
-      } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-      }
-    }
+    async ({ ruleId }) => ibkrTool("get_market_rule", async () => ({ data: await reqMarketRule(ruleId) }), { ruleId })
   );
 
   server.tool(
     "get_smart_components",
     "Get SMART routing component map for an exchange.",
     { exchange: z.string().min(1) },
-    async ({ exchange }) => {
-      if (!isConnected()) {
-        return { content: [{ type: "text", text: JSON.stringify({ error: "IBKR not connected. Start TWS/Gateway for smart components." }, null, 2) }], isError: true };
-      }
-      try {
-        const data = await reqSmartComponents(exchange.toUpperCase());
-        return { content: [{ type: "text", text: JSON.stringify({ data }, null, 2) }] };
-      } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-      }
-    }
+    async ({ exchange }) => ibkrTool("get_smart_components", async () => ({ data: await reqSmartComponents(exchange.toUpperCase()) }), { exchange })
   );
 
   server.tool(
     "get_depth_exchanges",
     "Get list of available market depth exchanges.",
     {},
-    async () => {
-      if (!isConnected()) {
-        return { content: [{ type: "text", text: JSON.stringify({ error: "IBKR not connected. Start TWS/Gateway for depth exchange data." }, null, 2) }], isError: true };
-      }
-      try {
-        const data = await reqMktDepthExchanges();
-        return { content: [{ type: "text", text: JSON.stringify({ data }, null, 2) }] };
-      } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-      }
-    }
+    async () => ibkrTool("get_depth_exchanges", async () => ({ data: await reqMktDepthExchanges() }))
   );
 
   server.tool(
     "get_fundamental_data",
     "Get IBKR fundamental data XML report for a symbol.",
     { symbol: z.string(), reportType: z.string().optional() },
-    async ({ symbol, reportType }) => {
-      if (!isConnected()) {
-        return { content: [{ type: "text", text: JSON.stringify({ error: "IBKR not connected. Start TWS/Gateway for fundamental data." }, null, 2) }], isError: true };
-      }
-      try {
-        const data = await reqFundamentalDataBySymbol({ symbol, reportType: reportType ?? "ReportSnapshot" });
-        return { content: [{ type: "text", text: JSON.stringify({ data }, null, 2) }] };
-      } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-      }
-    }
+    async ({ symbol, reportType }) => ibkrTool("get_fundamental_data", async () => ({
+      data: await reqFundamentalDataBySymbol({ symbol, reportType: reportType ?? "ReportSnapshot" }),
+    }), { symbol, reportType })
   );
 
   // --- Tool: stress_test (IBKR — requires TWS/Gateway) ---
@@ -1054,28 +738,8 @@ export function createMcpServer(): McpServer {
       shockPercent: z.number().describe("Shock percentage to apply (e.g. -5 for a 5% down shock)"),
       betaAdjusted: z.boolean().optional().describe("When true, scales each symbol shock by its beta vs SPY"),
     },
-    async ({ shockPercent, betaAdjusted }) => {
-      if (!isConnected()) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(
-                { error: "IBKR not connected. Start TWS/Gateway for portfolio stress test." },
-                null,
-                2
-              ),
-            },
-          ],
-        };
-      }
-      try {
-        const result = await runPortfolioStressTest(shockPercent, betaAdjusted ?? true);
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-      }
-    }
+    async ({ shockPercent, betaAdjusted }) => ibkrTool("stress_test",
+      () => runPortfolioStressTest(shockPercent, betaAdjusted ?? true), { shockPercent, betaAdjusted })
   );
 
   // --- Tool: portfolio_exposure (IBKR — requires TWS/Gateway) ---
@@ -1083,29 +747,7 @@ export function createMcpServer(): McpServer {
     "portfolio_exposure",
     "Compute portfolio exposure analytics: gross/net exposure, % deployed, largest position, sector breakdown, beta-weighted exposure, portfolio heat. Requires TWS/Gateway.",
     {},
-    async () => {
-      if (!isConnected()) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(
-                { error: "IBKR not connected. Start TWS/Gateway for portfolio data." },
-                null,
-                2
-              ),
-            },
-          ],
-          isError: true,
-        };
-      }
-      try {
-        const exposure = await computePortfolioExposure();
-        return { content: [{ type: "text", text: JSON.stringify(exposure, null, 2) }] };
-      } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-      }
-    }
+    async () => ibkrTool("portfolio_exposure", () => computePortfolioExposure())
   );
 
   // --- Tool: get_open_orders (IBKR — requires TWS/Gateway) ---
@@ -1113,21 +755,10 @@ export function createMcpServer(): McpServer {
     "get_open_orders",
     "Get all open orders across all clients. Shows orderId, symbol, action, type, quantity, limit/stop price, status, TIF.",
     {},
-    async () => {
-      if (!isConnected()) {
-        return {
-          content: [
-            { type: "text", text: JSON.stringify({ error: "IBKR not connected. Start TWS/Gateway for order data." }, null, 2) },
-          ],
-        };
-      }
-      try {
-        const orders = await getOpenOrders();
-        return { content: [{ type: "text", text: JSON.stringify({ count: orders.length, orders }, null, 2) }] };
-      } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-      }
-    }
+    async () => ibkrTool("get_open_orders", async () => {
+      const orders = await getOpenOrders();
+      return { count: orders.length, orders };
+    })
   );
 
   // --- Tool: get_completed_orders (IBKR — requires TWS/Gateway) ---
@@ -1135,21 +766,10 @@ export function createMcpServer(): McpServer {
     "get_completed_orders",
     "Get completed (filled/cancelled) orders. Shows fill price, quantity, status, completion time.",
     {},
-    async () => {
-      if (!isConnected()) {
-        return {
-          content: [
-            { type: "text", text: JSON.stringify({ error: "IBKR not connected. Start TWS/Gateway for order data." }, null, 2) },
-          ],
-        };
-      }
-      try {
-        const orders = await getCompletedOrders();
-        return { content: [{ type: "text", text: JSON.stringify({ count: orders.length, orders }, null, 2) }] };
-      } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-      }
-    }
+    async () => ibkrTool("get_completed_orders", async () => {
+      const orders = await getCompletedOrders();
+      return { count: orders.length, orders };
+    })
   );
 
   // --- Tool: get_executions (IBKR — requires TWS/Gateway) ---
@@ -1161,22 +781,11 @@ export function createMcpServer(): McpServer {
       secType: z.string().optional().describe("Filter by security type: STK, OPT, FUT, etc."),
       time: z.string().optional().describe("Filter executions after this time: yyyymmdd hh:mm:ss"),
     },
-    async ({ symbol, secType, time }) => {
-      if (!isConnected()) {
-        return {
-          content: [
-            { type: "text", text: JSON.stringify({ error: "IBKR not connected. Start TWS/Gateway for execution data." }, null, 2) },
-          ],
-        };
-      }
-      try {
-        const filter = symbol || secType || time ? { symbol, secType, time } : undefined;
-        const executions = await getExecutions(filter);
-        return { content: [{ type: "text", text: JSON.stringify({ count: executions.length, executions }, null, 2) }] };
-      } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-      }
-    }
+    async ({ symbol, secType, time }) => ibkrTool("get_executions", async () => {
+      const filter = symbol || secType || time ? { symbol, secType, time } : undefined;
+      const executions = await getExecutions(filter);
+      return { count: executions.length, executions };
+    }, { symbol, secType, time })
   );
 
   // --- Tool: get_contract_details (IBKR — requires TWS/Gateway) ---
@@ -1189,21 +798,10 @@ export function createMcpServer(): McpServer {
       exchange: z.string().optional().describe("Exchange: SMART (default), NYSE, GLOBEX, etc."),
       currency: z.string().optional().describe("Currency: USD (default), EUR, GBP, etc."),
     },
-    async ({ symbol, secType, exchange, currency }) => {
-      if (!isConnected()) {
-        return {
-          content: [
-            { type: "text", text: JSON.stringify({ error: "IBKR not connected. Start TWS/Gateway for contract data." }, null, 2) },
-          ],
-        };
-      }
-      try {
-        const details = await getContractDetails({ symbol, secType, exchange, currency });
-        return { content: [{ type: "text", text: JSON.stringify({ count: details.length, contracts: details }, null, 2) }] };
-      } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-      }
-    }
+    async ({ symbol, secType, exchange, currency }) => ibkrTool("get_contract_details", async () => {
+      const details = await getContractDetails({ symbol, secType, exchange, currency });
+      return { count: details.length, contracts: details };
+    }, { symbol, secType, exchange, currency })
   );
 
   // --- Tool: get_ibkr_quote (IBKR — requires TWS/Gateway) ---
@@ -1216,21 +814,8 @@ export function createMcpServer(): McpServer {
       exchange: z.string().optional().describe("Exchange: SMART (default), NYSE, GLOBEX, etc."),
       currency: z.string().optional().describe("Currency: USD (default), EUR, GBP, etc."),
     },
-    async ({ symbol, secType, exchange, currency }) => {
-      if (!isConnected()) {
-        return {
-          content: [
-            { type: "text", text: JSON.stringify({ error: "IBKR not connected. Start TWS/Gateway for market data." }, null, 2) },
-          ],
-        };
-      }
-      try {
-        const quote = await getIBKRQuote({ symbol, secType, exchange, currency });
-        return { content: [{ type: "text", text: JSON.stringify(quote, null, 2) }] };
-      } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-      }
-    }
+    async ({ symbol, secType, exchange, currency }) => ibkrTool("get_ibkr_quote",
+      () => getIBKRQuote({ symbol, secType, exchange, currency }), { symbol, secType, exchange, currency })
   );
 
   // --- Tool: place_order (IBKR — requires TWS/Gateway) ---
@@ -1261,27 +846,17 @@ export function createMcpServer(): McpServer {
       currency: z.string().optional().describe("Currency: USD (default)"),
       eval_id: z.string().optional().describe("Evaluation ID to link this order to (for auto-link tracking)"),
     },
-    async (params) => {
-      if (!isConnected()) {
-        return {
-          content: [{ type: "text", text: JSON.stringify({ error: "IBKR not connected." }, null, 2) }],
-        };
-      }
-      try {
+    async (params) => ibkrTool(
+      "place_order",
+      async () => {
         const validation = validateOrder(params as any);
-        if (!validation.valid) {
-          return { content: [{ type: "text", text: JSON.stringify({ error: validation.errors.join("; ") }, null, 2) }] };
-        }
+        if (!validation.valid) throw new Error(validation.errors.join("; "));
         const riskResult = checkRisk(params);
-        if (!riskResult.allowed) {
-          return { content: [{ type: "text", text: JSON.stringify({ error: `Risk gate rejected: ${riskResult.reason}` }, null, 2) }] };
-        }
-        const result = await placeOrder({ ...params, order_source: "mcp" });
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-      }
-    }
+        if (!riskResult.allowed) throw new Error(`Risk gate rejected: ${riskResult.reason}`);
+        return placeOrder({ ...params, order_source: "mcp" });
+      },
+      params as Record<string, unknown>,
+    )
   );
 
   // --- Tool: place_bracket_order (IBKR — requires TWS/Gateway) ---
@@ -1302,23 +877,15 @@ export function createMcpServer(): McpServer {
       currency: z.string().optional().describe("Currency: USD (default)"),
       eval_id: z.string().optional().describe("Evaluation ID to link this order to"),
     },
-    async (params) => {
-      if (!isConnected()) {
-        return {
-          content: [{ type: "text", text: JSON.stringify({ error: "IBKR not connected." }, null, 2) }],
-        };
-      }
-      try {
+    async (params) => ibkrTool(
+      "place_bracket_order",
+      async () => {
         const riskResult = checkRisk({ symbol: params.symbol, action: params.action, orderType: params.entryType, totalQuantity: params.totalQuantity, lmtPrice: params.entryPrice, secType: params.secType });
-        if (!riskResult.allowed) {
-          return { content: [{ type: "text", text: JSON.stringify({ error: `Risk gate rejected: ${riskResult.reason}` }, null, 2) }] };
-        }
-        const result = await placeBracketOrder({ ...params, order_source: "mcp" });
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-      }
-    }
+        if (!riskResult.allowed) throw new Error(`Risk gate rejected: ${riskResult.reason}`);
+        return placeBracketOrder({ ...params, order_source: "mcp" });
+      },
+      params as Record<string, unknown>,
+    )
   );
 
   // --- Tool: place_advanced_bracket (IBKR — requires TWS/Gateway) ---
@@ -1351,23 +918,15 @@ export function createMcpServer(): McpServer {
       currency: z.string().optional().describe("Currency: USD (default)"),
       eval_id: z.string().optional().describe("Evaluation ID to link this order to"),
     },
-    async (params) => {
-      if (!isConnected()) {
-        return {
-          content: [{ type: "text", text: JSON.stringify({ error: "IBKR not connected." }, null, 2) }],
-        };
-      }
-      try {
+    async (params) => ibkrTool(
+      "place_advanced_bracket",
+      async () => {
         const riskResult = checkRisk({ symbol: params.symbol, action: params.action, orderType: params.entry.type, totalQuantity: params.quantity, lmtPrice: params.entry.price, secType: params.secType });
-        if (!riskResult.allowed) {
-          return { content: [{ type: "text", text: JSON.stringify({ error: `Risk gate rejected: ${riskResult.reason}` }, null, 2) }] };
-        }
-        const result = await placeAdvancedBracket({ ...params, order_source: "mcp" });
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-      }
-    }
+        if (!riskResult.allowed) throw new Error(`Risk gate rejected: ${riskResult.reason}`);
+        return placeAdvancedBracket({ ...params, order_source: "mcp" });
+      },
+      params as Record<string, unknown>,
+    )
   );
 
   // --- Tool: modify_order (IBKR — requires TWS/Gateway) ---
@@ -1384,19 +943,7 @@ export function createMcpServer(): McpServer {
       trailingPercent: z.number().optional().describe("New trailing stop percentage"),
       trailStopPrice: z.number().optional().describe("New trail stop price anchor"),
     },
-    async (params) => {
-      if (!isConnected()) {
-        return {
-          content: [{ type: "text", text: JSON.stringify({ error: "IBKR not connected." }, null, 2) }],
-        };
-      }
-      try {
-        const result = await modifyOrder(params);
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-      }
-    }
+    async (params) => ibkrTool("modify_order", () => modifyOrder(params), params as Record<string, unknown>)
   );
 
   // --- Tool: cancel_order (IBKR — requires TWS/Gateway) ---
@@ -1406,19 +953,7 @@ export function createMcpServer(): McpServer {
     {
       orderId: z.number().describe("The order ID to cancel"),
     },
-    async ({ orderId: id }) => {
-      if (!isConnected()) {
-        return {
-          content: [{ type: "text", text: JSON.stringify({ error: "IBKR not connected." }, null, 2) }],
-        };
-      }
-      try {
-        const result = await cancelOrder(id);
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-      }
-    }
+    async ({ orderId: id }) => ibkrTool("cancel_order", () => cancelOrder(id), { orderId: id })
   );
 
   // --- Tool: cancel_all_orders (IBKR — requires TWS/Gateway) ---
@@ -1426,19 +961,7 @@ export function createMcpServer(): McpServer {
     "cancel_all_orders",
     "Cancel ALL open orders globally. Use with caution. Requires TWS/Gateway.",
     {},
-    async () => {
-      if (!isConnected()) {
-        return {
-          content: [{ type: "text", text: JSON.stringify({ error: "IBKR not connected." }, null, 2) }],
-        };
-      }
-      try {
-        const result = await cancelAllOrders();
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-      }
-    }
+    async () => ibkrTool("cancel_all_orders", () => cancelAllOrders())
   );
 
   // --- Tool: flatten_positions (EOD close-out) ---
@@ -1446,17 +969,7 @@ export function createMcpServer(): McpServer {
     "flatten_positions",
     "Immediately close ALL open positions with MKT orders and cancel all open orders. Use for EOD flatten or emergency exit.",
     {},
-    async () => {
-      if (!isConnected()) {
-        return { content: [{ type: "text", text: JSON.stringify({ error: "IBKR not connected." }, null, 2) }] };
-      }
-      try {
-        const result = await flattenAllPositions();
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-      }
-    }
+    async () => ibkrTool("flatten_positions", () => flattenAllPositions())
   );
 
   // --- Tool: flatten_config (view/toggle auto-flatten) ---
@@ -1659,17 +1172,7 @@ export function createMcpServer(): McpServer {
       maxCapitalPercent: z.number().positive().max(100).optional().describe("Max % of equity in this position (default 10%)"),
       volatilityRegime: z.enum(["low", "normal", "high"]).optional().describe("Current volatility regime — scales position down in high vol (default: normal)"),
     },
-    async (params) => {
-      if (!isConnected()) {
-        return { content: [{ type: "text", text: "Error: IBKR not connected. Start TWS/Gateway for account data." }], isError: true };
-      }
-      try {
-        const result = await calculatePositionSize(params);
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-      }
-    }
+    async (params) => ibkrTool("size_position", () => calculatePositionSize(params), params as Record<string, unknown>)
   );
 
   // =====================================================================
