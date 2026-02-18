@@ -13,6 +13,7 @@ import { computeMarketAlignment } from "./market-alignment.js";
 import { classifyTimeOfDay, minutesSinceOpen } from "./time-classification.js";
 import { classifyVolatilityRegime } from "./volatility-regime.js";
 import { classifyLiquidity } from "./liquidity.js";
+import { computeRSI, classifyRSI } from "./rsi.js";
 import { logger } from "../../logging.js";
 
 export interface ComputeResult {
@@ -55,6 +56,9 @@ export async function computeFeatures(
   const price_extension_pct = computePriceExtension(last, closePrev, open, atr_14);
   const gap_pct = computeGapPct(open, closePrev);
   const range_position_pct = computeRangePositionPct(last, high, low);
+  const dailyCloses = dailyBars.map((bar) => bar.close);
+  const rsi = computeRSI(dailyCloses);
+  const rsi_regime = rsi === null ? "neutral" : classifyRSI(rsi);
   const volatility_regime = classifyVolatilityRegime(atr_pct);
   const liquidity_bucket = classifyLiquidity(dailyBars, last);
 
@@ -81,6 +85,8 @@ export async function computeFeatures(
     price_extension_pct,
     gap_pct,
     range_position_pct,
+    rsi,
+    rsi_regime,
     volatility_regime,
     liquidity_bucket,
     spy_change_pct: marketCtx.spy_change_pct,

@@ -19,6 +19,8 @@ export interface FeatureVector {
   price_extension_pct: number;
   gap_pct: number;
   range_position_pct: number;
+  rsi: number | null;
+  rsi_regime: "oversold" | "neutral" | "overbought";
   volatility_regime: "low" | "normal" | "high";
   liquidity_bucket: "small" | "mid" | "large";
   spy_change_pct: number;
