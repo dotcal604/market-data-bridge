@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { TickVelocity } from "../tick-velocity.js";
+import { TickVelocity, computeTickVelocity } from "../tick-velocity.js";
 
 describe("TickVelocity", () => {
   let tracker: TickVelocity;
@@ -244,5 +244,12 @@ describe("TickVelocity", () => {
       expect(velocity).toBeDefined();
       expect(typeof velocity).toBe("number");
     });
+  });
+});
+
+describe("computeTickVelocity", () => {
+  it("should return null when tick data is unavailable", () => {
+    const result = computeTickVelocity();
+    expect(result).toBeNull();
   });
 });
