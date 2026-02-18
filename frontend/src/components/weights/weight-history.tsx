@@ -11,7 +11,7 @@ export function WeightHistory() {
     return <Skeleton className="h-48 rounded-lg" />;
   }
 
-  if (!data?.length) {
+  if (!data?.history?.length) {
     return (
       <Card>
         <CardHeader>
@@ -25,7 +25,7 @@ export function WeightHistory() {
   }
 
   // Show newest first, limit to 20
-  const rows = data.slice(0, 20);
+  const rows = data.history.slice(0, 20);
 
   return (
     <Card>
@@ -45,22 +45,22 @@ export function WeightHistory() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((row, i) => (
+              {rows.map((row: { created_at: string; weights: { claude: number; gpt4o: number; gemini: number; k: number } }, i: number) => (
                 <tr key={i} className="border-b border-border/50 last:border-0">
                   <td className="py-1.5 pr-4 font-mono text-xs text-muted-foreground">
-                    {new Date(row.updated_at).toLocaleString()}
+                    {new Date(row.created_at).toLocaleString()}
                   </td>
                   <td className="py-1.5 pr-4 text-right font-mono">
-                    {(row.claude * 100).toFixed(1)}
+                    {(row.weights.claude * 100).toFixed(1)}
                   </td>
                   <td className="py-1.5 pr-4 text-right font-mono">
-                    {(row.gpt4o * 100).toFixed(1)}
+                    {(row.weights.gpt4o * 100).toFixed(1)}
                   </td>
                   <td className="py-1.5 pr-4 text-right font-mono">
-                    {(row.gemini * 100).toFixed(1)}
+                    {(row.weights.gemini * 100).toFixed(1)}
                   </td>
                   <td className="py-1.5 text-right font-mono">
-                    {row.k.toFixed(1)}
+                    {row.weights.k.toFixed(1)}
                   </td>
                 </tr>
               ))}
