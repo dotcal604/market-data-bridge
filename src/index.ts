@@ -67,6 +67,16 @@ async function main() {
   // Prune old log files (keep 30 days)
   pruneOldLogs();
 
+  // ── Crash loop detection ──
+  // pm2 sets PM2_RESTART_COUNT on restarts. If it's > 0 AND uptime < 5s,
+  // we just crashed and were restarted. Give TWS time to clean up.
+  const pm2Restarts = parseInt(process.env.PM2_RESTART_COUNT ?? "0", 10);
+  if (pm2Restarts > 0 && process.uptime() < 5) {
+    recordIncident("crash_loop", "critical", `Process restarted within ${Math.round(process.uptime())}s — pm2 restart #${pm2Restarts}`);
+    logger.warn({ pm2Restarts }, "Crash loop detected — delaying IBKR connect by 5s to let TWS clean up");
+    await new Promise((r) => setTimeout(r, 5000));
+  }
+
   // IBKR connection is only needed for REST/both modes.
   // MCP-only processes proxy through the REST bridge and must NOT connect
   // to TWS — doing so creates clientId collisions and phantom connections

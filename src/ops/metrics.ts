@@ -7,6 +7,7 @@
  */
 import { getConnectionStatus } from "../ibkr/connection.js";
 import { logger } from "../logging.js";
+import { dispatchWebhook } from "./webhook.js";
 
 const log = logger.child({ subsystem: "ops" });
 
@@ -128,6 +129,9 @@ export function recordIncident(type: string, severity: Incident["severity"], det
   } else {
     log.info({ incident }, `INCIDENT: ${type} — ${detail}`);
   }
+
+  // Fire-and-forget webhook notification (dedup handled inside)
+  dispatchWebhook(incident);
 }
 
 export function getRecentIncidents(limit: number = 20): Incident[] {

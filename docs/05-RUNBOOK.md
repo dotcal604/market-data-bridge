@@ -2,47 +2,69 @@
 
 ---
 
+## 0. Emergency Quick Reference
+
+| What | Command |
+|------|---------|
+| **Health (local)** | `curl http://localhost:3000/health/ready` |
+| **Health (full)** | `curl http://localhost:3000/health/deep` |
+| **Health (tunnel)** | `curl https://api.klfh-dot-io.com/health/deep` |
+| **pm2 status** | `pm2 status` |
+| **pm2 restart** | `pm2 restart market-bridge` |
+| **pm2 logs** | `pm2 logs market-bridge --lines 50` |
+| **Flatten all** | `curl -X POST localhost:3000/agent -H "Content-Type: application/json" -d "{\"action\":\"flatten_positions\"}"` |
+| **Process info** | Runs as `market-bridge` via pm2, `--mode both` (MCP+REST) |
+| **Tunnel** | Cloudflare: `api.klfh-dot-io.com` → `localhost:3000` |
+| **Logs** | `~/.pm2/logs/market-bridge-*.log` |
+
+---
+
 ## 1. Diagnostic Quick Reference
 
 ### 1.1 Health Check Commands
 
 ```bash
-# Is the REST server running?
-curl http://localhost:3000/api/status
+# Readiness probe (returns 503 until fully initialized)
+curl http://localhost:3000/health/ready
+
+# Full ops dashboard (metrics, IBKR SLA, incidents)
+curl http://localhost:3000/health/deep
+
+# Via Cloudflare tunnel
+curl https://api.klfh-dot-io.com/health/deep
 
 # Is TWS listening on the expected port?
 netstat -ano | findstr :7496
 
-# Is the bridge process alive?
-tasklist | findstr node
+# pm2 process status
+pm2 status
 
-# Can we reach the ngrok tunnel?
-curl https://YOUR-NGROK-URL/api/status
-
-# Quick data test
-curl http://localhost:3000/api/quote/AAPL
+# Recent logs
+pm2 logs market-bridge --lines 50
 ```
 
 ### 1.2 Expected Healthy State
 
 ```json
-// GET /api/status
+// GET /health/ready
 {
-  "connected": true,
-  "host": "127.0.0.1",
-  "port": 7496,
-  "clientId": 0
+  "ready": true,
+  "db_writable": true,
+  "ibkr_connected": true,
+  "rest_server": true
 }
 ```
 
 ```json
-// GET /api/quote/AAPL (during market hours)
+// GET /health/deep (key fields)
 {
-  "symbol": "AAPL",
-  "bid": 275.50,
-  "ask": 275.65,
-  "last": 275.60,
-  ...
+  "ibkrConnected": true,
+  "ibkrUptimePercent": 99.7,
+  "ibkrDisconnects": 0,
+  "incidentCount": 0,
+  "memoryMb": { "rss": 80 },
+  "cpuPercent": 0,
+  "requests": { "errorRate": 0 }
 }
 ```
 

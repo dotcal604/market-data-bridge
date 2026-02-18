@@ -7,13 +7,13 @@ let connected = false;
 let nextReqId = 1;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let reconnectAttempts = 0;
-const RECONNECT_BASE_MS = 5_000;     // start at 5s
-const RECONNECT_MAX_MS = 5 * 60_000; // cap at 5 minutes
+const RECONNECT_BASE_MS = 2_000;     // start at 2s (was 5s)
+const RECONNECT_MAX_MS = 30_000;     // cap at 30s (was 5 min — too slow)
 let twsVersion: number | null = null;
 
 // ── Connection metrics & history ─────────────────────────────────────
 interface ConnectionEvent {
-  type: "connected" | "disconnected" | "error_326" | "reconnect_attempt";
+  type: "connected" | "disconnected" | "error_326" | "reconnect_attempt" | "tws_restart";
   timestamp: string;
   clientId?: number;
   detail?: string;
@@ -24,6 +24,8 @@ const connectionHistory: ConnectionEvent[] = [];
 let totalDisconnects = 0;
 let lastConnectedAt: string | null = null;
 let lastDisconnectedAt: string | null = null;
+let disconnectedAtMs: number | null = null; // for reconnect duration tracking
+let lastReconnectDurationMs: number | null = null;
 
 function pushEvent(evt: ConnectionEvent): void {
   connectionHistory.push(evt);
@@ -32,36 +34,82 @@ function pushEvent(evt: ConnectionEvent): void {
   }
 }
 
-// ── Heartbeat / keepalive ────────────────────────────────────────────
+// ── Heartbeat / keepalive (3-strike system) ──────────────────────────
 const HEARTBEAT_INTERVAL_MS = 60_000;  // ping TWS every 60s
-const HEARTBEAT_TIMEOUT_MS = 10_000;   // force reconnect if no reply in 10s
-let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+const HEARTBEAT_TIMEOUT_MS = 10_000;   // per-strike timeout
+const HEARTBEAT_JITTER_MS = 2_000;     // ±2s jitter on interval
+let heartbeatTimer: ReturnType<typeof setTimeout> | null = null;
+let heartbeatMisses = 0;
+let heartbeatLatencies: number[] = [];  // rolling window for p95 computation
+const MAX_HB_LATENCIES = 60;           // keep last 60 readings (~1 hour)
 
-function startHeartbeat(): void {
+function jitteredHeartbeatInterval(): number {
+  return HEARTBEAT_INTERVAL_MS + Math.round((Math.random() * 2 - 1) * HEARTBEAT_JITTER_MS);
+}
+
+function scheduleNextHeartbeat(): void {
   if (heartbeatTimer) return;
-  heartbeatTimer = setInterval(() => {
-    if (!connected || !ib) return;
-    let responded = false;
-    const onTime = () => { responded = true; };
-    ib.on(EventName.currentTime, onTime);
-    ib.reqCurrentTime();
-    setTimeout(() => {
-      ib?.off(EventName.currentTime, onTime);
-      if (!responded && connected) {
-        console.error("[IBKR] Heartbeat timeout — TWS unresponsive, forcing reconnect");
-        pushEvent({ type: "disconnected", timestamp: new Date().toISOString(), detail: "heartbeat_timeout" });
+  heartbeatTimer = setTimeout(() => {
+    heartbeatTimer = null;
+    runHeartbeat();
+    if (connected) scheduleNextHeartbeat();
+  }, jitteredHeartbeatInterval());
+}
+
+function runHeartbeat(): void {
+  if (!connected || !ib) return;
+  let responded = false;
+  const sentAt = Date.now();
+  const onTime = () => {
+    responded = true;
+    const latency = Date.now() - sentAt;
+    heartbeatLatencies.push(latency);
+    if (heartbeatLatencies.length > MAX_HB_LATENCIES) heartbeatLatencies.shift();
+    if (heartbeatMisses > 0) {
+      console.error(`[IBKR] Heartbeat recovered after ${heartbeatMisses} miss(es) (latency=${latency}ms)`);
+    }
+    heartbeatMisses = 0;
+  };
+  ib.on(EventName.currentTime, onTime);
+  ib.reqCurrentTime();
+  setTimeout(() => {
+    ib?.off(EventName.currentTime, onTime);
+    if (!responded && connected) {
+      heartbeatMisses++;
+      if (heartbeatMisses === 1) {
+        // Strike 1: warning
+        console.error(`[IBKR] Heartbeat miss #1 — TWS slow (timeout=${HEARTBEAT_TIMEOUT_MS}ms)`);
+        recordIncident("ibkr_heartbeat_miss", "warning", `Strike 1: no response in ${HEARTBEAT_TIMEOUT_MS}ms (clientId=${currentClientId})`);
+      } else if (heartbeatMisses === 2) {
+        // Strike 2: attempt soft reconnect
+        console.error(`[IBKR] Heartbeat miss #2 — attempting soft reconnect`);
+        recordIncident("ibkr_heartbeat_miss", "warning", `Strike 2: soft reconnect attempt (clientId=${currentClientId})`);
+        // Try a fresh reqCurrentTime to see if TWS wakes up
+        ib?.reqCurrentTime();
+      } else {
+        // Strike 3: full disconnect + hard reconnect
+        console.error(`[IBKR] Heartbeat miss #3 — TWS unresponsive, forcing hard reconnect`);
+        pushEvent({ type: "disconnected", timestamp: new Date().toISOString(), detail: "heartbeat_timeout_3strike" });
         totalDisconnects++;
         lastDisconnectedAt = new Date().toISOString();
-        recordIncident("ibkr_heartbeat_timeout", "critical", `TWS unresponsive after ${HEARTBEAT_TIMEOUT_MS}ms — forcing reconnect (clientId=${currentClientId})`);
+        disconnectedAtMs = Date.now();
+        recordIncident("ibkr_heartbeat_timeout", "critical", `3-strike timeout — TWS unresponsive after ${heartbeatMisses} misses (clientId=${currentClientId})`);
+        heartbeatMisses = 0;
         destroyIB();
         scheduleReconnect(1000);
       }
-    }, HEARTBEAT_TIMEOUT_MS);
-  }, HEARTBEAT_INTERVAL_MS);
+    }
+  }, HEARTBEAT_TIMEOUT_MS);
+}
+
+function startHeartbeat(): void {
+  heartbeatMisses = 0;
+  scheduleNextHeartbeat();
 }
 
 function stopHeartbeat(): void {
-  if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+  if (heartbeatTimer) { clearTimeout(heartbeatTimer); heartbeatTimer = null; }
+  heartbeatMisses = 0;
 }
 
 /** Minimum TWS server version we expect. Below this we log a warning. */
@@ -126,6 +174,11 @@ export function getIB(): IBApi {
       reconnectAttempts = 0; // reset backoff on successful connect
       twsVersion = ib!.serverVersion ?? null;
       lastConnectedAt = new Date().toISOString();
+      // Track reconnect duration
+      if (disconnectedAtMs) {
+        lastReconnectDurationMs = Date.now() - disconnectedAtMs;
+        disconnectedAtMs = null;
+      }
       pushEvent({ type: "connected", timestamp: lastConnectedAt, clientId: currentClientId });
       console.error(`[IBKR] Connected to TWS/Gateway (clientId=${currentClientId}, mode=${accountMode()}, port=${config.ibkr.port}, serverVersion=${twsVersion})`);
       if (twsVersion !== null && twsVersion < MIN_TWS_VERSION) {
@@ -149,6 +202,7 @@ export function getIB(): IBApi {
       twsVersion = null;
       totalDisconnects++;
       lastDisconnectedAt = new Date().toISOString();
+      disconnectedAtMs = Date.now();
       pushEvent({ type: "disconnected", timestamp: lastDisconnectedAt });
       stopHeartbeat();
       console.error("[IBKR] Disconnected from TWS/Gateway");
@@ -170,6 +224,24 @@ export function getIB(): IBApi {
         } else {
           console.error(`[IBKR] Exhausted clientId retries. Staying on reconnect loop.`);
         }
+        return;
+      }
+      // Error 1100 = TWS lost connectivity (TWS restart / network issue)
+      // Wait longer before reconnecting to let TWS stabilize
+      if ((code as number) === 1100) {
+        console.error("[IBKR] TWS lost connectivity (error 1100) — waiting 10s for TWS to stabilize before reconnecting");
+        pushEvent({ type: "tws_restart", timestamp: new Date().toISOString(), detail: "error_1100_tws_connectivity_lost" });
+        recordIncident("ibkr_tws_restart", "critical", "TWS lost connectivity (1100) — waiting 10s before reconnect");
+        disconnectedAtMs = Date.now();
+        destroyIB();
+        scheduleReconnect(10_000); // 10s delay for TWS stabilization
+        return;
+      }
+      // Error 1102 = TWS connectivity restored
+      if ((code as number) === 1102) {
+        console.error("[IBKR] TWS connectivity restored (error 1102)");
+        recordIncident("ibkr_tws_restored", "info", "TWS connectivity restored (1102)");
+        heartbeatMisses = 0; // reset heartbeat on restore
         return;
       }
       if (isNonFatalError(code, err)) return;
@@ -194,9 +266,15 @@ function destroyIB(): void {
   }
 }
 
+/** Add ±25% jitter to a delay value */
+function jitter(ms: number): number {
+  return Math.round(ms * (0.75 + Math.random() * 0.5));
+}
+
 export function scheduleReconnect(delayMs?: number): void {
   if (reconnectTimer) return;
-  const delay = delayMs ?? Math.min(RECONNECT_BASE_MS * Math.pow(2, reconnectAttempts), RECONNECT_MAX_MS);
+  const baseDelay = delayMs ?? Math.min(RECONNECT_BASE_MS * Math.pow(2, reconnectAttempts), RECONNECT_MAX_MS);
+  const delay = delayMs != null ? delayMs : jitter(baseDelay); // jitter only on auto-backoff, not explicit delays
   reconnectAttempts++;
   // Only log every 5th attempt after the first few to reduce spam
   const shouldLog = reconnectAttempts <= 3 || reconnectAttempts % 5 === 0;
@@ -204,7 +282,7 @@ export function scheduleReconnect(delayMs?: number): void {
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
     if (shouldLog) {
-      console.error(`[IBKR] Attempting reconnect (clientId=${currentClientId}, attempt=${reconnectAttempts}, nextDelay=${Math.min(RECONNECT_BASE_MS * Math.pow(2, reconnectAttempts), RECONNECT_MAX_MS)}ms)...`);
+      console.error(`[IBKR] Attempting reconnect (clientId=${currentClientId}, attempt=${reconnectAttempts}, nextDelay=${jitter(Math.min(RECONNECT_BASE_MS * Math.pow(2, reconnectAttempts), RECONNECT_MAX_MS))}ms)...`);
     }
     connect().catch(() => scheduleReconnect());
   }, delay);
@@ -275,6 +353,31 @@ function accountMode(): "paper" | "live" | "unknown" {
   return "unknown";
 }
 
+/** Compute connection health score 0-100 */
+export function getConnectionHealth(): number {
+  // Uptime weight (50%): connected streak vs 1 hour
+  const streakMs = lastConnectedAt && connected
+    ? Date.now() - new Date(lastConnectedAt).getTime()
+    : 0;
+  const uptimeScore = Math.min(streakMs / (60 * 60 * 1000), 1) * 50;
+
+  // Heartbeat latency weight (25%): p95 < 2000ms = perfect, > 8000ms = 0
+  const p95 = heartbeatLatencies.length > 0
+    ? [...heartbeatLatencies].sort((a, b) => a - b)[Math.ceil(0.95 * heartbeatLatencies.length) - 1]
+    : 0;
+  const latencyScore = heartbeatLatencies.length === 0
+    ? 25  // no data yet, assume healthy
+    : Math.max(0, 1 - (p95 - 2000) / 6000) * 25;
+
+  // Reconnect frequency weight (25%): 0 reconnects in last hour = perfect
+  const recentReconnects = connectionHistory
+    .filter((e) => e.type === "reconnect_attempt" && Date.now() - new Date(e.timestamp).getTime() < 60 * 60 * 1000)
+    .length;
+  const reconnectScore = Math.max(0, 1 - recentReconnects / 10) * 25;
+
+  return Math.round(uptimeScore + latencyScore + reconnectScore);
+}
+
 export function getConnectionStatus() {
   return {
     connected,
@@ -291,6 +394,12 @@ export function getConnectionStatus() {
     uptimeSinceConnect: lastConnectedAt && connected
       ? Math.floor((Date.now() - new Date(lastConnectedAt).getTime()) / 1000)
       : null,
+    lastReconnectDurationMs,
+    heartbeatMisses,
+    heartbeatP95Ms: heartbeatLatencies.length > 0
+      ? [...heartbeatLatencies].sort((a, b) => a - b)[Math.ceil(0.95 * heartbeatLatencies.length) - 1]
+      : null,
+    connectionHealth: getConnectionHealth(),
     recentEvents: connectionHistory.slice(-10),
   };
 }
