@@ -8,6 +8,7 @@
 import { getConnectionStatus } from "../ibkr/connection.js";
 import { getMcpSessionStats } from "../db/database.js";
 import { getTunnelMetrics } from "./tunnel-monitor.js";
+import { wsBroadcast } from "../ws/server.js";
 import { logger } from "../logging.js";
 import { dispatchWebhook } from "./webhook.js";
 
@@ -196,6 +197,9 @@ export function recordIncident(type: string, severity: Incident["severity"], det
   if (incidents.length > MAX_INCIDENTS) {
     incidents.splice(0, incidents.length - MAX_INCIDENTS);
   }
+
+  // Broadcast incident to WebSocket clients
+  wsBroadcast("incidents", incident);
 
   if (severity === "critical") {
     log.error({ incident }, `INCIDENT: ${type} — ${detail}`);
