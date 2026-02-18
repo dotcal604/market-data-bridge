@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
   computeEdgeReport,
+  computeMonteCarloDD,
   runWalkForward,
   type EdgeReport,
   type WalkForwardResult,
@@ -85,6 +86,7 @@ describe("edge-analytics", () => {
         expect(report.current.edge_score).toBe(0);
         expect(report.walk_forward).toBeNull();
         expect(report.feature_attribution).toEqual([]);
+        expect(report.monte_carlo).toBeNull();
       });
     });
 
@@ -161,6 +163,80 @@ describe("edge-analytics", () => {
       });
     });
 
+
+    describe("monte carlo in edge report", () => {
+      it("should return null monte_carlo when fewer than 20 trades", () => {
+        const mockRows = Array.from({ length: 19 }, (_, i) => ({
+          evaluation_id: `e${i + 1}`,
+          symbol: "AAPL",
+          direction: "long",
+          timestamp: `2024-01-${String(i + 1).padStart(2, "0")}T10:00:00`,
+          ensemble_trade_score: 70,
+          ensemble_should_trade: 1,
+          r_multiple: i % 2 === 0 ? 1 : -0.5,
+          trade_taken: 1,
+          rvol: 1.2,
+          vwap_deviation_pct: 0.3,
+          spread_pct: 0.1,
+          volume_acceleration: 1.1,
+          atr_pct: 2.5,
+          gap_pct: 0.5,
+          range_position_pct: 0.6,
+          price_extension_pct: 1.0,
+          spy_change_pct: 0.2,
+          qqq_change_pct: 0.3,
+          minutes_since_open: 60,
+          volatility_regime: "normal",
+          time_of_day: "morning",
+        }));
+
+        mockDb = {
+          prepare: vi.fn(() => ({
+            all: vi.fn(() => mockRows),
+          })),
+        };
+
+        const report = computeEdgeReport({ days: 90, includeWalkForward: false });
+        expect(report.monte_carlo).toBeNull();
+      });
+
+      it("should include monte_carlo when at least 20 trades exist", () => {
+        const mockRows = Array.from({ length: 20 }, (_, i) => ({
+          evaluation_id: `e${i + 1}`,
+          symbol: "AAPL",
+          direction: "long",
+          timestamp: `2024-01-${String(i + 1).padStart(2, "0")}T10:00:00`,
+          ensemble_trade_score: 70,
+          ensemble_should_trade: 1,
+          r_multiple: i % 3 === 0 ? 1.2 : -0.4,
+          trade_taken: 1,
+          rvol: 1.2,
+          vwap_deviation_pct: 0.3,
+          spread_pct: 0.1,
+          volume_acceleration: 1.1,
+          atr_pct: 2.5,
+          gap_pct: 0.5,
+          range_position_pct: 0.6,
+          price_extension_pct: 1.0,
+          spy_change_pct: 0.2,
+          qqq_change_pct: 0.3,
+          minutes_since_open: 60,
+          volatility_regime: "normal",
+          time_of_day: "morning",
+        }));
+
+        mockDb = {
+          prepare: vi.fn(() => ({
+            all: vi.fn(() => mockRows),
+          })),
+        };
+
+        const report = computeEdgeReport({ days: 90, includeWalkForward: false });
+        expect(report.monte_carlo).not.toBeNull();
+        expect(report.monte_carlo?.simulations).toBe(1000);
+      });
+    });
+
     describe("rolling window computation", () => {
       it("should calculate rolling metrics with correct window size", () => {
         const mockRows = Array.from({ length: 30 }, (_, i) => ({
@@ -200,6 +276,27 @@ describe("edge-analytics", () => {
         expect(report.rolling_metrics[29].cumulative_trades).toBe(30);
         expect(report.rolling_metrics[29].rolling_win_rate).toBeGreaterThan(0);
       });
+    });
+  });
+
+  describe("computeMonteCarloDD", () => {
+    it("should produce deterministic results with the same seed", () => {
+      const rMultiples = [1.2, -0.7, 0.9, -1.1, 0.4, 1.5, -0.5, 0.8, -0.3, 0.6];
+
+      const first = computeMonteCarloDD(rMultiples, 500, 10, 42);
+      const second = computeMonteCarloDD(rMultiples, 500, 10, 42);
+
+      expect(first).toEqual(second);
+    });
+
+    it("should compute a high drawdown percentile for alternating wins/losses", () => {
+      const rMultiples = [1, -1];
+      const result = computeMonteCarloDD(rMultiples, 1000, 2, 42);
+
+      expect(result.max_dd_95th).toBe(1);
+      expect(result.max_dd_99th).toBe(1);
+      expect(result.simulations).toBe(1000);
+      expect(result.trades_per_sim).toBe(2);
     });
   });
 
@@ -719,6 +816,7 @@ describe("edge-analytics", () => {
 
         const report = computeEdgeReport({ days: 90, includeWalkForward: false });
         expect(report.feature_attribution).toEqual([]);
+        expect(report.monte_carlo).toBeNull();
       });
     });
   });

@@ -72,6 +72,19 @@ export interface EdgeReport {
   walk_forward: WalkForwardResult | null;
   feature_attribution: FeatureAttribution[];
   bootstrap_ci: BootstrapCI[] | null;
+  monte_carlo: MonteCarloResult | null;
+}
+
+export interface MonteCarloResult {
+  simulations: number;
+  trades_per_sim: number;
+  max_dd_mean: number;
+  max_dd_median: number;
+  max_dd_95th: number;
+  max_dd_99th: number;
+  final_equity_mean: number;
+  final_equity_median: number;
+  ruin_probability: number;
 }
 
 export interface FeatureAttribution {
@@ -432,6 +445,78 @@ export function computeBootstrapCI(
   ];
 }
 
+/**
+ * Monte Carlo drawdown simulation using bootstrap resampling of R-multiples.
+ *
+ * For each simulation:
+ * 1) Resample trades with replacement.
+ * 2) Build equity curve from sampled R-multiples.
+ * 3) Track maximum drawdown and final equity.
+ */
+export function computeMonteCarloDD(
+  rMultiples: number[],
+  nSimulations: number = 1000,
+  nTrades: number = rMultiples.length,
+  seed: number = 42,
+): MonteCarloResult {
+  if (rMultiples.length === 0 || nSimulations <= 0 || nTrades <= 0) {
+    return {
+      simulations: 0,
+      trades_per_sim: 0,
+      max_dd_mean: 0,
+      max_dd_median: 0,
+      max_dd_95th: 0,
+      max_dd_99th: 0,
+      final_equity_mean: 0,
+      final_equity_median: 0,
+      ruin_probability: 0,
+    };
+  }
+
+  const percentile = (arr: number[], p: number): number => {
+    const sorted = [...arr].sort((a, b) => a - b);
+    const idx = Math.floor(sorted.length * p);
+    return sorted[Math.min(idx, sorted.length - 1)];
+  };
+
+  const rng = mulberry32(seed);
+  const maxDds: number[] = [];
+  const finalEquities: number[] = [];
+  let ruinCount = 0;
+
+  for (let i = 0; i < nSimulations; i++) {
+    let equity = 0;
+    let peak = 0;
+    let maxDd = 0;
+
+    for (let j = 0; j < nTrades; j++) {
+      equity += rMultiples[Math.floor(rng() * rMultiples.length)];
+      if (equity > peak) peak = equity;
+
+      const dd = peak > 0 ? (peak - equity) / peak : 0;
+      if (dd > maxDd) maxDd = dd;
+    }
+
+    if (maxDd >= 0.5) ruinCount++;
+    maxDds.push(maxDd);
+    finalEquities.push(equity);
+  }
+
+  const mean = (arr: number[]): number => arr.reduce((s, v) => s + v, 0) / arr.length;
+
+  return {
+    simulations: nSimulations,
+    trades_per_sim: nTrades,
+    max_dd_mean: round3(mean(maxDds)),
+    max_dd_median: round3(percentile(maxDds, 0.5)),
+    max_dd_95th: round3(percentile(maxDds, 0.95)),
+    max_dd_99th: round3(percentile(maxDds, 0.99)),
+    final_equity_mean: round3(mean(finalEquities)),
+    final_equity_median: round3(percentile(finalEquities, 0.5)),
+    ruin_probability: round3(ruinCount / nSimulations),
+  };
+}
+
 // ── Walk-Forward Validation ──────────────────────────────────────────────
 
 /**
@@ -759,11 +844,16 @@ export function computeEdgeReport(opts: {
     ? computeBootstrapCI(rows.map((r) => r.r_multiple))
     : null;
 
+  const monteCarlo = rows.length >= 20
+    ? computeMonteCarloDD(rows.map((r) => r.r_multiple))
+    : null;
+
   return {
     rolling_metrics: rollingMetrics,
     current,
     walk_forward: walkForward,
     feature_attribution: featureAttribution,
     bootstrap_ci: bootstrapCI,
+    monte_carlo: monteCarlo,
   };
 }
