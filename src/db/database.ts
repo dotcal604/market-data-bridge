@@ -12,7 +12,7 @@ if (!fs.existsSync(defaultDataDir)) fs.mkdirSync(defaultDataDir, { recursive: tr
 
 // DB_PATH env var allows parallel instances (e.g., paper vs live) to use separate databases
 const dbPath = process.env.DB_PATH
-  ? path.resolve(process.env.DB_PATH)
+  ? (process.env.DB_PATH === ":memory:" ? ":memory:" : path.resolve(process.env.DB_PATH))
   : path.join(defaultDataDir, "bridge.db");
 const dbDir = path.dirname(dbPath);
 if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
