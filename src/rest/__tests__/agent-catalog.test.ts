@@ -7,7 +7,7 @@ describe("Action Catalog", () => {
       // Get all action keys from the catalog
       const catalogKeys = Object.keys(actionsMeta).sort();
       
-      // Expected actions based on the actions object (102 total)
+      // Expected actions based on the actions object (104 total)
       const expectedActions = [
         "auto_eval_status",
         "auto_eval_toggle",
@@ -107,7 +107,9 @@ describe("Action Catalog", () => {
         "multi_model_score",
         "ops_health",
         "ops_incidents",
+        "ops_outages",
         "ops_runbook",
+        "ops_sla",
         "ops_uptime",
         "orders_history",
         "place_advanced_bracket",

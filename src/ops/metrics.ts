@@ -8,6 +8,7 @@
 import { getConnectionStatus } from "../ibkr/connection.js";
 import { getMcpSessionStats } from "../db/database.js";
 import { getTunnelMetrics } from "./tunnel-monitor.js";
+import { getSlaReport } from "./availability.js";
 import { wsBroadcast } from "../ws/server.js";
 import { logger } from "../logging.js";
 import { dispatchWebhook } from "./webhook.js";
@@ -327,6 +328,12 @@ export interface OpsMetrics {
   incidentCount: number;
   unhandledRejections: number;
   lastIncident: Incident | null;
+
+  // SLA (availability tracking)
+  sla?: {
+    last_1h: { bridge_pct: number; ibkr_pct: number; tunnel_pct: number; end_to_end_pct: number };
+    last_24h: { bridge_pct: number; ibkr_pct: number; tunnel_pct: number; end_to_end_pct: number };
+  };
 }
 
 export function getMetrics(): OpsMetrics {
@@ -351,6 +358,28 @@ export function getMetrics(): OpsMetrics {
 
   // MCP session stats
   const mcpStats = getMcpSessionStats();
+
+  // Get SLA data if available
+  let sla: OpsMetrics["sla"] = undefined;
+  try {
+    const report = getSlaReport();
+    sla = {
+      last_1h: {
+        bridge_pct: report.last_1h.bridge_pct,
+        ibkr_pct: report.last_1h.ibkr_pct,
+        tunnel_pct: report.last_1h.tunnel_pct,
+        end_to_end_pct: report.last_1h.end_to_end_pct,
+      },
+      last_24h: {
+        bridge_pct: report.last_24h.bridge_pct,
+        ibkr_pct: report.last_24h.ibkr_pct,
+        tunnel_pct: report.last_24h.tunnel_pct,
+        end_to_end_pct: report.last_24h.end_to_end_pct,
+      },
+    };
+  } catch {
+    // SLA data not available yet (tables not created or no samples)
+  }
 
   return {
     startedAt: processStartedAt,
@@ -399,6 +428,7 @@ export function getMetrics(): OpsMetrics {
     incidentCount: incidents.length,
     unhandledRejections: unhandledRejectionCount,
     lastIncident: getLastIncident(),
+    sla,
   };
 }
 

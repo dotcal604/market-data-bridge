@@ -898,6 +898,15 @@ const actions: Record<string, ActionHandler> = {
       last_incident: metrics.lastIncident,
     };
   },
+  ops_sla: async () => {
+    const { getSlaReport } = await import("../ops/availability.js");
+    return getSlaReport();
+  },
+  ops_outages: async (p) => {
+    const { getRecentOutages } = await import("../ops/availability.js");
+    const limit = num(p, "limit", 20);
+    return { count: getRecentOutages(limit).length, outages: getRecentOutages(limit) };
+  },
 };
 
 // ── Dispatcher ───────────────────────────────────────────────────
@@ -1142,6 +1151,8 @@ export const actionsMeta: Record<string, ActionMeta> = {
   ops_incidents: { description: "Get recent operational incidents (disconnects, errors, heartbeat timeouts)", params: ["limit?"] },
   ops_runbook: { description: "Get operational runbook guidance by scenario keyword", params: ["scenario?"] },
   ops_uptime: { description: "Get uptime summary: process uptime, IBKR connection SLA, memory/CPU, error rate" },
+  ops_sla: { description: "Get availability SLA report: uptime % for bridge/IBKR/tunnel/end-to-end over 1h/24h/7d/30d windows" },
+  ops_outages: { description: "Get recent outages with duration and affected components", params: ["limit?"] },
 };
 
 /**

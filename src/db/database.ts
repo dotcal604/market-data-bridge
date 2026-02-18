@@ -410,6 +410,34 @@ db.exec(`
 
 db.exec(RISK_CONFIG_SCHEMA_SQL);
 
+// ── Ops Availability Tables ────────────────────────────────────────────
+db.exec(`
+  CREATE TABLE IF NOT EXISTS ops_availability (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT NOT NULL,
+    bridge_ok INTEGER NOT NULL,
+    ibkr_ok INTEGER NOT NULL,
+    tunnel_ok INTEGER NOT NULL,
+    mcp_sessions INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_ops_avail_timestamp ON ops_availability(timestamp);
+  CREATE INDEX IF NOT EXISTS idx_ops_avail_bridge ON ops_availability(bridge_ok);
+  CREATE INDEX IF NOT EXISTS idx_ops_avail_ibkr ON ops_availability(ibkr_ok);
+
+  CREATE TABLE IF NOT EXISTS ops_outages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    start TEXT NOT NULL,
+    end TEXT NOT NULL,
+    duration_seconds INTEGER NOT NULL,
+    affected_components TEXT NOT NULL,
+    cause TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_ops_outages_start ON ops_outages(start);
+  CREATE INDEX IF NOT EXISTS idx_ops_outages_created ON ops_outages(created_at);
+`);
+
 // ── Column Migrations (safe for existing DBs — silently ignored if column exists) ──
 
 function addColumnIfMissing(table: string, column: string, type: string): void {
