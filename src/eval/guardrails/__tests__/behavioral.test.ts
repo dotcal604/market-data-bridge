@@ -400,5 +400,81 @@ describe("behavioral guardrails", () => {
 
       vi.useRealTimers();
     });
+
+    it("should add soft insufficient sample warning below soft threshold", () => {
+      const testDate = getDateAtET(10, 0);
+      vi.useFakeTimers();
+      vi.setSystemTime(testDate);
+
+      const result = runGuardrails(createMockEnsemble(), () => [], () => 29);
+
+      expect(result.allowed).toBe(true);
+      expect(result.insufficient_sample).toBe(false);
+      expect(result.sample_size).toBe(29);
+      expect(result.flags).toContain("insufficient sample: 29 trades, metrics unreliable");
+
+      vi.useRealTimers();
+    });
+
+    it("should hard block when sample is below hard threshold", () => {
+      const testDate = getDateAtET(10, 0);
+      vi.useFakeTimers();
+      vi.setSystemTime(testDate);
+
+      const result = runGuardrails(createMockEnsemble(), () => [], () => 7);
+
+      expect(result.allowed).toBe(false);
+      expect(result.insufficient_sample).toBe(true);
+      expect(result.sample_size).toBe(7);
+      expect(result.flags).toContain("insufficient sample: 7 trades, metrics unreliable");
+
+      vi.useRealTimers();
+    });
+
+    it("should not flag insufficient sample when sample meets soft threshold", () => {
+      const testDate = getDateAtET(10, 0);
+      vi.useFakeTimers();
+      vi.setSystemTime(testDate);
+
+      const result = runGuardrails(createMockEnsemble(), () => [], () => 30);
+
+      expect(result.allowed).toBe(true);
+      expect(result.insufficient_sample).toBe(false);
+      expect(result.sample_size).toBe(30);
+      expect(result.flags.some((f) => f.includes("insufficient sample"))).toBe(false);
+
+      vi.useRealTimers();
+    });
+
+    it("should keep sample defaults when outcome count callback is omitted", () => {
+      const testDate = getDateAtET(10, 0);
+      vi.useFakeTimers();
+      vi.setSystemTime(testDate);
+
+      const result = runGuardrails(createMockEnsemble(), () => []);
+
+      expect(result.allowed).toBe(true);
+      expect(result.insufficient_sample).toBe(false);
+      expect(result.sample_size).toBe(0);
+
+      vi.useRealTimers();
+    });
+
+    it("should handle outcome count callback errors gracefully", () => {
+      const testDate = getDateAtET(10, 0);
+      vi.useFakeTimers();
+      vi.setSystemTime(testDate);
+
+      const result = runGuardrails(createMockEnsemble(), () => [], () => {
+        throw new Error("count failure");
+      });
+
+      expect(result.allowed).toBe(true);
+      expect(result.insufficient_sample).toBe(false);
+      expect(result.sample_size).toBe(0);
+
+      vi.useRealTimers();
+    });
+
   });
 });

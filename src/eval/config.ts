@@ -18,4 +18,6 @@ export const evalConfig = {
   tradingWindowStart: 9 * 60 + 30, // 9:30 ET in minutes
   tradingWindowEnd: 15 * 60 + 55,  // 15:55 ET
   maxConsecutiveLosses: 3,
+  minOutcomesSoft: parseInt(process.env.MIN_OUTCOMES_SOFT ?? "30", 10),
+  minOutcomesHard: parseInt(process.env.MIN_OUTCOMES_HARD ?? "10", 10),
 } as const;
