@@ -14,6 +14,7 @@ import { classifyTimeOfDay, minutesSinceOpen } from "./time-classification.js";
 import { classifyVolatilityRegime } from "./volatility-regime.js";
 import { classifyLiquidity } from "./liquidity.js";
 import { computeRSI, classifyRSI } from "./rsi.js";
+import { computeTickVelocity } from "./tick-velocity.js";
 import { logger } from "../../logging.js";
 
 export interface ComputeResult {
@@ -68,6 +69,10 @@ export async function computeFeatures(
   const rsi_regime = rsi === null ? "neutral" : classifyRSI(rsi);
   const volatility_regime = classifyVolatilityRegime(atr_pct);
   const liquidity_bucket = classifyLiquidity(dailyBars, last);
+  
+  const tickData = computeTickVelocity();
+  const tick_velocity = tickData?.velocity ?? null;
+  const tick_acceleration = tickData?.acceleration ?? null;
 
   const marketCtx = await computeMarketAlignment(direction);
 
@@ -94,6 +99,8 @@ export async function computeFeatures(
     range_position_pct,
     rsi,
     rsi_regime,
+    tick_velocity,
+    tick_acceleration,
     volatility_regime,
     liquidity_bucket,
     spy_change_pct: marketCtx.spy_change_pct,

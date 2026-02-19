@@ -25,6 +25,8 @@ Evaluation principles:
 - Price extension > 2.0 ATR from key level increases reversal risk
 - Gap > 5% increases mean-reversion risk
 - Range position > 90% suggests near high-of-day (potential resistance)
+- tick_velocity: price change per millisecond from real-time ticks (null = data unavailable, ignore in evaluation)
+- tick_acceleration: change in tick velocity over time (null = data unavailable, ignore in evaluation)
 - Market alignment matters: trading against SPY/QQQ trend requires higher conviction
 - Time of day matters: open_drive has more false moves, power_hour has more sustained moves
 - Volatility regime affects expected move size and stop placement

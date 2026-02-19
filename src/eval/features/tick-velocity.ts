@@ -118,3 +118,15 @@ export class TickVelocity {
     // No need to zero out arrays, they will be overwritten
   }
 }
+
+/**
+ * Compute tick velocity and acceleration for a symbol.
+ * Returns null when tick data is unavailable (stateful tracking not yet implemented).
+ * 
+ * Future enhancement: Integrate with IBKR real-time tick stream to populate TickVelocity tracker.
+ */
+export function computeTickVelocity(): { velocity: number; acceleration: number } | null {
+  // Tick data requires real-time stream accumulation (not available in stateless pipeline)
+  // Return null to indicate feature is unavailable
+  return null;
+}
