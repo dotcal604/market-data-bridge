@@ -960,11 +960,22 @@ export async function handleAgentRequest(req: Request, res: Response): Promise<v
 
 // ── Action Catalog Metadata ─────────────────────────────────────
 
+interface ParamSchema {
+  type: "string" | "number" | "boolean" | "object" | "array";
+  description: string;
+  required?: boolean;
+  enum?: string[] | number[];
+  default?: string | number | boolean;
+  items?: { type: string };
+}
+
 interface ActionMeta {
   description: string;
-  params?: string[];
+  params?: string[] | Record<string, ParamSchema>;
   requiresIBKR?: boolean;
 }
+
+export type { ParamSchema, ActionMeta };
 
 export const actionsMeta: Record<string, ActionMeta> = {
   // System
@@ -972,46 +983,266 @@ export const actionsMeta: Record<string, ActionMeta> = {
   get_gpt_instructions: { description: "Get GPT system instructions" },
 
   // Market Data (Yahoo — always available)
-  get_quote: { description: "Get real-time quote for a symbol", params: ["symbol"] },
-  get_historical_bars: { description: "Get historical price bars", params: ["symbol", "period?", "interval?"] },
-  get_stock_details: { description: "Get stock details (sector, industry, description, market cap)", params: ["symbol"] },
-  get_options_chain: { description: "Get options chain for a symbol", params: ["symbol", "expiration?"] },
-  get_option_quote: { description: "Get quote for a specific option contract", params: ["symbol", "expiry", "strike", "right"] },
-  search_symbols: { description: "Search for symbols by query string", params: ["query"] },
-  get_news: { description: "Get news articles for a query", params: ["query"] },
-  get_financials: { description: "Get financial data (revenue, margins, debt, analyst targets)", params: ["symbol"] },
-  get_earnings: { description: "Get earnings history (actual vs estimate)", params: ["symbol"] },
-  get_recommendations: { description: "Get analyst recommendations", params: ["symbol"] },
-  get_trending: { description: "Get trending symbols by region", params: ["region?"] },
+  get_quote: { 
+    description: "Get real-time quote for a symbol", 
+    params: {
+      symbol: { type: "string", description: "Stock ticker symbol (e.g., 'AAPL', 'TSLA')", required: true },
+    },
+  },
+  get_historical_bars: { 
+    description: "Get historical price bars", 
+    params: {
+      symbol: { type: "string", description: "Stock ticker symbol (e.g., 'AAPL', 'TSLA')", required: true },
+      period: { 
+        type: "string", 
+        description: "Historical period to fetch",
+        enum: ["1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "ytd", "max"],
+        default: "3mo",
+      },
+      interval: { 
+        type: "string", 
+        description: "Bar interval/timeframe",
+        enum: ["1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h", "1d", "5d", "1wk", "1mo", "3mo"],
+        default: "1d",
+      },
+    },
+  },
+  get_stock_details: { 
+    description: "Get stock details (sector, industry, description, market cap)", 
+    params: {
+      symbol: { type: "string", description: "Stock ticker symbol (e.g., 'AAPL', 'TSLA')", required: true },
+    },
+  },
+  get_options_chain: { 
+    description: "Get options chain for a symbol", 
+    params: {
+      symbol: { type: "string", description: "Stock ticker symbol (e.g., 'AAPL', 'TSLA')", required: true },
+      expiration: { type: "string", description: "Option expiration date in YYYYMMDD format (e.g., '20240315')" },
+    },
+  },
+  get_option_quote: { 
+    description: "Get quote for a specific option contract", 
+    params: {
+      symbol: { type: "string", description: "Stock ticker symbol (e.g., 'AAPL', 'TSLA')", required: true },
+      expiry: { type: "string", description: "Option expiration date in YYYYMMDD format (e.g., '20240315')", required: true },
+      strike: { type: "number", description: "Strike price (e.g., 150.0)", required: true },
+      right: { type: "string", description: "Option type", enum: ["C", "P"], required: true },
+    },
+  },
+  search_symbols: { 
+    description: "Search for symbols by query string", 
+    params: {
+      query: { type: "string", description: "Search query (company name or ticker)", required: true },
+    },
+  },
+  get_news: { 
+    description: "Get news articles for a query", 
+    params: {
+      query: { type: "string", description: "Search query (ticker or topic)", required: true },
+    },
+  },
+  get_financials: { 
+    description: "Get financial data (revenue, margins, debt, analyst targets)", 
+    params: {
+      symbol: { type: "string", description: "Stock ticker symbol (e.g., 'AAPL', 'TSLA')", required: true },
+    },
+  },
+  get_earnings: { 
+    description: "Get earnings history (actual vs estimate)", 
+    params: {
+      symbol: { type: "string", description: "Stock ticker symbol (e.g., 'AAPL', 'TSLA')", required: true },
+    },
+  },
+  get_recommendations: { 
+    description: "Get analyst recommendations", 
+    params: {
+      symbol: { type: "string", description: "Stock ticker symbol (e.g., 'AAPL', 'TSLA')", required: true },
+    },
+  },
+  get_trending: { 
+    description: "Get trending symbols by region", 
+    params: {
+      region: { type: "string", description: "Region code", enum: ["US", "GB", "IN", "FR", "DE", "IT", "ES"], default: "US" },
+    },
+  },
   get_screener_filters: { description: "Get list of available screener IDs" },
-  run_screener: { description: "Run a stock screener", params: ["screener_id?", "count?"] },
-  run_screener_with_quotes: { description: "Run a stock screener with full quote data", params: ["screener_id?", "count?"] },
+  run_screener: { 
+    description: "Run a stock screener", 
+    params: {
+      screener_id: { 
+        type: "string", 
+        description: "Screener to run",
+        enum: ["day_gainers", "day_losers", "most_actives", "small_cap_gainers", "undervalued_large_caps", "aggressive_small_caps", "growth_technology_stocks"],
+        default: "day_gainers",
+      },
+      count: { type: "number", description: "Number of results to return (max 100)", default: 20 },
+    },
+  },
+  run_screener_with_quotes: { 
+    description: "Run a stock screener with full quote data", 
+    params: {
+      screener_id: { 
+        type: "string", 
+        description: "Screener to run",
+        enum: ["day_gainers", "day_losers", "most_actives", "small_cap_gainers", "undervalued_large_caps", "aggressive_small_caps", "growth_technology_stocks"],
+        default: "day_gainers",
+      },
+      count: { type: "number", description: "Number of results to return (max 100)", default: 20 },
+    },
+  },
 
   // IBKR Market Data
-  get_ibkr_quote: { description: "Get IBKR real-time quote", params: ["symbol", "secType?", "exchange?", "currency?"], requiresIBKR: true },
-  get_historical_ticks: { description: "Get historical tick data", params: ["symbol", "startTime", "endTime?", "type?", "count?"], requiresIBKR: true },
-  get_contract_details: { description: "Get contract details from IBKR", params: ["symbol", "secType?", "currency?", "exchange?"], requiresIBKR: true },
+  get_ibkr_quote: { 
+    description: "Get IBKR real-time quote", 
+    params: {
+      symbol: { type: "string", description: "Stock ticker symbol (e.g., 'AAPL', 'TSLA')", required: true },
+      secType: { type: "string", description: "Security type", enum: ["STK", "OPT", "FUT", "CASH", "BOND", "CFD", "FOP", "WAR", "IOPT", "FWD", "BAG", "IND", "BILL", "FUND", "FIXED", "SLB", "NEWS", "CMDTY", "BSK", "ICU", "ICS"], default: "STK" },
+      exchange: { type: "string", description: "Exchange code", default: "SMART" },
+      currency: { type: "string", description: "Currency code", default: "USD" },
+    },
+    requiresIBKR: true 
+  },
+  get_historical_ticks: { 
+    description: "Get historical tick data", 
+    params: {
+      symbol: { type: "string", description: "Stock ticker symbol", required: true },
+      startTime: { type: "string", description: "Start time in ISO 8601 format or YYYYMMDD-HH:MM:SS", required: true },
+      endTime: { type: "string", description: "End time in ISO 8601 format or YYYYMMDD-HH:MM:SS" },
+      type: { type: "string", description: "Tick data type", enum: ["TRADES", "MIDPOINT", "BID", "ASK", "BID_ASK"], default: "TRADES" },
+      count: { type: "number", description: "Maximum number of ticks to return (max 1000)", default: 1000 },
+    },
+    requiresIBKR: true 
+  },
+  get_contract_details: { 
+    description: "Get contract details from IBKR", 
+    params: {
+      symbol: { type: "string", description: "Stock ticker symbol", required: true },
+      secType: { type: "string", description: "Security type", enum: ["STK", "OPT", "FUT", "CASH", "BOND", "CFD", "FOP", "WAR", "IOPT", "FWD", "BAG", "IND", "BILL", "FUND", "FIXED", "SLB", "NEWS", "CMDTY", "BSK", "ICU", "ICS"], default: "STK" },
+      currency: { type: "string", description: "Currency code", default: "USD" },
+      exchange: { type: "string", description: "Exchange code", default: "SMART" },
+    },
+    requiresIBKR: true 
+  },
 
   // IBKR News
   get_news_providers: { description: "Get list of IBKR news providers", requiresIBKR: true },
-  get_news_article: { description: "Get specific news article from IBKR", params: ["providerCode", "articleId"], requiresIBKR: true },
-  get_historical_news: { description: "Get historical news from IBKR", params: ["conId", "providerCodes", "startDateTime", "endDateTime"], requiresIBKR: true },
+  get_news_article: { 
+    description: "Get specific news article from IBKR", 
+    params: {
+      providerCode: { type: "string", description: "News provider code (e.g., 'BRFUPDN', 'DJ-N')", required: true },
+      articleId: { type: "string", description: "Article ID from provider", required: true },
+    },
+    requiresIBKR: true 
+  },
+  get_historical_news: { 
+    description: "Get historical news from IBKR", 
+    params: {
+      conId: { type: "number", description: "Contract ID for the symbol", required: true },
+      providerCodes: { type: "string", description: "Comma-separated provider codes (e.g., 'BRFUPDN,DJ-N')", required: true },
+      startDateTime: { type: "string", description: "Start date/time in YYYYMMDD HH:MM:SS format", required: true },
+      endDateTime: { type: "string", description: "End date/time in YYYYMMDD HH:MM:SS format", required: true },
+    },
+    requiresIBKR: true 
+  },
   get_news_bulletins: { description: "Get IBKR news bulletins", requiresIBKR: true },
 
   // IBKR Data Wrappers
-  get_pnl_single: { description: "Get P&L for a single position", params: ["symbol"], requiresIBKR: true },
-  search_ibkr_symbols: { description: "Search for symbols using IBKR", params: ["pattern"], requiresIBKR: true },
-  set_market_data_type: { description: "Set market data type (live, frozen, delayed)", params: ["marketDataType"], requiresIBKR: true },
-  set_auto_open_orders: { description: "Enable/disable auto-binding of open orders", params: ["autoBind?"], requiresIBKR: true },
-  get_head_timestamp: { description: "Get earliest available data timestamp", params: ["symbol", "whatToShow?", "useRTH?", "formatDate?"], requiresIBKR: true },
-  get_histogram_data: { description: "Get histogram data for a symbol", params: ["symbol", "useRTH?", "period?", "periodUnit?"], requiresIBKR: true },
-  calculate_implied_volatility: { description: "Calculate implied volatility for an option", params: ["symbol", "expiry", "strike", "right", "optionPrice", "underlyingPrice"], requiresIBKR: true },
-  calculate_option_price: { description: "Calculate theoretical option price", params: ["symbol", "expiry", "strike", "right", "volatility", "underlyingPrice"], requiresIBKR: true },
+  get_pnl_single: { 
+    description: "Get P&L for a single position", 
+    params: {
+      symbol: { type: "string", description: "Stock ticker symbol", required: true },
+    },
+    requiresIBKR: true 
+  },
+  search_ibkr_symbols: { 
+    description: "Search for symbols using IBKR", 
+    params: {
+      pattern: { type: "string", description: "Search pattern (partial symbol or company name)", required: true },
+    },
+    requiresIBKR: true 
+  },
+  set_market_data_type: { 
+    description: "Set market data type (live, frozen, delayed)", 
+    params: {
+      marketDataType: { type: "number", description: "Market data type (1=Live, 2=Frozen, 3=Delayed, 4=Delayed-Frozen)", enum: [1, 2, 3, 4], required: true },
+    },
+    requiresIBKR: true 
+  },
+  set_auto_open_orders: { 
+    description: "Enable/disable auto-binding of open orders", 
+    params: {
+      autoBind: { type: "boolean", description: "Enable automatic order binding", default: true },
+    },
+    requiresIBKR: true 
+  },
+  get_head_timestamp: { 
+    description: "Get earliest available data timestamp", 
+    params: {
+      symbol: { type: "string", description: "Stock ticker symbol", required: true },
+      whatToShow: { type: "string", description: "Data type to query", enum: ["TRADES", "MIDPOINT", "BID", "ASK", "BID_ASK", "ADJUSTED_LAST", "HISTORICAL_VOLATILITY", "OPTION_IMPLIED_VOLATILITY"], default: "TRADES" },
+      useRTH: { type: "boolean", description: "Use regular trading hours only", default: true },
+      formatDate: { type: "number", description: "Date format (1=YYYYMMDD HH:MM:SS, 2=Unix timestamp)", enum: [1, 2], default: 1 },
+    },
+    requiresIBKR: true 
+  },
+  get_histogram_data: { 
+    description: "Get histogram data for a symbol", 
+    params: {
+      symbol: { type: "string", description: "Stock ticker symbol", required: true },
+      useRTH: { type: "boolean", description: "Use regular trading hours only", default: true },
+      period: { type: "number", description: "Period duration (combine with periodUnit)", default: 1 },
+      periodUnit: { type: "string", description: "Period unit", enum: ["S", "D", "W", "M", "Y"], default: "D" },
+    },
+    requiresIBKR: true 
+  },
+  calculate_implied_volatility: { 
+    description: "Calculate implied volatility for an option", 
+    params: {
+      symbol: { type: "string", description: "Stock ticker symbol", required: true },
+      expiry: { type: "string", description: "Option expiration date in YYYYMMDD format", required: true },
+      strike: { type: "number", description: "Strike price", required: true },
+      right: { type: "string", description: "Option type", enum: ["C", "P"], required: true },
+      optionPrice: { type: "number", description: "Current option price", required: true },
+      underlyingPrice: { type: "number", description: "Current underlying stock price", required: true },
+    },
+    requiresIBKR: true 
+  },
+  calculate_option_price: { 
+    description: "Calculate theoretical option price", 
+    params: {
+      symbol: { type: "string", description: "Stock ticker symbol", required: true },
+      expiry: { type: "string", description: "Option expiration date in YYYYMMDD format", required: true },
+      strike: { type: "number", description: "Strike price", required: true },
+      right: { type: "string", description: "Option type", enum: ["C", "P"], required: true },
+      volatility: { type: "number", description: "Implied volatility (as decimal, e.g., 0.25 for 25%)", required: true },
+      underlyingPrice: { type: "number", description: "Current underlying stock price", required: true },
+    },
+    requiresIBKR: true 
+  },
   get_tws_current_time: { description: "Get current time from TWS server", requiresIBKR: true },
-  get_market_rule: { description: "Get market rule by rule ID", params: ["ruleId"], requiresIBKR: true },
-  get_smart_components: { description: "Get smart routing components for an exchange", params: ["exchange"], requiresIBKR: true },
+  get_market_rule: { 
+    description: "Get market rule by rule ID", 
+    params: {
+      ruleId: { type: "number", description: "Market rule ID", required: true },
+    },
+    requiresIBKR: true 
+  },
+  get_smart_components: { 
+    description: "Get smart routing components for an exchange", 
+    params: {
+      exchange: { type: "string", description: "Exchange code (e.g., 'NYSE', 'NASDAQ')", required: true },
+    },
+    requiresIBKR: true 
+  },
   get_depth_exchanges: { description: "Get list of exchanges that support market depth", requiresIBKR: true },
-  get_fundamental_data: { description: "Get fundamental data from IBKR", params: ["symbol", "reportType?"], requiresIBKR: true },
+  get_fundamental_data: { 
+    description: "Get fundamental data from IBKR", 
+    params: {
+      symbol: { type: "string", description: "Stock ticker symbol", required: true },
+      reportType: { type: "string", description: "Report type", enum: ["ReportsFinSummary", "ReportsOwnership", "ReportSnapshot", "ReportsFinStatements", "RESC", "CalendarReport"], default: "ReportsFinSummary" },
+    },
+    requiresIBKR: true 
+  },
 
   // Account
   get_account_summary: { description: "Get account summary (buying power, cash, equity)", requiresIBKR: true },
@@ -1022,137 +1253,599 @@ export const actionsMeta: Record<string, ActionMeta> = {
   get_open_orders: { description: "Get all open orders", requiresIBKR: true },
   get_completed_orders: { description: "Get completed orders", requiresIBKR: true },
   get_executions: { description: "Get recent executions", requiresIBKR: true },
-  place_order: { description: "Place a single order", params: ["symbol", "action", "orderType", "totalQuantity", "lmtPrice?", "auxPrice?", "secType?", "exchange?", "currency?", "tif?"], requiresIBKR: true },
-  place_bracket_order: { description: "Place a bracket order (entry + TP + SL)", params: ["symbol", "action", "totalQuantity", "entryType", "entryPrice?", "takeProfitPrice", "stopLossPrice", "secType?", "tif?"], requiresIBKR: true },
-  place_advanced_bracket: { description: "Place an advanced bracket order with full control", params: ["symbol", "action", "totalQuantity", "entry", "takeProfit", "stopLoss", "outsideRth?", "ocaType?", "trailingAmount?", "trailingPercent?"], requiresIBKR: true },
-  modify_order: { description: "Modify an existing open order", params: ["orderId", "lmtPrice?", "auxPrice?", "totalQuantity?", "orderType?", "tif?"], requiresIBKR: true },
-  cancel_order: { description: "Cancel a specific order", params: ["orderId"], requiresIBKR: true },
+  place_order: { 
+    description: "Place a single order", 
+    params: {
+      symbol: { type: "string", description: "Stock ticker symbol (e.g., 'AAPL', 'TSLA')", required: true },
+      action: { type: "string", description: "Order action", enum: ["BUY", "SELL"], required: true },
+      orderType: { type: "string", description: "Order type", enum: ["MKT", "LMT", "STP", "STP LMT", "TRAIL", "TRAIL LIMIT", "REL", "MIT", "MOC", "LOC", "MIDPRICE"], required: true },
+      totalQuantity: { type: "number", description: "Number of shares/contracts to trade", required: true },
+      lmtPrice: { type: "number", description: "Limit price (required for LMT, STP LMT, TRAIL LIMIT, REL orders)" },
+      auxPrice: { type: "number", description: "Auxiliary price (stop price for STP/STP LMT, trailing amount for TRAIL)" },
+      secType: { type: "string", description: "Security type", enum: ["STK", "OPT", "FUT", "CASH", "BOND", "CFD", "FOP", "WAR", "IOPT", "FWD", "BAG", "IND", "BILL", "FUND", "FIXED", "SLB", "NEWS", "CMDTY", "BSK", "ICU", "ICS"], default: "STK" },
+      exchange: { type: "string", description: "Exchange code", default: "SMART" },
+      currency: { type: "string", description: "Currency code", default: "USD" },
+      tif: { type: "string", description: "Time in force", enum: ["DAY", "GTC", "IOC", "GTD", "OPG", "FOK", "DTC"], default: "DAY" },
+    },
+    requiresIBKR: true 
+  },
+  place_bracket_order: { 
+    description: "Place a bracket order (entry + TP + SL)", 
+    params: {
+      symbol: { type: "string", description: "Stock ticker symbol (e.g., 'AAPL', 'TSLA')", required: true },
+      action: { type: "string", description: "Order action", enum: ["BUY", "SELL"], required: true },
+      totalQuantity: { type: "number", description: "Number of shares/contracts to trade", required: true },
+      entryType: { type: "string", description: "Entry order type", enum: ["MKT", "LMT", "STP", "STP LMT"], required: true },
+      entryPrice: { type: "number", description: "Entry price (required for LMT, STP, STP LMT entry types)" },
+      takeProfitPrice: { type: "number", description: "Take profit limit price", required: true },
+      stopLossPrice: { type: "number", description: "Stop loss price", required: true },
+      secType: { type: "string", description: "Security type", enum: ["STK", "OPT", "FUT", "CASH", "BOND", "CFD", "FOP", "WAR", "IOPT", "FWD", "BAG", "IND", "BILL", "FUND", "FIXED", "SLB", "NEWS", "CMDTY", "BSK", "ICU", "ICS"], default: "STK" },
+      tif: { type: "string", description: "Time in force", enum: ["DAY", "GTC", "IOC", "GTD", "OPG", "FOK", "DTC"], default: "DAY" },
+    },
+    requiresIBKR: true 
+  },
+  place_advanced_bracket: { 
+    description: "Place an advanced bracket order with full control", 
+    params: {
+      symbol: { type: "string", description: "Stock ticker symbol", required: true },
+      action: { type: "string", description: "Order action", enum: ["BUY", "SELL"], required: true },
+      totalQuantity: { type: "number", description: "Number of shares/contracts", required: true },
+      entry: { type: "object", description: "Entry order configuration (orderType, lmtPrice, auxPrice)", required: true },
+      takeProfit: { type: "object", description: "Take profit order configuration (lmtPrice)", required: true },
+      stopLoss: { type: "object", description: "Stop loss order configuration (auxPrice, orderType)", required: true },
+      outsideRth: { type: "boolean", description: "Allow execution outside regular trading hours", default: false },
+      ocaType: { type: "number", description: "OCA type (1=Cancel with block, 2=Reduce with block, 3=Reduce non-block)", enum: [1, 2, 3], default: 1 },
+      trailingAmount: { type: "number", description: "Trailing stop amount (for TRAIL orders)" },
+      trailingPercent: { type: "number", description: "Trailing stop percentage (for TRAIL orders)" },
+    },
+    requiresIBKR: true 
+  },
+  modify_order: { 
+    description: "Modify an existing open order", 
+    params: {
+      orderId: { type: "number", description: "Order ID to modify", required: true },
+      lmtPrice: { type: "number", description: "New limit price" },
+      auxPrice: { type: "number", description: "New auxiliary price (stop price)" },
+      totalQuantity: { type: "number", description: "New quantity" },
+      orderType: { type: "string", description: "New order type", enum: ["MKT", "LMT", "STP", "STP LMT", "TRAIL", "TRAIL LIMIT", "REL", "MIT", "MOC", "LOC", "MIDPRICE"] },
+      tif: { type: "string", description: "New time in force", enum: ["DAY", "GTC", "IOC", "GTD", "OPG", "FOK", "DTC"] },
+    },
+    requiresIBKR: true 
+  },
+  cancel_order: { 
+    description: "Cancel a specific order", 
+    params: {
+      orderId: { type: "number", description: "Order ID to cancel", required: true },
+    },
+    requiresIBKR: true 
+  },
   cancel_all_orders: { description: "Cancel all open orders", requiresIBKR: true },
   flatten_positions: { description: "Flatten all positions immediately with market orders", requiresIBKR: true },
 
   // Portfolio Analytics
   portfolio_exposure: { description: "Get portfolio exposure analysis (gross/net, sector breakdown, beta-weighted)", requiresIBKR: true },
-  stress_test: { description: "Run portfolio stress test with market shock", params: ["shockPercent?", "betaAdjusted?"], requiresIBKR: true },
-  size_position: { description: "Calculate position size based on risk parameters", params: ["symbol", "entryPrice", "stopPrice", "riskPercent?", "maxCapitalPercent?", "volatilityRegime?"], requiresIBKR: true },
+  stress_test: { 
+    description: "Run portfolio stress test with market shock", 
+    params: {
+      shockPercent: { type: "number", description: "Market shock percentage (e.g., -10 for 10% drop)", default: -10 },
+      betaAdjusted: { type: "boolean", description: "Apply beta-adjusted shocks per position", default: true },
+    },
+    requiresIBKR: true 
+  },
+  size_position: { 
+    description: "Calculate position size based on risk parameters", 
+    params: {
+      symbol: { type: "string", description: "Stock ticker symbol", required: true },
+      entryPrice: { type: "number", description: "Planned entry price", required: true },
+      stopPrice: { type: "number", description: "Stop loss price", required: true },
+      riskPercent: { type: "number", description: "Risk percentage of account (e.g., 1 for 1%)", default: 1 },
+      maxCapitalPercent: { type: "number", description: "Maximum capital allocation percentage", default: 20 },
+      volatilityRegime: { type: "string", description: "Volatility regime", enum: ["low", "normal", "high"] },
+    },
+    requiresIBKR: true 
+  },
 
   // Risk / Session
   get_risk_config: { description: "Get effective risk limits and configuration" },
   tune_risk_params: { description: "Auto-tune risk parameters from recent outcomes" },
-  update_risk_config: { description: "Update risk configuration parameters", params: ["max_position_pct?", "max_daily_loss_pct?", "max_concentration_pct?", "volatility_scalar?", "source?"] },
+  update_risk_config: { 
+    description: "Update risk configuration parameters", 
+    params: {
+      max_position_pct: { type: "number", description: "Maximum position size as % of account" },
+      max_daily_loss_pct: { type: "number", description: "Maximum daily loss as % of account" },
+      max_concentration_pct: { type: "number", description: "Maximum concentration in single position as %" },
+      volatility_scalar: { type: "number", description: "Volatility adjustment scalar" },
+      source: { type: "string", description: "Configuration source identifier" },
+    },
+  },
   get_session_state: { description: "Get current session state (trades, P&L, lock status)" },
-  session_record_trade: { description: "Record a trade result in the session", params: ["realizedPnl"] },
-  session_lock: { description: "Lock trading session", params: ["reason?"] },
+  session_record_trade: { 
+    description: "Record a trade result in the session", 
+    params: {
+      realizedPnl: { type: "number", description: "Realized P&L from the trade", required: true },
+    },
+  },
+  session_lock: { 
+    description: "Lock trading session", 
+    params: {
+      reason: { type: "string", description: "Reason for locking the session" },
+    },
+  },
   session_unlock: { description: "Unlock trading session" },
   session_reset: { description: "Reset trading session state" },
 
   // Evaluation
-  record_outcome: { description: "Record outcome for an evaluation", params: ["evaluation_id", "trade_taken", "decision_type?", "confidence_rating?", "rule_followed?", "setup_type?", "actual_entry_price?", "actual_exit_price?", "r_multiple?", "exit_reason?", "notes?"] },
-  simulate_weights: { description: "Simulate ensemble weights against historical evaluations", params: ["claude", "gpt4o", "gemini", "k?", "days?", "symbol?"] },
+  record_outcome: { 
+    description: "Record outcome for an evaluation", 
+    params: {
+      evaluation_id: { type: "string", description: "Evaluation ID", required: true },
+      trade_taken: { type: "boolean", description: "Whether the trade was taken", required: true },
+      decision_type: { type: "string", description: "Decision type", enum: ["took_trade", "passed_setup", "ensemble_no", "risk_gate_blocked"] },
+      confidence_rating: { type: "number", description: "Confidence rating (1-5)" },
+      rule_followed: { type: "boolean", description: "Whether evaluation rules were followed" },
+      setup_type: { type: "string", description: "Setup type/category" },
+      actual_entry_price: { type: "number", description: "Actual entry price if trade was taken" },
+      actual_exit_price: { type: "number", description: "Actual exit price if trade was closed" },
+      r_multiple: { type: "number", description: "R-multiple (profit/loss as multiple of risk)" },
+      exit_reason: { type: "string", description: "Exit reason" },
+      notes: { type: "string", description: "Additional notes" },
+    },
+  },
+  simulate_weights: { 
+    description: "Simulate ensemble weights against historical evaluations", 
+    params: {
+      claude: { type: "number", description: "Weight for Claude model (0-1)", required: true },
+      gpt4o: { type: "number", description: "Weight for GPT-4o model (0-1)", required: true },
+      gemini: { type: "number", description: "Weight for Gemini model (0-1)", required: true },
+      k: { type: "number", description: "Disagreement penalty coefficient", default: 50 },
+      days: { type: "number", description: "Days of history to analyze", default: 90 },
+      symbol: { type: "string", description: "Filter by symbol (optional)" },
+    },
+  },
   drift_report: { description: "Get model drift report (accuracy, calibration, regime shifts)" },
   drift_check: { description: "Check model drift against thresholds and generate alerts" },
-  drift_alerts: { description: "Get recent model drift alerts from database", params: ["limit?"] },
-  edge_report: { description: "Full edge analytics: rolling Sharpe/Sortino, win rate, profit factor, feature attribution, walk-forward validation", params: ["days?", "rolling_window?", "include_walk_forward?"] },
-  walk_forward: { description: "Walk-forward backtest: train/test split with weight optimization, proves out-of-sample edge vs luck", params: ["days?", "train_size?", "test_size?"] },
+  drift_alerts: { 
+    description: "Get recent model drift alerts from database", 
+    params: {
+      limit: { type: "number", description: "Maximum number of alerts to return", default: 50 },
+    },
+  },
+  edge_report: { 
+    description: "Full edge analytics: rolling Sharpe/Sortino, win rate, profit factor, feature attribution, walk-forward validation", 
+    params: {
+      days: { type: "number", description: "Days of history to analyze", default: 90 },
+      rolling_window: { type: "number", description: "Rolling window size for metrics", default: 20 },
+      include_walk_forward: { type: "boolean", description: "Include walk-forward validation", default: true },
+    },
+  },
+  walk_forward: { 
+    description: "Walk-forward backtest: train/test split with weight optimization, proves out-of-sample edge vs luck", 
+    params: {
+      days: { type: "number", description: "Days of history to analyze", default: 180 },
+      train_size: { type: "number", description: "Training window size in days", default: 30 },
+      test_size: { type: "number", description: "Test window size in days", default: 10 },
+    },
+  },
 
   // Flatten Config
   get_flatten_config: { description: "Get EOD auto-flatten configuration" },
-  set_flatten_enabled: { description: "Enable/disable EOD auto-flatten", params: ["enabled"] },
+  set_flatten_enabled: { 
+    description: "Enable/disable EOD auto-flatten", 
+    params: {
+      enabled: { type: "boolean", description: "Enable auto-flatten", required: true },
+    },
+  },
 
   // Collaboration
-  collab_read: { description: "Read collaboration messages", params: ["limit?", "author?", "tag?", "since?"] },
-  collab_post: { description: "Post a collaboration message", params: ["content", "tags?", "replyTo?"] },
+  collab_read: { 
+    description: "Read collaboration messages", 
+    params: {
+      limit: { type: "number", description: "Maximum number of messages to return", default: 50 },
+      author: { type: "string", description: "Filter by author", enum: ["claude", "chatgpt", "user"] },
+      tag: { type: "string", description: "Filter by tag" },
+      since: { type: "string", description: "Filter messages since timestamp (ISO 8601)" },
+    },
+  },
+  collab_post: { 
+    description: "Post a collaboration message", 
+    params: {
+      content: { type: "string", description: "Message content", required: true },
+      tags: { type: "array", description: "Message tags", items: { type: "string" } },
+      replyTo: { type: "string", description: "Message ID to reply to" },
+    },
+  },
   collab_clear: { description: "Clear all collaboration messages" },
   collab_stats: { description: "Get collaboration statistics" },
 
   // Inbox (event buffer for ChatGPT polling)
-  check_inbox: { description: "Check inbox for recent events (fills, signals, drift alerts, order status). Poll this at conversation start.", params: ["since?", "type?", "symbol?", "unread_only?", "limit?"] },
-  mark_inbox_read: { description: "Mark inbox items as read", params: ["id?", "ids?", "all?"] },
+  check_inbox: { 
+    description: "Check inbox for recent events (fills, signals, drift alerts, order status). Poll this at conversation start.", 
+    params: {
+      since: { type: "string", description: "Filter events since timestamp (ISO 8601)" },
+      type: { type: "string", description: "Filter by event type (e.g., 'fill', 'signal', 'drift_alert', 'order_status')" },
+      symbol: { type: "string", description: "Filter by symbol" },
+      unread_only: { type: "boolean", description: "Only return unread items", default: false },
+      limit: { type: "number", description: "Maximum number of items to return", default: 50 },
+    },
+  },
+  mark_inbox_read: { 
+    description: "Mark inbox items as read", 
+    params: {
+      id: { type: "string", description: "Single item ID to mark as read" },
+      ids: { type: "array", description: "Array of item IDs to mark as read", items: { type: "string" } },
+      all: { type: "boolean", description: "Mark all items as read", default: false },
+    },
+  },
   clear_inbox: { description: "Clear all inbox items" },
   inbox_stats: { description: "Get inbox statistics (total, unread, breakdown by type)" },
 
   // Trade Journal
-  journal_read: { description: "Read trade journal entries", params: ["symbol?", "strategy?", "limit?"] },
-  journal_create: { description: "Create a trade journal entry", params: ["symbol", "reasoning", "tags?", "strategy_version?", "spy_price?", "vix_level?", "ai_recommendations?"] },
-  journal_get: { description: "Get a specific journal entry by ID", params: ["id"] },
-  journal_update: { description: "Update a journal entry", params: ["id", "outcome_tags?", "notes?"] },
-  tradersync_import: { description: "Import TraderSync CSV data", params: ["csv"] },
+  journal_read: { 
+    description: "Read trade journal entries", 
+    params: {
+      symbol: { type: "string", description: "Filter by symbol" },
+      strategy: { type: "string", description: "Filter by strategy" },
+      limit: { type: "number", description: "Maximum number of entries to return", default: 100 },
+    },
+  },
+  journal_create: { 
+    description: "Create a trade journal entry", 
+    params: {
+      symbol: { type: "string", description: "Stock ticker symbol", required: true },
+      reasoning: { type: "string", description: "Trade reasoning/setup description", required: true },
+      tags: { type: "array", description: "Tags for the entry", items: { type: "string" } },
+      strategy_version: { type: "string", description: "Strategy version identifier" },
+      spy_price: { type: "number", description: "SPY price at entry time" },
+      vix_level: { type: "number", description: "VIX level at entry time" },
+      ai_recommendations: { type: "string", description: "AI recommendations/notes" },
+    },
+  },
+  journal_get: { 
+    description: "Get a specific journal entry by ID", 
+    params: {
+      id: { type: "number", description: "Journal entry ID", required: true },
+    },
+  },
+  journal_update: { 
+    description: "Update a journal entry", 
+    params: {
+      id: { type: "number", description: "Journal entry ID", required: true },
+      outcome_tags: { type: "array", description: "Outcome tags (e.g., ['win', 'stopped_out'])", items: { type: "string" } },
+      notes: { type: "string", description: "Additional notes/updates" },
+    },
+  },
+  tradersync_import: { 
+    description: "Import TraderSync CSV data", 
+    params: {
+      csv: { type: "string", description: "CSV content as string", required: true },
+    },
+  },
   tradersync_stats: { description: "Get TraderSync import statistics" },
-  tradersync_trades: { description: "Query TraderSync trades", params: ["symbol?", "side?", "status?", "days?", "limit?"] },
+  tradersync_trades: { 
+    description: "Query TraderSync trades", 
+    params: {
+      symbol: { type: "string", description: "Filter by symbol" },
+      side: { type: "string", description: "Filter by side", enum: ["LONG", "SHORT"] },
+      status: { type: "string", description: "Filter by status" },
+      days: { type: "number", description: "Days of history to query" },
+      limit: { type: "number", description: "Maximum number of trades to return" },
+    },
+  },
 
   // History
-  orders_history: { description: "Query historical orders", params: ["symbol?", "strategy?", "limit?"] },
-  executions_history: { description: "Query historical executions", params: ["symbol?", "limit?"] },
+  orders_history: { 
+    description: "Query historical orders", 
+    params: {
+      symbol: { type: "string", description: "Filter by symbol" },
+      strategy: { type: "string", description: "Filter by strategy" },
+      limit: { type: "number", description: "Maximum number of orders to return", default: 100 },
+    },
+  },
+  executions_history: { 
+    description: "Query historical executions", 
+    params: {
+      symbol: { type: "string", description: "Filter by symbol" },
+      limit: { type: "number", description: "Maximum number of executions to return", default: 100 },
+    },
+  },
 
   // Subscriptions (streaming)
-  subscribe_real_time_bars: { description: "Subscribe to real-time 5-second bars", params: ["symbol", "secType?", "exchange?", "currency?", "whatToShow?", "useRTH?"], requiresIBKR: true },
-  unsubscribe_real_time_bars: { description: "Unsubscribe from real-time bars", params: ["subscriptionId"], requiresIBKR: true },
-  get_real_time_bars: { description: "Get buffered real-time bars from subscription", params: ["subscriptionId", "limit?"], requiresIBKR: true },
-  subscribe_account_updates: { description: "Subscribe to real-time account updates", params: ["account"], requiresIBKR: true },
+  subscribe_real_time_bars: { 
+    description: "Subscribe to real-time 5-second bars", 
+    params: {
+      symbol: { type: "string", description: "Stock ticker symbol", required: true },
+      secType: { type: "string", description: "Security type", enum: ["STK", "OPT", "FUT", "CASH", "BOND", "CFD", "FOP", "WAR", "IOPT", "FWD", "BAG", "IND", "BILL", "FUND", "FIXED", "SLB", "NEWS", "CMDTY", "BSK", "ICU", "ICS"], default: "STK" },
+      exchange: { type: "string", description: "Exchange code", default: "SMART" },
+      currency: { type: "string", description: "Currency code", default: "USD" },
+      whatToShow: { type: "string", description: "Data type to show", enum: ["TRADES", "MIDPOINT", "BID", "ASK"], default: "TRADES" },
+      useRTH: { type: "boolean", description: "Use regular trading hours only", default: true },
+    },
+    requiresIBKR: true 
+  },
+  unsubscribe_real_time_bars: { 
+    description: "Unsubscribe from real-time bars", 
+    params: {
+      subscriptionId: { type: "string", description: "Subscription ID to unsubscribe", required: true },
+    },
+    requiresIBKR: true 
+  },
+  get_real_time_bars: { 
+    description: "Get buffered real-time bars from subscription", 
+    params: {
+      subscriptionId: { type: "string", description: "Subscription ID", required: true },
+      limit: { type: "number", description: "Maximum number of bars to return (max 300)", default: 60 },
+    },
+    requiresIBKR: true 
+  },
+  subscribe_account_updates: { 
+    description: "Subscribe to real-time account updates", 
+    params: {
+      account: { type: "string", description: "Account ID to subscribe to", required: true },
+    },
+    requiresIBKR: true 
+  },
   unsubscribe_account_updates: { description: "Unsubscribe from account updates", requiresIBKR: true },
   get_account_snapshot_stream: { description: "Get latest account snapshot from active subscription", requiresIBKR: true },
   get_scanner_parameters: { description: "Get IBKR scanner parameters XML", requiresIBKR: true },
   list_subscriptions: { description: "List all active subscriptions", requiresIBKR: true },
 
   // Holly AI Alerts
-  holly_import: { description: "Import Holly AI alerts CSV", params: ["csv"] },
-  holly_alerts: { description: "Query Holly AI alerts", params: ["symbol?", "strategy?", "since?", "limit?"] },
+  holly_import: { 
+    description: "Import Holly AI alerts CSV", 
+    params: {
+      csv: { type: "string", description: "CSV content as string", required: true },
+    },
+  },
+  holly_alerts: { 
+    description: "Query Holly AI alerts", 
+    params: {
+      symbol: { type: "string", description: "Filter by symbol" },
+      strategy: { type: "string", description: "Filter by strategy" },
+      since: { type: "string", description: "Filter alerts since timestamp (ISO 8601)" },
+      limit: { type: "number", description: "Maximum number of alerts to return", default: 100 },
+    },
+  },
   holly_stats: { description: "Get Holly AI alert statistics" },
-  holly_symbols: { description: "Get latest distinct symbols from Holly alerts", params: ["limit?"] },
+  holly_symbols: { 
+    description: "Get latest distinct symbols from Holly alerts", 
+    params: {
+      limit: { type: "number", description: "Maximum number of symbols to return", default: 20 },
+    },
+  },
 
   // Holly Pre-Alert Predictor
   holly_predictor_status: { description: "Get Holly predictor status (profiles built, strategies, sample count)" },
-  holly_predictor_profiles: { description: "Get feature distribution profiles learned from historical Holly alerts", params: ["min_samples?"] },
-  holly_predictor_scan: { description: "Scan a single symbol against Holly strategy profiles to detect pre-alert conditions", params: ["symbol", "threshold?"] },
-  holly_predictor_scan_batch: { description: "Scan multiple symbols against Holly profiles in parallel", params: ["symbols", "threshold?"] },
-  holly_predictor_candidates: { description: "Get top pre-alert candidates — symbols most likely to trigger Holly alerts soon", params: ["symbols?", "threshold?", "limit?"] },
-  holly_predictor_refresh: { description: "Rebuild Holly predictor profiles from latest data", params: ["min_samples?"] },
+  holly_predictor_profiles: { 
+    description: "Get feature distribution profiles learned from historical Holly alerts", 
+    params: {
+      min_samples: { type: "number", description: "Minimum sample size for profile inclusion", default: 20 },
+      strategy: { type: "string", description: "Filter by strategy" },
+    },
+  },
+  holly_predictor_scan: { 
+    description: "Scan a single symbol against Holly strategy profiles to detect pre-alert conditions", 
+    params: {
+      symbol: { type: "string", description: "Stock ticker symbol", required: true },
+      threshold: { type: "number", description: "Probability threshold for candidate detection", default: 0.7 },
+    },
+  },
+  holly_predictor_scan_batch: { 
+    description: "Scan multiple symbols against Holly profiles in parallel", 
+    params: {
+      symbols: { type: "array", description: "Array of stock ticker symbols", items: { type: "string" }, required: true },
+      threshold: { type: "number", description: "Probability threshold for candidate detection", default: 0.7 },
+    },
+  },
+  holly_predictor_candidates: { 
+    description: "Get top pre-alert candidates — symbols most likely to trigger Holly alerts soon", 
+    params: {
+      symbols: { type: "array", description: "Array of stock ticker symbols to scan", items: { type: "string" } },
+      threshold: { type: "number", description: "Probability threshold for candidate detection", default: 0.7 },
+      limit: { type: "number", description: "Maximum number of candidates to return", default: 10 },
+      hours_back: { type: "number", description: "Hours back to check for recent signals", default: 24 },
+    },
+  },
+  holly_predictor_refresh: { 
+    description: "Rebuild Holly predictor profiles from latest data", 
+    params: {
+      min_samples: { type: "number", description: "Minimum sample size for profile inclusion", default: 20 },
+    },
+  },
 
   // Holly Reverse-Engineering & Backtest
-  holly_extract_rules: { description: "Reverse-engineer Holly trigger conditions: extract feature thresholds that distinguish Holly alerts from baseline evaluations", params: ["min_alerts?", "min_separation?", "since?"] },
-  holly_backtest: { description: "Backtest extracted Holly rules across any symbol universe and timeframe. Reports precision, win rate, Sharpe, P&L per strategy", params: ["days?", "symbols?", "min_match_score?", "since?", "until?"] },
-  holly_strategy_breakdown: { description: "Quick breakdown of each Holly strategy: defining features, separation, outcome P&L", params: ["since?"] },
+  holly_extract_rules: { 
+    description: "Reverse-engineer Holly trigger conditions: extract feature thresholds that distinguish Holly alerts from baseline evaluations", 
+    params: {
+      min_alerts: { type: "number", description: "Minimum alerts required per rule", default: 10 },
+      min_separation: { type: "number", description: "Minimum feature separation threshold", default: 0.2 },
+      since: { type: "string", description: "Filter rules since timestamp (ISO 8601)" },
+    },
+  },
+  holly_backtest: { 
+    description: "Backtest extracted Holly rules across any symbol universe and timeframe. Reports precision, win rate, Sharpe, P&L per strategy", 
+    params: {
+      days: { type: "number", description: "Days of history to backtest" },
+      symbols: { type: "array", description: "Array of symbols to backtest", items: { type: "string" } },
+      min_match_score: { type: "number", description: "Minimum match score for rule firing", default: 0.6 },
+      since: { type: "string", description: "Backtest start date (ISO 8601)" },
+      until: { type: "string", description: "Backtest end date (ISO 8601)" },
+    },
+  },
+  holly_strategy_breakdown: { 
+    description: "Quick breakdown of each Holly strategy: defining features, separation, outcome P&L", 
+    params: {
+      since: { type: "string", description: "Filter since timestamp (ISO 8601)" },
+    },
+  },
 
   // Holly Trade Data (historical Trade Ideas export)
-  holly_trade_import: { description: "Import Holly trade CSV content (Trade Ideas export format)", params: ["csv"] },
-  holly_trade_import_file: { description: "Import Holly trades from a file path on disk", params: ["file_path"] },
+  holly_trade_import: { 
+    description: "Import Holly trade CSV content (Trade Ideas export format)", 
+    params: {
+      csv: { type: "string", description: "CSV content as string", required: true },
+    },
+  },
+  holly_trade_import_file: { 
+    description: "Import Holly trades from a file path on disk", 
+    params: {
+      file_path: { type: "string", description: "Path to CSV file on disk", required: true },
+    },
+  },
   holly_trade_stats: { description: "Get Holly trade statistics (total, win rate, avg R, avg giveback, avg hold time)" },
-  holly_trades: { description: "Query Holly historical trades with MFE/MAE/giveback metrics", params: ["symbol?", "strategy?", "segment?", "since?", "until?", "limit?"] },
+  holly_trades: { 
+    description: "Query Holly historical trades with MFE/MAE/giveback metrics", 
+    params: {
+      symbol: { type: "string", description: "Filter by symbol" },
+      strategy: { type: "string", description: "Filter by strategy" },
+      segment: { type: "string", description: "Filter by segment (e.g., 'AM', 'PM')" },
+      since: { type: "string", description: "Filter trades since timestamp (ISO 8601)" },
+      until: { type: "string", description: "Filter trades until timestamp (ISO 8601)" },
+      limit: { type: "number", description: "Maximum number of trades to return", default: 100 },
+    },
+  },
 
   // Holly Exit Autopsy
-  holly_exit_autopsy: { description: "Full exit autopsy report: strategy leaderboard, MFE/MAE profiles, exit policy recommendations, time-of-day analysis, segment comparison", params: ["since?", "until?"] },
+  holly_exit_autopsy: { 
+    description: "Full exit autopsy report: strategy leaderboard, MFE/MAE profiles, exit policy recommendations, time-of-day analysis, segment comparison", 
+    params: {
+      since: { type: "string", description: "Filter trades since timestamp (ISO 8601)" },
+      until: { type: "string", description: "Filter trades until timestamp (ISO 8601)" },
+    },
+  },
 
   // Trailing Stop Optimizer
-  trailing_stop_optimize: { description: "Run all 19 trailing stop strategies on Holly trades, sorted by P&L improvement. Simulates fixed-%, ATR, time-decay, MFE-escalation, breakeven+trail exits", params: ["strategy?", "segment?", "since?", "until?"] },
-  trailing_stop_summary: { description: "Compact comparison table of all trailing stop strategies: original vs simulated P&L, win rate, Sharpe, giveback reduction", params: ["strategy?", "segment?", "since?", "until?"] },
-  trailing_stop_per_strategy: { description: "Find the optimal trailing stop for EACH Holly strategy independently. Shows best trailing params per strategy", params: ["since?", "until?", "min_trades?"] },
-  trailing_stop_recommend: { description: "Get the best trailing stop recommendation for a symbol/strategy", params: ["symbol", "strategy?"] },
-  trailing_stop_simulate: { description: "Simulate a single custom trailing stop strategy with specific parameters", params: ["type", "name?", "trail_pct?", "atr_mult?", "initial_target_pct?", "decay_per_min?", "mfe_trigger_pct?", "tight_trail_pct?", "be_trigger_r?", "post_be_trail_pct?", "strategy?", "segment?", "since?", "until?"] },
+  trailing_stop_optimize: { 
+    description: "Run all 19 trailing stop strategies on Holly trades, sorted by P&L improvement. Simulates fixed-%, ATR, time-decay, MFE-escalation, breakeven+trail exits", 
+    params: {
+      strategy: { type: "string", description: "Filter by strategy" },
+      segment: { type: "string", description: "Filter by segment (e.g., 'AM', 'PM')" },
+      since: { type: "string", description: "Filter trades since timestamp (ISO 8601)" },
+      until: { type: "string", description: "Filter trades until timestamp (ISO 8601)" },
+    },
+  },
+  trailing_stop_summary: { 
+    description: "Compact comparison table of all trailing stop strategies: original vs simulated P&L, win rate, Sharpe, giveback reduction", 
+    params: {
+      strategy: { type: "string", description: "Filter by strategy" },
+      segment: { type: "string", description: "Filter by segment (e.g., 'AM', 'PM')" },
+      since: { type: "string", description: "Filter trades since timestamp (ISO 8601)" },
+      until: { type: "string", description: "Filter trades until timestamp (ISO 8601)" },
+    },
+  },
+  trailing_stop_per_strategy: { 
+    description: "Find the optimal trailing stop for EACH Holly strategy independently. Shows best trailing params per strategy", 
+    params: {
+      since: { type: "string", description: "Filter trades since timestamp (ISO 8601)" },
+      until: { type: "string", description: "Filter trades until timestamp (ISO 8601)" },
+      min_trades: { type: "number", description: "Minimum trades required per strategy", default: 20 },
+    },
+  },
+  trailing_stop_recommend: { 
+    description: "Get the best trailing stop recommendation for a symbol/strategy", 
+    params: {
+      symbol: { type: "string", description: "Stock ticker symbol", required: true },
+      strategy: { type: "string", description: "Filter by strategy" },
+    },
+  },
+  trailing_stop_simulate: { 
+    description: "Simulate a single custom trailing stop strategy with specific parameters", 
+    params: {
+      type: { type: "string", description: "Trailing stop type", enum: ["fixed_pct", "atr_multiple", "time_decay", "mfe_escalation", "breakeven_trail"], required: true },
+      name: { type: "string", description: "Custom name for the simulation" },
+      trail_pct: { type: "number", description: "Trailing percentage (for fixed_pct type)" },
+      atr_mult: { type: "number", description: "ATR multiplier (for atr_multiple type)" },
+      initial_target_pct: { type: "number", description: "Initial target percentage (for time_decay type)" },
+      decay_per_min: { type: "number", description: "Decay per minute (for time_decay type)" },
+      mfe_trigger_pct: { type: "number", description: "MFE trigger percentage (for mfe_escalation type)" },
+      tight_trail_pct: { type: "number", description: "Tight trail percentage (for mfe_escalation type)" },
+      be_trigger_r: { type: "number", description: "Breakeven trigger R-multiple (for breakeven_trail type)" },
+      post_be_trail_pct: { type: "number", description: "Post-breakeven trail percentage (for breakeven_trail type)" },
+      strategy: { type: "string", description: "Filter by strategy" },
+      segment: { type: "string", description: "Filter by segment (e.g., 'AM', 'PM')" },
+      since: { type: "string", description: "Filter trades since timestamp (ISO 8601)" },
+      until: { type: "string", description: "Filter trades until timestamp (ISO 8601)" },
+    },
+  },
   trailing_stop_params: { description: "List all 19 default trailing stop parameter sets that can be tested" },
 
   // Signals / Auto-Eval
-  signal_feed: { description: "Query evaluated signals from auto-eval pipeline", params: ["symbol?", "direction?", "since?", "limit?"] },
+  signal_feed: { 
+    description: "Query evaluated signals from auto-eval pipeline", 
+    params: {
+      symbol: { type: "string", description: "Filter by symbol" },
+      direction: { type: "string", description: "Filter by direction", enum: ["LONG", "SHORT"] },
+      since: { type: "string", description: "Filter signals since timestamp (ISO 8601)" },
+      limit: { type: "number", description: "Maximum number of signals to return", default: 50 },
+    },
+  },
   signal_stats: { description: "Get signal statistics (total, tradeable, blocked)" },
   auto_eval_status: { description: "Get auto-eval pipeline status (enabled, running, config)" },
-  auto_eval_toggle: { description: "Enable or disable auto-eval pipeline", params: ["enabled"] },
+  auto_eval_toggle: { 
+    description: "Enable or disable auto-eval pipeline", 
+    params: {
+      enabled: { type: "boolean", description: "Enable auto-eval pipeline", required: true },
+    },
+  },
   auto_link_stats: { description: "Get evaluation-to-execution auto-link statistics and recent links" },
   recalibration_status: { description: "Get Bayesian recalibration status: outcomes since last batch, per-regime weights, state file" },
 
   // Multi-model orchestration
-  multi_model_score: { description: "Collect weighted scores from GPT, Gemini, and Claude providers", params: ["symbol", "features?"] },
-  multi_model_consensus: { description: "Return weighted consensus verdict and disagreement notes from provider scores", params: ["scores"] },
+  multi_model_score: { 
+    description: "Collect weighted scores from GPT, Gemini, and Claude providers", 
+    params: {
+      symbol: { type: "string", description: "Stock ticker symbol", required: true },
+      features: { type: "object", description: "Optional feature vector to override auto-computation" },
+    },
+  },
+  multi_model_consensus: { 
+    description: "Return weighted consensus verdict and disagreement notes from provider scores", 
+    params: {
+      scores: { type: "object", description: "Provider scores object with gpt4o, gemini, claude fields", required: true },
+    },
+  },
 
   // Divoom Display
   divoom_status: { description: "Check Divoom Times Gate display connection and get device info" },
-  divoom_send_text: { description: "Send text to Divoom Times Gate display", params: ["text", "color?", "x?", "y?", "font?", "scrollSpeed?"] },
-  divoom_set_brightness: { description: "Set Divoom Times Gate display brightness (0-100)", params: ["brightness"] },
+  divoom_send_text: { 
+    description: "Send text to Divoom Times Gate display", 
+    params: {
+      text: { type: "string", description: "Text to display", required: true },
+      color: { type: "string", description: "Text color in hex format (e.g., '#FF0000')" },
+      x: { type: "number", description: "X position (0-63)" },
+      y: { type: "number", description: "Y position (0-63)" },
+      font: { type: "number", description: "Font ID (0-7)" },
+      scrollSpeed: { type: "number", description: "Scroll speed (ms per pixel)" },
+    },
+  },
+  divoom_set_brightness: { 
+    description: "Set Divoom Times Gate display brightness (0-100)", 
+    params: {
+      brightness: { type: "number", description: "Brightness level (0-100)", required: true },
+    },
+  },
 
   // Ops / Monitoring
   ops_health: { description: "Full ops health dashboard: process metrics, IBKR availability SLA, request latency percentiles, error rates, incidents" },
-  ops_incidents: { description: "Get recent operational incidents (disconnects, errors, heartbeat timeouts)", params: ["limit?"] },
-  ops_runbook: { description: "Get operational runbook guidance by scenario keyword", params: ["scenario?"] },
+  ops_incidents: { 
+    description: "Get recent operational incidents (disconnects, errors, heartbeat timeouts)", 
+    params: {
+      limit: { type: "number", description: "Maximum number of incidents to return", default: 20 },
+    },
+  },
+  ops_runbook: { 
+    description: "Get operational runbook guidance by scenario keyword", 
+    params: {
+      scenario: { type: "string", description: "Scenario keyword (e.g., 'bridge_crash', 'ibkr_disconnect', 'tunnel_down')", enum: ["bridge_crash", "ibkr_disconnect", "tunnel_down", "mcp_transport_broken", "high_error_rate", "memory_leak", "tws_restart"] },
+    },
+  },
   ops_uptime: { description: "Get uptime summary: process uptime, IBKR connection SLA, memory/CPU, error rate" },
   ops_sla: { description: "Get availability SLA report: uptime % for bridge/IBKR/tunnel/end-to-end over 1h/24h/7d/30d windows" },
-  ops_outages: { description: "Get recent outages with duration and affected components", params: ["limit?"] },
+  ops_outages: { 
+    description: "Get recent outages with duration and affected components", 
+    params: {
+      limit: { type: "number", description: "Maximum number of outages to return", default: 20 },
+    },
+  },
 };
 
 /**
