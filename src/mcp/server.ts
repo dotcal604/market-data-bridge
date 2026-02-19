@@ -101,6 +101,12 @@ import { RISK_CONFIG_DEFAULTS, type RiskConfigParam } from "../db/schema.js";
 import type { ModelEvaluation } from "../eval/models/types.js";
 import { logger } from "../logging.js";
 import { updateMcpSessionActivity } from "../db/database.js";
+import {
+  createExitPlan, getExitPlan, getExitPlanByCorrelation, getActiveExitPlans,
+  queryExitPlans, activateExitPlan, updatePolicy, recordOverride,
+  closeExitPlan, getExitPlanStats, recommendPolicy,
+} from "../exit-plan/index.js";
+import type { ExitPlanState, OverrideReason } from "../exit-plan/types.js";
 
 const log = logger.child({ subsystem: "mcp" });
 
@@ -2391,6 +2397,206 @@ export function createMcpServer(): McpServer {
       upsertRiskConfig(entries);
       return { content: [{ type: "text", text: JSON.stringify({ updated: entries.length, config: getRiskGateConfig() }, null, 2) }] };
     }
+  );
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // EXIT PLAN TOOLS
+  // ═══════════════════════════════════════════════════════════════════════
+
+  // --- Tool: exit_plan_create ---
+  server.tool(
+    "exit_plan_create",
+    "Create an exit plan for a bracket order. Generates recommended TP ladder, trailing stop, and protect triggers based on Holly exit-autopsy data. Attach to a bracket via correlation_id.",
+    {
+      correlation_id: z.string().describe("Bracket correlation_id from place_bracket_order or place_advanced_bracket"),
+      symbol: z.string().describe("Ticker symbol"),
+      direction: z.enum(["long", "short"]).describe("Trade direction"),
+      total_shares: z.number().describe("Total position size"),
+      entry_price: z.number().describe("Entry price (or planned entry for limit orders)"),
+      hard_stop: z.number().describe("Hard stop loss price"),
+      strategy: z.string().optional().describe("Holly strategy name (for tailored recommendations)"),
+      eval_id: z.string().optional().describe("Evaluation ID to link"),
+    },
+    withErrorHandling("exit_plan_create", async (params) => {
+      const plan = createExitPlan({
+        correlation_id: params.correlation_id,
+        symbol: params.symbol,
+        direction: params.direction,
+        total_shares: params.total_shares,
+        entry_price: params.entry_price,
+        hard_stop: params.hard_stop,
+        strategy: params.strategy,
+        eval_id: params.eval_id,
+      });
+      return { content: [{ type: "text", text: JSON.stringify(plan, null, 2) }] };
+    })
+  );
+
+  // --- Tool: exit_plan_get ---
+  server.tool(
+    "exit_plan_get",
+    "Get an exit plan by ID or correlation_id. Returns full policy, runtime state, and override history.",
+    {
+      id: z.string().optional().describe("Exit plan UUID"),
+      correlation_id: z.string().optional().describe("Bracket correlation_id"),
+    },
+    withErrorHandling("exit_plan_get", async (params) => {
+      const plan = params.id
+        ? getExitPlan(params.id)
+        : params.correlation_id
+          ? getExitPlanByCorrelation(params.correlation_id)
+          : null;
+      if (!plan) {
+        return { content: [{ type: "text", text: JSON.stringify({ error: "Exit plan not found" }) }] };
+      }
+      return { content: [{ type: "text", text: JSON.stringify(plan, null, 2) }] };
+    })
+  );
+
+  // --- Tool: exit_plan_list ---
+  server.tool(
+    "exit_plan_list",
+    "List exit plans. Defaults to active (non-terminal) plans. Filter by symbol or state.",
+    {
+      symbol: z.string().optional().describe("Filter by symbol"),
+      state: z.enum(["draft", "active", "protecting", "scaling", "exited", "cancelled"]).optional().describe("Filter by state"),
+      active_only: z.boolean().default(true).describe("Only show non-terminal plans (default true)"),
+      limit: z.number().default(20).describe("Max results"),
+    },
+    withErrorHandling("exit_plan_list", async (params) => {
+      if (params.active_only && !params.state) {
+        const plans = getActiveExitPlans();
+        return { content: [{ type: "text", text: JSON.stringify({ count: plans.length, plans }, null, 2) }] };
+      }
+      const plans = queryExitPlans({
+        symbol: params.symbol,
+        state: params.state as ExitPlanState | undefined,
+        limit: params.limit,
+      });
+      return { content: [{ type: "text", text: JSON.stringify({ count: plans.length, plans }, null, 2) }] };
+    })
+  );
+
+  // --- Tool: exit_plan_activate ---
+  server.tool(
+    "exit_plan_activate",
+    "Activate an exit plan after entry fill. Transitions draft → active and records actual entry price.",
+    {
+      id: z.string().describe("Exit plan UUID"),
+      entry_price: z.number().describe("Actual fill price"),
+    },
+    withErrorHandling("exit_plan_activate", async (params) => {
+      const plan = activateExitPlan(params.id, params.entry_price);
+      return { content: [{ type: "text", text: JSON.stringify(plan, null, 2) }] };
+    })
+  );
+
+  // --- Tool: exit_plan_recommend ---
+  server.tool(
+    "exit_plan_recommend",
+    "Get recommended exit policy (TP ladder, trailing stop, protect trigger) without creating a plan. Preview before committing.",
+    {
+      symbol: z.string().describe("Ticker symbol"),
+      direction: z.enum(["long", "short"]).describe("Trade direction"),
+      entry_price: z.number().describe("Entry price"),
+      stop_price: z.number().describe("Stop loss price"),
+      total_shares: z.number().describe("Position size"),
+      strategy: z.string().optional().describe("Holly strategy name"),
+    },
+    withErrorHandling("exit_plan_recommend", async (params) => {
+      const policy = recommendPolicy({
+        symbol: params.symbol,
+        direction: params.direction,
+        entry_price: params.entry_price,
+        stop_price: params.stop_price,
+        total_shares: params.total_shares,
+        strategy: params.strategy,
+      });
+      return { content: [{ type: "text", text: JSON.stringify(policy, null, 2) }] };
+    })
+  );
+
+  // --- Tool: exit_plan_update_policy ---
+  server.tool(
+    "exit_plan_update_policy",
+    "Modify an exit plan's policy (stop, TP targets, runner, protect trigger). Use for pre-trade adjustments.",
+    {
+      id: z.string().describe("Exit plan UUID"),
+      hard_stop: z.number().optional().describe("New hard stop price"),
+      trail_pct: z.number().optional().describe("New trailing stop percentage (0-1)"),
+      time_stop_min: z.number().optional().describe("Time-based stop (minutes)"),
+    },
+    withErrorHandling("exit_plan_update_policy", async (params) => {
+      const updates: Record<string, unknown> = {};
+      if (params.hard_stop !== undefined) updates.hard_stop = params.hard_stop;
+      if (params.trail_pct !== undefined || params.time_stop_min !== undefined) {
+        const existing = getExitPlan(params.id);
+        if (!existing) throw new Error("Exit plan not found");
+        updates.runner = {
+          ...existing.policy.runner,
+          ...(params.trail_pct !== undefined ? { trail_pct: params.trail_pct } : {}),
+          ...(params.time_stop_min !== undefined ? { time_stop_min: params.time_stop_min } : {}),
+        };
+      }
+      const plan = updatePolicy(params.id, updates);
+      return { content: [{ type: "text", text: JSON.stringify(plan, null, 2) }] };
+    })
+  );
+
+  // --- Tool: exit_plan_record_override ---
+  server.tool(
+    "exit_plan_record_override",
+    "Record a psychology override — when the trader deviates from the exit plan. Captures reason (revenge, too_early, too_late, freeze, tilt, news, technical, sizing, manual_override, system_error).",
+    {
+      exit_plan_id: z.string().describe("Exit plan UUID"),
+      field: z.string().describe("What was changed (e.g., 'hard_stop', 'tp1', 'runner', 'position_size')"),
+      old_value: z.string().describe("Previous value (serialized)"),
+      new_value: z.string().describe("New value (serialized)"),
+      reason: z.enum([
+        "revenge", "too_early", "too_late", "freeze", "tilt",
+        "news", "technical", "sizing", "manual_override", "system_error",
+      ]).describe("Why the plan was overridden"),
+      notes: z.string().optional().describe("Free-form context"),
+    },
+    withErrorHandling("exit_plan_record_override", async (params) => {
+      const event = recordOverride({
+        exit_plan_id: params.exit_plan_id,
+        field: params.field,
+        old_value: params.old_value,
+        new_value: params.new_value,
+        reason: params.reason as OverrideReason,
+        notes: params.notes,
+      });
+      return { content: [{ type: "text", text: JSON.stringify(event, null, 2) }] };
+    })
+  );
+
+  // --- Tool: exit_plan_close ---
+  server.tool(
+    "exit_plan_close",
+    "Close an exit plan (mark as exited or cancelled). Calculates R-multiple and giveback ratio.",
+    {
+      id: z.string().describe("Exit plan UUID"),
+      exit_price: z.number().describe("Exit price (0 for cancellation)"),
+      reason: z.enum(["tp_filled", "sl_filled", "manual", "flatten", "cancelled"]).describe("Why the plan closed"),
+    },
+    withErrorHandling("exit_plan_close", async (params) => {
+      const plan = closeExitPlan(params.id, params.exit_price, params.reason);
+      return { content: [{ type: "text", text: JSON.stringify(plan, null, 2) }] };
+    })
+  );
+
+  // --- Tool: exit_plan_stats ---
+  server.tool(
+    "exit_plan_stats",
+    "Get exit plan analytics: total plans, avg R-multiple, avg giveback ratio, override frequency and reasons.",
+    {
+      days: z.number().default(90).describe("Lookback period in days"),
+    },
+    withErrorHandling("exit_plan_stats", async (params) => {
+      const stats = getExitPlanStats(params.days);
+      return { content: [{ type: "text", text: JSON.stringify(stats, null, 2) }] };
+    })
   );
 
   return server;
