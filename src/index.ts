@@ -87,56 +87,50 @@ async function main() {
     await new Promise((r) => setTimeout(r, 5000));
   }
 
-  // IBKR connection is only needed for REST/both modes.
-  // MCP-only processes proxy through the REST bridge and must NOT connect
-  // to TWS — doing so creates clientId collisions and phantom connections
-  // that churn in TWS's API Connections panel.
-  if (mode !== "mcp") {
-    try {
-      logger.info("Delaying IBKR connect by 5s to allow TWS cleanup");
-      await sleep(5_000);
-      await connect();
-      logger.info("IBKR connected — account data available");
-
-      // Attach persistent DB listeners for order/execution events
-      attachPersistentOrderListeners();
-
-      // Register reconnect hook: re-attach order listeners + reconcile DB
-      // This runs on every TWS reconnect (clientId collision, network blip, TWS restart)
-      onReconnect(() => {
-        resetPersistentListenerGuard();
-        attachPersistentOrderListeners();
-        logger.info("Re-attached persistent order listeners after reconnect");
-
-        // Re-run reconciliation to sync DB with IBKR after disconnect
-        runReconciliation().catch((e) => {
-          logger.error({ err: e }, "Post-reconnect reconciliation failed");
-        });
-      }, "order-listeners+reconciliation");
-
-      // Run boot reconciliation (compare DB state vs IBKR state)
-      runReconciliation().catch((e) => {
-        logger.error({ err: e }, "Boot reconciliation failed");
-      });
-
-      // Start periodic snapshots (account + positions every 5 min during market hours)
-      startScheduler();
-    } catch (e: any) {
-      logger.warn({ err: e.message }, "IBKR not available — market data still works via Yahoo");
-      logger.info("Will keep retrying IBKR connection in background...");
-      scheduleReconnect();
-    }
-  } else {
-    logger.info("MCP-only mode — skipping IBKR connection (REST bridge handles it)");
+  // A) Connect to TWS — all modes try this.
+  // MCP connects directly for tool calls instead of proxying through REST.
+  try {
+    logger.info("Delaying IBKR connect by 5s to allow TWS cleanup");
+    await sleep(5_000);
+    await connect();
+    logger.info("IBKR connected — account data available");
+  } catch (e: any) {
+    logger.warn({ err: e.message }, "IBKR not available — market data still works via Yahoo");
+    logger.info("Will keep retrying IBKR connection in background...");
+    scheduleReconnect();
   }
 
-  // Start Holly AI alert file watcher (polls Trade Ideas CSV export)
-  // Runs independently of IBKR — watches a local CSV file
-  startHollyWatcher();
+  // B) Background automation — only the always-on bridge process (rest/both).
+  // MCP processes are lean: connect + serve tools, no scheduler/flatten/reconciliation.
+  // Running these in multiple MCP clients risks duplicate EOD flatten orders.
+  if (mode !== "mcp") {
+    attachPersistentOrderListeners();
 
-  // Start Divoom display updater (sends live trading data to pixel art display)
-  // Runs independently — polls data and updates display periodically
-  await startDivoomUpdater();
+    onReconnect(() => {
+      resetPersistentListenerGuard();
+      attachPersistentOrderListeners();
+      logger.info("Re-attached persistent order listeners after reconnect");
+
+      runReconciliation().catch((e) => {
+        logger.error({ err: e }, "Post-reconnect reconciliation failed");
+      });
+    }, "order-listeners+reconciliation");
+
+    runReconciliation().catch((e) => {
+      logger.error({ err: e }, "Boot reconciliation failed");
+    });
+
+    startScheduler();
+  } else {
+    logger.info("MCP mode — connected to TWS for tools, no background automation");
+  }
+
+  // Holly watcher + Divoom updater only run in bridge mode (rest/both).
+  // MCP clients are lean — no file watchers or display drivers.
+  if (mode !== "mcp") {
+    startHollyWatcher();
+    await startDivoomUpdater();
+  }
 
   // Start REST server
   if (mode === "rest" || mode === "both") {
@@ -161,8 +155,12 @@ async function main() {
       shutdown().catch((e) => logger.error({ err: e }, "Shutdown error after stdout failure"));
     });
 
-    await mcpServer.connect(transport);
-    logger.info("MCP server running on stdio");
+    try {
+      await mcpServer.connect(transport);
+      logger.info("MCP server running on stdio");
+    } catch (e: any) {
+      logger.error({ err: e.message }, "MCP transport failed to connect");
+    }
   }
 
   // ── Bridge fully initialized — accept connections ──
