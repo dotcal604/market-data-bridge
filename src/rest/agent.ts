@@ -1427,55 +1427,6 @@ export const actionsMeta: Record<string, ActionMeta> = {
     },
   },
 
-  // ── Evaluation Analytics ──
-  eval_stats: { 
-    description: "Get evaluation statistics (total, by model, win rate, avg scores)",
-    params: {
-      days: { type: "number", description: "Days of history to analyze", default: 30 },
-      symbol: { type: "string", description: "Filter by symbol" },
-    },
-  },
-  eval_outcomes: { 
-    description: "Query recorded evaluation outcomes", 
-    params: {
-      days: { type: "number", description: "Days of history to query", default: 90 },
-      symbol: { type: "string", description: "Filter by symbol" },
-      limit: { type: "number", description: "Maximum number of outcomes to return", default: 100 },
-    },
-  },
-  eval_reasoning: { 
-    description: "Get detailed model reasoning for an evaluation", 
-    params: {
-      evaluation_id: { type: "string", description: "Evaluation ID", required: true },
-    },
-  },
-  daily_summary: { 
-    description: "Get daily evaluation and outcome summary", 
-    params: {
-      date: { type: "string", description: "Date in YYYY-MM-DD format (defaults to today)" },
-    },
-  },
-  weight_history: { 
-    description: "Get ensemble weight history and changes", 
-    params: {
-      limit: { type: "number", description: "Maximum number of weight changes to return", default: 50 },
-    },
-  },
-
-  // ── Inbox Management ──
-  inbox_digest: { 
-    description: "Get inbox digest summary (grouped by type, recent unread)", 
-    params: {
-      hours: { type: "number", description: "Hours back to include in digest", default: 24 },
-    },
-  },
-  inbox_prune: { 
-    description: "Remove old read inbox items", 
-    params: {
-      days: { type: "number", description: "Remove items older than N days", default: 7 },
-    },
-  },
-
   // Flatten Config
   get_flatten_config: { description: "Get EOD auto-flatten configuration" },
   set_flatten_enabled: { 
