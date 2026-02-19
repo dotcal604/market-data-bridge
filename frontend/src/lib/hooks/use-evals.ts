@@ -1,9 +1,24 @@
 "use client";
 
+import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { evalClient } from "../api/eval-client";
+import { useWebSocket } from "./useWebSocket";
 
 export function useEvalHistory(limit = 50, symbol?: string) {
+  const queryClient = useQueryClient();
+  const { data: wsData } = useWebSocket<unknown>("eval");
+
+  useEffect(() => {
+    if (wsData) {
+      queryClient.invalidateQueries({ queryKey: ["eval-history"] });
+      queryClient.invalidateQueries({ queryKey: ["eval-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["eval-outcomes"] });
+      queryClient.invalidateQueries({ queryKey: ["eval-calibration"] });
+      queryClient.invalidateQueries({ queryKey: ["model-agreement"] });
+    }
+  }, [wsData, queryClient]);
+
   return useQuery({
     queryKey: ["eval-history", limit, symbol],
     queryFn: () => evalClient.getHistory(limit, symbol),
