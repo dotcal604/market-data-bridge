@@ -3,11 +3,15 @@
  * Generates OpenAPI 3.0 JSON with component schemas for each action.
  */
 import { actionsMeta, getActionList } from "./agent.js";
+import type { ParamSchema, ActionMeta } from "./agent.js";
 
 interface OpenApiProperty {
   type: string;
   description?: string;
   additionalProperties?: boolean;
+  enum?: string[] | number[];
+  default?: string | number | boolean;
+  items?: { type: string };
 }
 
 interface OpenApiSchema {
@@ -81,7 +85,7 @@ function generateActionParamsSchema(actionName: string): OpenApiSchema {
     additionalProperties: false,
   };
 
-  if (!meta.params || meta.params.length === 0) {
+  if (!meta.params) {
     // No params defined - allow any properties
     schema.additionalProperties = true;
     return schema;
@@ -89,20 +93,48 @@ function generateActionParamsSchema(actionName: string): OpenApiSchema {
 
   const required: string[] = [];
   
-  for (const param of meta.params) {
-    // Parse param format: "paramName" or "paramName?" (optional)
-    const isOptional = param.endsWith("?");
-    const paramName = isOptional ? param.slice(0, -1) : param;
-    
-    if (!isOptional) {
-      required.push(paramName);
-    }
+  // Handle both string[] (legacy) and Record<string, ParamSchema> (enhanced)
+  if (Array.isArray(meta.params)) {
+    // Legacy format: ["paramName", "paramName?"]
+    for (const param of meta.params) {
+      const isOptional = param.endsWith("?");
+      const paramName = isOptional ? param.slice(0, -1) : param;
+      
+      if (!isOptional) {
+        required.push(paramName);
+      }
 
-    // Add property to schema
-    schema.properties![paramName] = {
-      type: "string", // Default to string; could be enhanced with type inference
-      description: `Parameter: ${paramName}`,
-    };
+      schema.properties![paramName] = {
+        type: "string",
+        description: `Parameter: ${paramName}`,
+      };
+    }
+  } else {
+    // Enhanced format: Record<string, ParamSchema>
+    for (const [paramName, paramSchema] of Object.entries(meta.params)) {
+      const property: OpenApiProperty = {
+        type: paramSchema.type,
+        description: paramSchema.description,
+      };
+
+      if (paramSchema.enum) {
+        property.enum = paramSchema.enum;
+      }
+
+      if (paramSchema.default !== undefined) {
+        property.default = paramSchema.default;
+      }
+
+      if (paramSchema.items) {
+        property.items = paramSchema.items;
+      }
+
+      schema.properties![paramName] = property;
+
+      if (paramSchema.required) {
+        required.push(paramName);
+      }
+    }
   }
 
   if (required.length > 0) {
