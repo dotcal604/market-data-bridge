@@ -1016,7 +1016,28 @@ export function insertJournalEntry(data: {
     session_type: data.session_type ?? null,
     spread_pct: data.spread_pct ?? null,
   });
-  return Number(info.lastInsertRowid);
+  const entryId = Number(info.lastInsertRowid);
+
+  // Emit journal post to WebSocket clients asynchronously (with sequence ID for ordering)
+  // Use setImmediate to schedule broadcast after DB write is complete
+  setImmediate(() => {
+    try {
+      const { wsBroadcastWithSequence, getNextSequenceId } = require("../ws/server.js");
+      const seqId = getNextSequenceId();
+      wsBroadcastWithSequence("journal_posted", {
+        type: "journal",
+        action: "posted",
+        entryId,
+        symbol: data.symbol ?? null,
+        reasoning: data.reasoning,
+        timestamp: new Date().toISOString(),
+      }, seqId);
+    } catch {
+      // WebSocket not available — this is non-fatal
+    }
+  });
+
+  return entryId;
 }
 
 /**
