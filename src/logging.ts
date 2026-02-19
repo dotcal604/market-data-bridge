@@ -54,6 +54,7 @@ export const logCollab = logger.child({ subsystem: "collab" });
 export const logReconcile = logger.child({ subsystem: "reconcile" });
 export const logRisk = logger.child({ subsystem: "risk-gate" });
 export const logDb = logger.child({ subsystem: "database" });
+export const logAnalytics = logger.child({ subsystem: "analytics" });
 
 // Express request logging middleware
 import type { Request, Response, NextFunction } from "express";

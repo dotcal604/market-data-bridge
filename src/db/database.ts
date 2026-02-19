@@ -3,8 +3,7 @@ import { randomUUID } from "crypto";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
-import { evalReasoningSchemaSql } from "./schema.js";
-import { RISK_CONFIG_DEFAULTS, RISK_CONFIG_SCHEMA_SQL, ANALYTICS_JOBS_SCHEMA_SQL, type RiskConfigParam } from "./schema.js";
+import { evalReasoningSchemaSql, RISK_CONFIG_DEFAULTS, RISK_CONFIG_SCHEMA_SQL, ANALYTICS_JOBS_SCHEMA_SQL, type RiskConfigParam } from "./schema.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const defaultDataDir = path.join(__dirname, "../../data");

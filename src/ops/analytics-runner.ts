@@ -2,14 +2,11 @@ import { spawn } from "child_process";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
-import { logger } from "../logging.js";
+import { logAnalytics } from "../logging.js";
 import { insertAnalyticsJob, updateAnalyticsJob } from "../db/database.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const analyticsDir = path.join(__dirname, "../../analytics");
-
-// Analytics logger
-const logAnalytics = logger.child({ subsystem: "analytics" });
 
 // Known Python scripts whitelist (populated at init time)
 let knownScripts: Set<string> = new Set();
@@ -85,26 +82,33 @@ export async function runAnalyticsScript(
       env: { ...process.env, PYTHONUNBUFFERED: "1" }, // Unbuffered for real-time output
     });
 
+    const MAX_BUFFER = 1024 * 1024; // 1MB cap per stream
+
     // Capture stdout
     proc.stdout.on("data", (data) => {
       const chunk = data.toString();
-      stdout += chunk;
+      if (stdout.length < MAX_BUFFER) {
+        stdout += chunk.slice(0, MAX_BUFFER - stdout.length);
+      }
       logAnalytics.debug({ jobId, chunk: chunk.slice(0, 200) }, "Script stdout");
     });
 
     // Capture stderr
     proc.stderr.on("data", (data) => {
       const chunk = data.toString();
-      stderr += chunk;
+      if (stderr.length < MAX_BUFFER) {
+        stderr += chunk.slice(0, MAX_BUFFER - stderr.length);
+      }
       logAnalytics.debug({ jobId, chunk: chunk.slice(0, 200) }, "Script stderr");
     });
 
     // Handle process exit
-    proc.on("exit", (code, signal) => {
+    proc.on("exit", (code, _signal) => {
       exitCode = code;
       const durationMs = Date.now() - startTime;
 
-      if (signal === "SIGTERM" && timedOut) {
+      // Use timedOut flag (not signal) — SIGTERM signal detection is unreliable on Windows
+      if (timedOut) {
         logAnalytics.warn({ jobId, scriptName, durationMs }, "Script timed out");
         updateAnalyticsJob(jobId, {
           status: "timeout",
@@ -152,14 +156,15 @@ export async function runAnalyticsScript(
       resolve({ jobId, exitCode: null, stdout, stderr, durationMs, timedOut: false });
     });
 
-    // Set timeout
+    // Set timeout with SIGTERM → SIGKILL cascade
+    let killTimer: ReturnType<typeof setTimeout> | undefined;
     const timeoutHandle = setTimeout(() => {
       timedOut = true;
       logAnalytics.warn({ jobId, scriptName, timeoutMs }, "Killing script due to timeout");
       proc.kill("SIGTERM");
 
       // Force kill after 5s if graceful termination fails
-      setTimeout(() => {
+      killTimer = setTimeout(() => {
         if (!proc.killed) {
           logAnalytics.error({ jobId, scriptName }, "Force killing script (SIGKILL)");
           proc.kill("SIGKILL");
@@ -167,8 +172,11 @@ export async function runAnalyticsScript(
       }, 5000);
     }, timeoutMs);
 
-    // Clear timeout if process exits naturally
-    proc.on("exit", () => clearTimeout(timeoutHandle));
+    // Clear both timers if process exits naturally
+    proc.on("exit", () => {
+      clearTimeout(timeoutHandle);
+      if (killTimer) clearTimeout(killTimer);
+    });
   });
 }
 
