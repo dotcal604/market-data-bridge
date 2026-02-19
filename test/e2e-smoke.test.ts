@@ -72,6 +72,10 @@ vi.mock("../src/db/database.js", () => ({
   getLatestHollySymbols: vi.fn(() => []),
   querySignals: vi.fn(() => []),
   getSignalStats: vi.fn(() => ({ total: 0, tradeable: 0, blocked: 0, long: 0, short: 0 })),
+  getActiveMcpSessions: vi.fn(() => []),
+  insertMcpSession: vi.fn(),
+  updateMcpSessionActivity: vi.fn(),
+  closeMcpSession: vi.fn(),
 }));
 
 // Mock status provider
@@ -82,7 +86,7 @@ vi.mock("../src/providers/status.js", () => ({
     marketSession: "regular",
     marketData: "yahoo-finance (always available)",
     screener: "yahoo-finance (always available)",
-    ibkr: { 
+    ibkr: {
       connected: false,
       host: "127.0.0.1",
       port: 7497,
@@ -287,7 +291,7 @@ vi.mock("../src/eval/routes.js", async () => {
 });
 
 vi.mock("../src/db/reconcile.js", () => ({
-  runReconciliation: vi.fn(async () => {}),
+  runReconciliation: vi.fn(async () => { }),
 }));
 
 vi.mock("../src/config-validator.js", () => ({

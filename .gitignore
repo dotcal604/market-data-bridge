@@ -28,3 +28,10 @@ coverage/
 analytics/.venv/
 __pycache__/
 *.pyc
+
+# Recent Build Artifacts & Logs
+deploy/
+logs/
+bridge-codebase*
+repomix-output.xml
+*.pdf
