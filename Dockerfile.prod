@@ -1,0 +1,79 @@
+# Multi-stage Docker build for Market Data Bridge production deployment
+# Stage 1: Build environment (installs dependencies and compiles)
+# Stage 2: Runtime (slim container with compiled assets only)
+
+# ========================================================================
+# Stage 1: Builder
+# ========================================================================
+FROM node:22-alpine as builder
+
+# Install build tools
+RUN apk add --no-cache python3 make g++ cairo-dev
+
+WORKDIR /build
+
+# Copy package files
+COPY package.json package-lock.json ./
+
+# Install dependencies (including devDependencies for TypeScript compilation)
+RUN npm ci
+
+# Copy source code
+COPY src ./src
+COPY frontend ./frontend
+COPY tsconfig.json ./
+COPY scripts ./scripts
+
+# Run production build script
+RUN node scripts/build-production.mjs
+
+# ========================================================================
+# Stage 2: Runtime
+# ========================================================================
+FROM node:22-alpine
+
+# Install runtime dependencies only (no build tools)
+RUN apk add --no-cache tini dumb-init
+
+WORKDIR /app
+
+# Copy package files from builder
+COPY --from=builder /build/package.json /build/package-lock.json ./
+
+# Install production dependencies only (--omit=dev)
+RUN npm ci --omit=dev && \
+    npm cache clean --force
+
+# Copy compiled application from builder
+COPY --from=builder /build/build ./build
+
+# Copy compiled frontend static assets from builder
+COPY --from=builder /build/frontend/out ./frontend/out
+
+# Copy runtime configuration templates
+COPY .env.example .env.production.example ./
+
+# Create non-root user for security
+RUN addgroup -g 1001 nodejs && \
+    adduser -S nodejs -u 1001 && \
+    chown -R nodejs:nodejs /app
+
+USER nodejs
+
+# Environment variables
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV IBKR_PORT=7496
+
+# Health check endpoint
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:3000/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
+
+# Expose port
+EXPOSE 3000
+
+# Use tini as init process to handle signals properly
+ENTRYPOINT ["/sbin/tini", "--"]
+
+# Start application (default to REST+MCP mode)
+CMD ["node", "build/index.js"]
