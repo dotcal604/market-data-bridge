@@ -28,7 +28,8 @@
     "ops:check:json": "node scripts/ops-check.mjs --json",
     "ops:backup": "node scripts/db-backup.mjs",
     "ops:backup:prune": "node scripts/db-backup.mjs --prune 7",
-    "ops:deploy": "bash scripts/deploy.sh"
+    "ops:deploy": "bash scripts/deploy.sh",
+    "generate:schema": "node scripts/generate-python-schema.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.74.0",
