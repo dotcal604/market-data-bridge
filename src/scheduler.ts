@@ -8,6 +8,7 @@ import { pruneInbox } from "./inbox/store.js";
 import { config } from "./config.js";
 import { checkTunnelHealth } from "./ops/tunnel-monitor.js";
 import { sampleAvailability, pruneOldSamples, SAMPLE_INTERVAL_MS } from "./ops/availability.js";
+import { runAnalyticsScript, getKnownScripts } from "./ops/analytics-runner.js";
 import { logger } from "./logging.js";
 
 const log = logger.child({ subsystem: "scheduler" });
@@ -18,6 +19,7 @@ let pruneTimer: ReturnType<typeof setInterval> | null = null;
 let tunnelCheckTimer: ReturnType<typeof setInterval> | null = null;
 let availabilityTimer: ReturnType<typeof setInterval> | null = null;
 let availabilityPruneTimer: ReturnType<typeof setInterval> | null = null;
+let analyticsTimer: ReturnType<typeof setInterval> | null = null;
 let flattenFiredToday = "";
 let lastPruneDate = "";
 
@@ -257,6 +259,69 @@ function checkPrune() {
   }
 }
 
+// ── Scheduled Analytics (pre/post-market) ────────────────────────────────
+
+interface ScheduledScript {
+  script: string;
+  hour: number;   // ET hour (24h)
+  minute: number;  // ET minute
+  label: string;
+}
+
+const ANALYTICS_SCHEDULE: ScheduledScript[] = [
+  { script: "recalibrate_weights", hour: 9,  minute: 20, label: "pre-market weight recalibration" },
+  { script: "regime",              hour: 16, minute: 10, label: "post-close regime detection" },
+];
+
+const analyticsFiredToday = new Map<string, string>(); // script → dateET
+const ANALYTICS_CHECK_MS = 60 * 1000; // check every 60s
+
+async function checkAnalyticsSchedule() {
+  const { hour, minute, day } = getNowET();
+  if (day === 0 || day === 6) return; // skip weekends
+
+  const today = getTodayET();
+
+  for (const job of ANALYTICS_SCHEDULE) {
+    // Validate script still exists in whitelist
+    if (!getKnownScripts().includes(job.script)) continue;
+
+    // Reset fire-once tracking on new day
+    const lastFired = analyticsFiredToday.get(job.script);
+    if (lastFired && lastFired !== today) {
+      analyticsFiredToday.delete(job.script);
+    }
+
+    // Already ran today
+    if (analyticsFiredToday.get(job.script) === today) continue;
+
+    // Check if it's time (match hour + within the same minute)
+    if (hour === job.hour && minute === job.minute) {
+      analyticsFiredToday.set(job.script, today);
+      log.info({ script: job.script, label: job.label, time: `${hour}:${String(minute).padStart(2, "0")} ET` },
+        `Scheduled analytics: running ${job.label}`);
+
+      try {
+        const result = await runAnalyticsScript(job.script, [], 5 * 60 * 1000, "scheduled");
+        log.info(
+          { script: job.script, jobId: result.jobId, exitCode: result.exitCode, durationMs: result.durationMs },
+          `Scheduled analytics complete: ${job.script} → exit ${result.exitCode} (${result.durationMs}ms)`,
+        );
+      } catch (err) {
+        log.error({ err, script: job.script }, `Scheduled analytics failed: ${job.script}`);
+      }
+    }
+  }
+}
+
+export function getAnalyticsSchedule() {
+  return ANALYTICS_SCHEDULE.map((s) => ({
+    ...s,
+    time: `${String(s.hour).padStart(2, "0")}:${String(s.minute).padStart(2, "0")} ET`,
+    firedToday: analyticsFiredToday.get(s.script) === getTodayET(),
+  }));
+}
+
 // ── Scheduler Lifecycle ──────────────────────────────────────────────────
 
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
@@ -329,6 +394,17 @@ export function startScheduler(intervalMs: number = DEFAULT_INTERVAL_MS) {
       try { pruneOldSamples(); } catch (err) { log.error({ err }, "Availability prune error (swallowed)"); }
     }, 60 * 60 * 1000); // 1 hour
   }
+
+  // Start scheduled analytics (60s interval — pre/post-market script execution)
+  if (!analyticsTimer) {
+    analyticsTimer = setInterval(() => {
+      checkAnalyticsSchedule().catch((err) => log.error({ err }, "Analytics schedule error (swallowed)"));
+    }, ANALYTICS_CHECK_MS);
+    log.info(
+      { jobs: ANALYTICS_SCHEDULE.map((s) => `${s.script} @ ${s.hour}:${String(s.minute).padStart(2, "0")} ET`) },
+      "Analytics scheduler armed — pre/post-market scripts",
+    );
+  }
 }
 
 export function stopScheduler() {
@@ -359,6 +435,10 @@ export function stopScheduler() {
   if (availabilityPruneTimer) {
     clearInterval(availabilityPruneTimer);
     availabilityPruneTimer = null;
+  }
+  if (analyticsTimer) {
+    clearInterval(analyticsTimer);
+    analyticsTimer = null;
   }
   log.info("Scheduler stopped");
 }

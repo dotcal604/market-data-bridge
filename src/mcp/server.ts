@@ -2599,5 +2599,64 @@ export function createMcpServer(): McpServer {
     })
   );
 
+  // --- Tool: run_analytics --- Run a Python analytics script
+  server.tool(
+    "run_analytics",
+    "Run a Python analytics script from the analytics/ directory. Returns job ID, exit code, stdout/stderr, duration. Scripts: recalibrate_weights, regime, calibration, holly_rules, etc.",
+    {
+      script: z.string().describe("Script name without .py (e.g. 'recalibrate_weights', 'regime')"),
+      args: z.array(z.string()).optional().describe("Optional CLI args to pass to the script"),
+      timeout_ms: z.number().optional().describe("Timeout in ms (default: 5 min)"),
+    },
+    withErrorHandling("run_analytics", async (params) => {
+      const { runAnalyticsScript } = await import("../ops/analytics-runner.js");
+      const result = await runAnalyticsScript(
+        params.script,
+        params.args ?? [],
+        params.timeout_ms ?? 5 * 60 * 1000,
+        "manual",
+      );
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    })
+  );
+
+  // --- Tool: list_analytics_scripts --- Show available Python scripts
+  server.tool(
+    "list_analytics_scripts",
+    "List available Python analytics scripts that can be run with run_analytics.",
+    {},
+    withErrorHandling("list_analytics_scripts", async () => {
+      const { getKnownScripts } = await import("../ops/analytics-runner.js");
+      const scripts = getKnownScripts();
+      return { content: [{ type: "text", text: JSON.stringify({ scripts, count: scripts.length }, null, 2) }] };
+    })
+  );
+
+  // --- Tool: list_analytics_jobs --- Query job history
+  server.tool(
+    "list_analytics_jobs",
+    "Query analytics job history. Shows script name, status, exit code, duration, trigger type.",
+    {
+      limit: z.number().optional().default(20).describe("Max jobs to return (default: 20)"),
+    },
+    withErrorHandling("list_analytics_jobs", async (params) => {
+      const { queryAnalyticsJobs } = await import("../db/database.js");
+      const jobs = queryAnalyticsJobs(params.limit);
+      return { content: [{ type: "text", text: JSON.stringify(jobs, null, 2) }] };
+    })
+  );
+
+  // --- Tool: analytics_schedule --- View scheduled analytics config
+  server.tool(
+    "analytics_schedule",
+    "View scheduled pre/post-market analytics jobs and whether they've fired today.",
+    {},
+    withErrorHandling("analytics_schedule", async () => {
+      const { getAnalyticsSchedule } = await import("../scheduler.js");
+      const schedule = getAnalyticsSchedule();
+      return { content: [{ type: "text", text: JSON.stringify(schedule, null, 2) }] };
+    })
+  );
+
   return server;
 }
