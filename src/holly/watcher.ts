@@ -122,7 +122,7 @@ export function stopHollyWatcher(): void {
  * Runs async — doesn't block the poll loop.
  */
 function triggerAutoEval(result: import("./importer.js").ImportResult): void {
-  processNewAlerts(result, (data) => wsBroadcast("signals", data))
+  processNewAlerts(result, (data) => { wsBroadcast("signals", data); wsBroadcast("holly", data); })
     .then((r) => {
       if (r.evaluated > 0 || r.errors > 0) {
         log.info({ evaluated: r.evaluated, skipped: r.skipped, errors: r.errors }, "Auto-eval batch done");

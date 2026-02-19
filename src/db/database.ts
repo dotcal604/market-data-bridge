@@ -2254,7 +2254,6 @@ export function getMcpSessionStats(): {
   };
 }
 
-<<<<<<< HEAD
 // ── Analytics Jobs ────────────────────────────────────────────────────────
 
 export interface AnalyticsJobRow {

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { randomUUID } from "crypto";
 import { computeFeatures } from "./features/compute.js";
 import { stripMetadata } from "./features/types.js";
+import { wsBroadcast } from "../ws/server.js";
 import type { FeatureVector } from "./features/types.js";
 import { runPrefilters } from "./guardrails/prefilter.js";
 import { evaluateAllModels } from "./models/runner.js";
@@ -222,7 +223,7 @@ evalRouter.post("/evaluate", async (req, res) => {
 
     logger.info(`[Eval ${id.slice(0, 8)}] Done ${totalLatency}ms — score=${ensemble.trade_score} trade=${ensemble.should_trade} allowed=${guardrail.allowed}`);
 
-    res.json({
+    const evalResult = {
       id,
       symbol: features.symbol,
       timestamp: features.timestamp,
@@ -232,7 +233,12 @@ evalRouter.post("/evaluate", async (req, res) => {
       ensemble,
       guardrail,
       latency_ms: latencyDetail,
-    });
+    };
+
+    res.json(evalResult);
+
+    // Broadcast to WebSocket subscribers
+    wsBroadcast("eval", { id, symbol: features.symbol, ensemble, guardrail: { allowed: guardrail.allowed } });
   } catch (e: any) {
     logger.error({ err: e }, "[Eval] evaluate failed");
     res.status(500).json({ error: e.message });
