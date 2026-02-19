@@ -45,7 +45,9 @@ const NAV_ITEMS = [
   { href: "/model-stats", label: "Model Stats", icon: BarChart3 },
   { href: "/drift", label: "Drift Monitor", icon: Activity },
   { href: "/edge", label: "Edge Analytics", icon: Crosshair },
-  { href: "/holly/autopsy", label: "Holly Autopsy", icon: Microscope },
+  { href: "/holly/autopsy", label: "Holly Autopsy", icon: Microscope, children: [
+    { href: "/holly/performance", label: "Performance", icon: TrendingUp },
+  ]},
   { href: "/weights", label: "Weights", icon: SlidersHorizontal },
   { href: "/account", label: "Account", icon: Wallet },
   { href: "/session", label: "Session", icon: Shield },

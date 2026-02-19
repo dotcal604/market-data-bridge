@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 import { randomUUID } from 'crypto';
+import { logger } from '../../logging.js';
 
 /**
  * VWAP Execution Algorithm Engine
@@ -107,7 +108,7 @@ export class VWAPSlicer extends EventEmitter {
     // If buying and price > VWAP, passive (Limit at Best Bid)
     
     // Simulating order placement
-    console.log(`[VWAP] Placing child order: ${this.config.side} ${qty} ${this.config.symbol}`);
+    logger.info({ side: this.config.side, qty, symbol: this.config.symbol }, "VWAP placing child order");
     
     // In production: await this.executionService.placeOrder(...)
     

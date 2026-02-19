@@ -1,4 +1,5 @@
 import { eventStore, type TradingEvent, type OrderStatus, type OrderSide } from './event-store.js';
+import { logger } from '../logging.js';
 
 // ── Read Model Interfaces ────────────────────────────────────────────────────
 
@@ -44,10 +45,10 @@ export class ReadModelStore {
     eventStore.subscribe(this.applyEvent.bind(this));
     
     // Replay events on startup to restore state
-    console.log('Hydrating Read Models from Event Store...');
+    logger.info("Hydrating Read Models from Event Store");
     const start = performance.now();
     eventStore.replay();
-    console.log(`Read Models hydrated in ${(performance.now() - start).toFixed(2)}ms`);
+    logger.info({ durationMs: +(performance.now() - start).toFixed(2) }, "Read Models hydrated");
   }
 
   /**

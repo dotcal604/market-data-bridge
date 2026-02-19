@@ -17,7 +17,15 @@ export default function DriftPage() {
         </p>
       </div>
 
-      <ModelHealthCards report={report} />
+      {reportLoading ? (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-28 animate-pulse rounded-lg border border-border bg-card" />
+          ))}
+        </div>
+      ) : (
+        <ModelHealthCards report={report} />
+      )}
 
       <div>
         <h2 className="mb-3 text-sm font-medium text-muted-foreground">Drift Alerts</h2>
