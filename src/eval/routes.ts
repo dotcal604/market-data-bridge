@@ -35,6 +35,7 @@ import { importTraderSyncCSV } from "../tradersync/importer.js";
 import { computeDriftReport } from "./drift.js";
 import { extractStructuredReasoning } from "./reasoning/extractor.js";
 import { logger } from "../logging.js";
+import { wsBroadcastWithSequence, getNextSequenceId } from "../ws/server.js";
 
 export const evalRouter = Router();
 
@@ -220,6 +221,18 @@ evalRouter.post("/evaluate", async (req, res) => {
     }
 
     logger.info(`[Eval ${id.slice(0, 8)}] Done ${totalLatency}ms — score=${ensemble.trade_score} trade=${ensemble.should_trade} allowed=${guardrail.allowed}`);
+
+    // Emit eval creation to WebSocket clients (with sequence ID for ordering)
+    const seqId = getNextSequenceId();
+    wsBroadcastWithSequence("eval_created", {
+      type: "eval",
+      action: "created",
+      evalId: id,
+      symbol: features.symbol,
+      score: ensemble.trade_score,
+      models: Object.keys(models),
+      timestamp: features.timestamp,
+    }, seqId);
 
     res.json({
       id,

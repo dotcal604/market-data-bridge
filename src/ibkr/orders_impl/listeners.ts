@@ -13,6 +13,7 @@ import {
 } from "../../db/database.js";
 import { tryLinkExecution, schedulePositionCloseCheck } from "../../eval/auto-link.js";
 import { logOrder, logExec } from "../../logging.js";
+import { wsBroadcastWithSequence, getNextSequenceId } from "../../ws/server.js";
 
 let persistentListenersAttached = false;
 
@@ -41,6 +42,7 @@ export function attachPersistentOrderListeners() {
       const existing = getOrderByOrderId(orderId) as any;
       if (!existing) return; // Order not in our DB
       const execId = execution.execId ?? "";
+      const timestamp = execution.time ?? new Date().toISOString();
       dbInsertExecution({
         exec_id: execId,
         order_id: orderId,
@@ -51,9 +53,26 @@ export function attachPersistentOrderListeners() {
         cum_qty: execution.cumQty ?? undefined,
         avg_price: execution.avgPrice ?? undefined,
         correlation_id: existing.correlation_id,
-        timestamp: execution.time ?? new Date().toISOString(),
+        timestamp,
       });
       logExec.info({ execId, orderId, symbol: contract.symbol, side: execution.side, shares: execution.shares, price: execution.price }, "Execution recorded");
+
+      // Emit order fill to WebSocket clients (with sequence ID for ordering)
+      const seqId = getNextSequenceId();
+      wsBroadcastWithSequence("order_filled", {
+        type: "order",
+        action: "filled",
+        orderId,
+        symbol: contract.symbol ?? "",
+        price: execution.price ?? 0,
+        qty: execution.shares ?? 0,
+        execution: {
+          execId,
+          side: execution.side ?? "",
+          avgPrice: execution.avgPrice ?? undefined,
+        },
+        timestamp,
+      }, seqId);
 
       // Auto-link execution to evaluation
       tryLinkExecution({
@@ -62,7 +81,7 @@ export function attachPersistentOrderListeners() {
         symbol: contract.symbol ?? "",
         side: execution.side ?? "",
         price: execution.price ?? 0,
-        timestamp: execution.time ?? new Date().toISOString(),
+        timestamp,
         eval_id: existing.eval_id ?? null,
       });
     } catch (e: any) {
