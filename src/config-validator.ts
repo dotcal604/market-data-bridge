@@ -15,6 +15,7 @@ export interface ValidationResult {
  * Checks:
  * - REST port is in valid range (1-65535)
  * - IBKR port is in valid range (1-65535)
+ * - IBKR host is set
  * - API key is at least 16 characters (warning if shorter)
  * - Holly watch path exists if set
  * - Drift thresholds are in valid range (0-1)
@@ -25,6 +26,8 @@ export interface ValidationResult {
  * - ibkr.executionTimeoutMs is positive and >= orderTimeoutMs
  * - ibkr.clientId is in valid range (0-32)
  * - gemini.timeoutMs is positive
+ * - Risk defaults are in valid range (0-100)
+ * - At least one model API key is configured (warning)
  * 
  * @param cfg - Configuration object from config.ts
  * @returns ValidationResult with arrays of error and warning messages
@@ -36,6 +39,10 @@ export function validateConfig(cfg: typeof config): ValidationResult {
   // Validate REST port range
   if (!isValidPort(cfg.rest.port)) {
     errors.push(`REST port must be between 1 and 65535, got ${cfg.rest.port}`);
+  }
+
+  if (!cfg.ibkr.host) {
+    errors.push("IBKR host is required");
   }
 
   // Validate IBKR port range
@@ -103,6 +110,22 @@ export function validateConfig(cfg: typeof config): ValidationResult {
     errors.push(`gemini.timeoutMs must be positive, got ${cfg.gemini.timeoutMs}`);
   }
 
+  // Validate risk defaults
+  if (!isValidPercentage(cfg.risk.riskPercent)) {
+    errors.push(`risk.riskPercent must be between 0 and 100, got ${cfg.risk.riskPercent}`);
+  }
+
+  if (!isValidPercentage(cfg.risk.maxPositionPercent)) {
+    errors.push(
+      `risk.maxPositionPercent must be between 0 and 100, got ${cfg.risk.maxPositionPercent}`
+    );
+  }
+
+  // Warn if no model API keys are configured
+  if (!cfg.models.anthropicApiKey && !cfg.models.openaiApiKey && !cfg.models.googleApiKey) {
+    warnings.push("No model API keys configured (Anthropic/OpenAI/Gemini) — Yahoo fallback only");
+  }
+
   return { errors, warnings };
 }
 
@@ -118,4 +141,8 @@ function isValidPort(port: number): boolean {
  */
 function isValidThreshold(threshold: number): boolean {
   return !isNaN(threshold) && threshold >= 0 && threshold <= 1;
+}
+
+function isValidPercentage(value: number): boolean {
+  return !isNaN(value) && value > 0 && value <= 100;
 }

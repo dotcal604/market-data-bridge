@@ -6,7 +6,7 @@ dotenv.config();
 export const config = {
   ibkr: {
     host: process.env.IBKR_HOST ?? "127.0.0.1",
-    port: parseInt(process.env.IBKR_PORT ?? "7496", 10),
+    port: parseInt(process.env.IBKR_PORT ?? "7497", 10),
     clientId: parseInt(process.env.IBKR_CLIENT_ID ?? "0", 10),
     maxClientIdRetries: 5,
     orderTimeoutMs: parseInt(process.env.IBKR_ORDER_TIMEOUT_MS ?? "10000", 10),
@@ -47,8 +47,19 @@ export const config = {
   ops: {
     webhookUrl: process.env.OPS_WEBHOOK_URL ?? "",
   },
+  risk: {
+    /** Default per-trade risk percentage of account equity */
+    riskPercent: parseFloat(process.env.RISK_PERCENT ?? "1"),
+    /** Maximum position size as a percentage of account equity */
+    maxPositionPercent: parseFloat(process.env.MAX_POSITION_PERCENT ?? "10"),
+  },
+  models: {
+    anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",
+    openaiApiKey: process.env.OPENAI_API_KEY ?? "",
+    googleApiKey: process.env.GOOGLE_AI_API_KEY ?? process.env.GOOGLE_API_KEY ?? "",
+  },
   gemini: {
-    apiKey: process.env.GOOGLE_AI_API_KEY ?? "",
+    apiKey: process.env.GOOGLE_AI_API_KEY ?? process.env.GOOGLE_API_KEY ?? "",
     model: process.env.GEMINI_MODEL ?? "gemini-2.0-flash",
     timeoutMs: parseInt(process.env.GEMINI_TIMEOUT_MS ?? "10000", 10),
   },
