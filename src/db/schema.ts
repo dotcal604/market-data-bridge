@@ -34,3 +34,21 @@ export const RISK_CONFIG_SCHEMA_SQL = `
   );
   CREATE INDEX IF NOT EXISTS idx_risk_config_param ON risk_config(param);
 `;
+
+export const ANALYTICS_JOBS_SCHEMA_SQL = `
+  CREATE TABLE IF NOT EXISTS analytics_jobs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    script TEXT NOT NULL,
+    trigger_type TEXT NOT NULL DEFAULT 'manual',
+    status TEXT NOT NULL DEFAULT 'running',
+    exit_code INTEGER,
+    stdout TEXT,
+    stderr TEXT,
+    duration_ms INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    completed_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_analytics_jobs_script ON analytics_jobs(script);
+  CREATE INDEX IF NOT EXISTS idx_analytics_jobs_status ON analytics_jobs(status);
+  CREATE INDEX IF NOT EXISTS idx_analytics_jobs_created ON analytics_jobs(created_at);
+`;

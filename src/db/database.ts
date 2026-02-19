@@ -4,7 +4,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
 import { evalReasoningSchemaSql } from "./schema.js";
-import { RISK_CONFIG_DEFAULTS, RISK_CONFIG_SCHEMA_SQL, type RiskConfigParam } from "./schema.js";
+import { RISK_CONFIG_DEFAULTS, RISK_CONFIG_SCHEMA_SQL, ANALYTICS_JOBS_SCHEMA_SQL, type RiskConfigParam } from "./schema.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const defaultDataDir = path.join(__dirname, "../../data");
@@ -409,6 +409,7 @@ db.exec(`
 `);
 
 db.exec(RISK_CONFIG_SCHEMA_SQL);
+db.exec(ANALYTICS_JOBS_SCHEMA_SQL);
 
 // ── Ops Availability Tables ────────────────────────────────────────────
 db.exec(`
@@ -684,6 +685,23 @@ pruneInbox: db.prepare(`DELETE FROM inbox WHERE created_at < datetime('now', '-'
       AVG(CASE WHEN closed_at IS NOT NULL THEN (julianday(closed_at) - julianday(created_at)) * 86400 ELSE NULL END) as avg_duration_seconds,
       SUM(tool_calls) as total_tool_calls
     FROM mcp_sessions
+  `),
+
+  // Analytics Jobs
+  insertAnalyticsJob: db.prepare(`
+    INSERT INTO analytics_jobs (script, trigger_type, status)
+    VALUES (@script, @trigger_type, @status)
+  `),
+  updateAnalyticsJob: db.prepare(`
+    UPDATE analytics_jobs
+    SET status = @status, exit_code = @exit_code, stdout = @stdout, stderr = @stderr, duration_ms = @duration_ms, completed_at = datetime('now')
+    WHERE id = @id
+  `),
+  queryAnalyticsJobs: db.prepare(`
+    SELECT * FROM analytics_jobs ORDER BY created_at DESC LIMIT ?
+  `),
+  getAnalyticsJobById: db.prepare(`
+    SELECT * FROM analytics_jobs WHERE id = ?
   `),
 };
 
@@ -1892,6 +1910,58 @@ export function getMcpSessionStats(): {
     avg_duration_seconds: number | null;
     total_tool_calls: number;
   };
+}
+
+// ── Analytics Jobs ────────────────────────────────────────────────────────
+
+export interface AnalyticsJobRow {
+  id: number;
+  script: string;
+  trigger_type: string;
+  status: string;
+  exit_code: number | null;
+  stdout: string | null;
+  stderr: string | null;
+  duration_ms: number | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export function insertAnalyticsJob(script: string, triggerType: string = "manual"): number {
+  const result = stmts.insertAnalyticsJob.run({
+    script,
+    trigger_type: triggerType,
+    status: "running",
+  });
+  return result.lastInsertRowid as number;
+}
+
+export function updateAnalyticsJob(
+  id: number,
+  update: {
+    status: string;
+    exitCode?: number | null;
+    stdout?: string | null;
+    stderr?: string | null;
+    durationMs?: number | null;
+  }
+): void {
+  stmts.updateAnalyticsJob.run({
+    id,
+    status: update.status,
+    exit_code: update.exitCode ?? null,
+    stdout: update.stdout ?? null,
+    stderr: update.stderr ?? null,
+    duration_ms: update.durationMs ?? null,
+  });
+}
+
+export function queryAnalyticsJobs(limit: number = 50): AnalyticsJobRow[] {
+  return stmts.queryAnalyticsJobs.all(limit) as AnalyticsJobRow[];
+}
+
+export function getAnalyticsJobById(id: number): AnalyticsJobRow | undefined {
+  return stmts.getAnalyticsJobById.get(id) as AnalyticsJobRow | undefined;
 }
 
 export function isDbWritable(): boolean {
