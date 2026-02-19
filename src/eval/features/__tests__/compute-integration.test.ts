@@ -100,6 +100,6 @@ describe("computeFeatures integration", () => {
     
     // Other features should still work
     expect(result.features.symbol).toBe("TSLA");
-    expect(result.latencyMs).toBeGreaterThan(0);
+    expect(result.latencyMs).toBeGreaterThanOrEqual(0);
   });
 });

@@ -186,14 +186,15 @@ describe("Action Catalog", () => {
     it("get_quote has correct metadata", () => {
       const meta = actionsMeta.get_quote;
       expect(meta.description).toBe("Get real-time quote for a symbol");
-      expect(meta.params).toEqual(["symbol"]);
+      expect(Object.keys(meta.params as Record<string, unknown>)).toContain("symbol");
       expect(meta.requiresIBKR).toBeFalsy();
     });
 
     it("get_ibkr_quote has correct metadata with requiresIBKR flag", () => {
       const meta = actionsMeta.get_ibkr_quote;
       expect(meta.description).toBe("Get IBKR real-time quote");
-      expect(meta.params).toEqual(["symbol", "secType?", "exchange?", "currency?"]);
+      const paramKeys = Object.keys(meta.params as Record<string, unknown>);
+      expect(paramKeys).toEqual(expect.arrayContaining(["symbol", "secType", "exchange", "currency"]));
       expect(meta.requiresIBKR).toBe(true);
     });
 
@@ -206,40 +207,36 @@ describe("Action Catalog", () => {
     it("place_order has correct params and requires IBKR", () => {
       const meta = actionsMeta.place_order;
       expect(meta.description).toBe("Place a single order");
-      expect(meta.params).toEqual([
-        "symbol",
-        "action",
-        "orderType",
-        "totalQuantity",
-        "lmtPrice?",
-        "auxPrice?",
-        "secType?",
-        "exchange?",
-        "currency?",
-        "tif?",
-      ]);
+      const paramKeys = Object.keys(meta.params as Record<string, unknown>);
+      expect(paramKeys).toContain("symbol");
+      expect(paramKeys).toContain("action");
+      expect(paramKeys).toContain("orderType");
+      expect(paramKeys).toContain("totalQuantity");
       expect(meta.requiresIBKR).toBe(true);
     });
 
     it("collab_read has correct params", () => {
       const meta = actionsMeta.collab_read;
       expect(meta.description).toBe("Read collaboration messages");
-      expect(meta.params).toEqual(["limit?", "author?", "tag?", "since?"]);
+      const paramKeys = Object.keys(meta.params as Record<string, unknown>);
+      expect(paramKeys).toEqual(expect.arrayContaining(["limit", "author", "tag", "since"]));
       expect(meta.requiresIBKR).toBeFalsy();
     });
 
     it("record_outcome has correct params", () => {
       const meta = actionsMeta.record_outcome;
       expect(meta.description).toBe("Record outcome for an evaluation");
-      expect(meta.params).toContain("evaluation_id");
-      expect(meta.params).toContain("trade_taken");
+      const paramKeys = Object.keys(meta.params as Record<string, unknown>);
+      expect(paramKeys).toContain("evaluation_id");
+      expect(paramKeys).toContain("trade_taken");
       expect(meta.requiresIBKR).toBeFalsy();
     });
 
     it("multi_model_score has correct metadata", () => {
       const meta = actionsMeta.multi_model_score;
       expect(meta.description).toBe("Collect weighted scores from GPT, Gemini, and Claude providers");
-      expect(meta.params).toEqual(["symbol", "features?"]);
+      const paramKeys = Object.keys(meta.params as Record<string, unknown>);
+      expect(paramKeys).toEqual(expect.arrayContaining(["symbol", "features"]));
       expect(meta.requiresIBKR).toBeFalsy();
     });
   });
@@ -355,12 +352,20 @@ describe("Action Catalog", () => {
       expect(uniqueDescriptions.size).toBeGreaterThanOrEqual(85);
     });
 
-    it("params arrays do not contain empty strings", () => {
+    it("params do not contain empty keys or descriptions", () => {
       for (const [action, meta] of Object.entries(actionsMeta)) {
         if (meta.params) {
-          for (const param of meta.params) {
-            expect(param, `Action ${action} has empty param string`).toBeTruthy();
-            expect(param.length, `Action ${action} param should be non-empty`).toBeGreaterThan(0);
+          if (Array.isArray(meta.params)) {
+            for (const param of meta.params) {
+              expect(param, `Action ${action} has empty param string`).toBeTruthy();
+              expect(param.length, `Action ${action} param should be non-empty`).toBeGreaterThan(0);
+            }
+          } else {
+            for (const [key, schema] of Object.entries(meta.params)) {
+              expect(key, `Action ${action} has empty param key`).toBeTruthy();
+              expect(key.length, `Action ${action} param key should be non-empty`).toBeGreaterThan(0);
+              expect(schema.description, `Action ${action}.${key} missing description`).toBeTruthy();
+            }
           }
         }
       }

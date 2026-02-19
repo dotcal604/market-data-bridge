@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
+// Prevent dotenv from re-reading .env file on module re-import
+vi.mock("dotenv", () => ({ default: { config: () => {} }, config: () => {} }));
+
 const clearEnv = () => {
   const keys = [
     "IBKR_PORT",
