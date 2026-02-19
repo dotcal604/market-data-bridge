@@ -133,3 +133,4 @@ class WeightHistory(BaseModel):
     sample_size: Optional[int]
     reason: Optional[str]
     created_at: str
+
