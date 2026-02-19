@@ -1,5 +1,33 @@
 # Market Data Bridge — Agent Rules
 
+## Team Roster
+
+| Role | Agent | Strengths | Trigger | Scope |
+|------|-------|-----------|---------|-------|
+| **Engineering Manager / Product Owner** | Human (dotcal604) | Priorities, approvals, risk decisions | — | All |
+| **Staff Engineer / Tech Lead** | Claude Code | Full repo context, multi-file refactors, debugging, architecture, incident response | Always active in terminal | Execution-critical code, integration, planning |
+| **Senior Dev (pair programming)** | Claude Desktop | Conversational analysis, strategy sessions, code review | Chat UI | Reviews, trade-off discussions, brainstorming |
+| **Senior Consultant / Architect** | ChatGPT | Big-picture architecture reviews, second opinions, research | Chat UI | Architecture, strategy, not direct code |
+| **Mid-Level Dev** | GitHub Copilot | Tests, boilerplate, well-scoped features, pattern-matching from existing code | "Assign to Copilot" on GitHub issue | Ops, tests, features following existing patterns |
+| **Junior Dev (spec executor)** | OpenAI Codex | Precise isolated tasks from detailed specs, docs, mechanical refactors | Codex UI or `@codex` in issue | Single-file changes, docs, JSDoc, schemas |
+| **Junior Dev (probationary)** | Google Jules | Multi-file mechanical work, Python + TS | [jules.google](https://jules.google) | Low-risk tasks until proven — JSDoc, docs, simple features |
+
+### Assignment Guidelines
+
+- **Execution-critical code** (orders, risk gate, connection, reconciliation): **Claude Code + Human review only**
+- **New features with clear specs**: Copilot (if pattern exists to follow) or Codex (if isolated)
+- **Tests and docs**: Codex or Copilot — both handle these well
+- **Cross-language work** (TS ↔ Python): Claude Code — juniors struggle with multi-language coordination
+- **Architecture decisions**: Claude Code proposes → ChatGPT/Claude Desktop review → Human approves
+- **Unproven agents** (Jules): Start with low-risk tasks (JSDoc, docs). Promote after 3 clean PRs.
+
+### Communication
+
+- All agents read this `AGENTS.md` on every task
+- PRs must reference the issue number (`Fixes #N`)
+- Claude Code reviews all agent PRs before human merge
+- No agent merges their own PR — human approval required
+
 ## Project Overview
 
 Single-process Node.js/TypeScript server (port 3000) + Next.js dashboard (port 3001 in dev):
@@ -328,7 +356,7 @@ cd frontend && npx tsc --noEmit
 - **Dark theme always** — use `bg-card`, `text-muted-foreground`, semantic Tailwind classes. No white backgrounds.
 - **Named exports only** — `export function Foo()`, not `export default function Foo()`
 
-### OpenAI Codex (Cloud Agent)
+### OpenAI Codex — Junior Dev (spec executor)
 
 Codex runs tasks in cloud sandboxes at [chatgpt.com/codex](https://chatgpt.com/codex). It reads this `AGENTS.md` file automatically via its discovery chain.
 
@@ -337,17 +365,35 @@ Codex runs tasks in cloud sandboxes at [chatgpt.com/codex](https://chatgpt.com/c
 npm install && cd frontend && npm install && cd ..
 ```
 
+**Best for:** Single-file changes, docs, JSDoc, mechanical refactors, schema generation. Needs detailed specs with exact file paths.
+
 **Strengths:** Long-running tasks (7+ hours), parallel task execution, GPT-5.2-Codex model, GitHub integration (@codex on issues/PRs).
+
+**Limitations:** Struggles with multi-file coordination, can miss cross-file context. Don't assign complex integration work.
 
 **Historical note:** Early Codex (PRs #3, #23) had broken PR bodies and missing env setup. Current Codex reads AGENTS.md, supports custom setup scripts, and uses GPT-5.2-Codex.
 
-### GitHub Copilot (Coding Agent)
+### GitHub Copilot — Mid-Level Dev
 
-Copilot creates draft PRs from assigned issues. Works best with detailed issue specs (exact file paths, props interfaces, acceptance criteria).
+Copilot creates draft PRs from assigned issues. Pattern-matches from existing code — best when there's a similar module to follow.
 
 **Trigger:** Assign Copilot to an issue via GitHub web UI, or use custom agents via `@copilot/{agent-name}`.
 
+**Best for:** Tests, boilerplate, features with clear patterns, ops work.
+
+**Limitations:** Can be superficial on complex logic, sometimes ignores edge cases. Review carefully.
+
 **Note:** Copilot's GitHub Actions firewall blocks `fonts.googleapis.com` — cosmetic only, builds succeed.
+
+### Google Jules — Junior Dev (probationary)
+
+Jules runs async tasks via [jules.google](https://jules.google). Connects to GitHub, creates branches and PRs.
+
+**Best for:** Multi-file mechanical work (JSDoc, docs), Python tasks. Currently unproven on this repo.
+
+**Limitations:** New agent — needs 3 clean PRs before promotion to mid-level tasks.
+
+**Trigger:** Paste issue URL or description at [jules.google](https://jules.google), select repo, approve plan.
 
 ### Verification Commands
 
