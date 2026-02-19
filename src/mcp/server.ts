@@ -137,7 +137,7 @@ export function createMcpServer(): McpServer {
   // --- Tool: debug_runtime --- Proves what THIS process is actually using
   server.tool(
     "debug_runtime",
-    "Returns runtime diagnostics: PID, env vars, clientId, connection state. Use to prove which process is serving tools.",
+    "Returns runtime diagnostics: PID, PPID, clientId, connection state, uptime. Use to prove which process is serving tools.",
     {},
     async () => {
       const conn = getConnectionStatus();
