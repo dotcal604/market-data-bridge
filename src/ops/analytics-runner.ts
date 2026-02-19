@@ -110,11 +110,12 @@ export async function runAnalyticsScript(
       // Use timedOut flag (not signal) — SIGTERM signal detection is unreliable on Windows
       if (timedOut) {
         logAnalytics.warn({ jobId, scriptName, durationMs }, "Script timed out");
+        stderr += "\n[Process killed due to timeout]";
         updateAnalyticsJob(jobId, {
           status: "timeout",
           exitCode: null,
           stdout,
-          stderr: stderr + "\n[Process killed due to timeout]",
+          stderr,
           durationMs,
         });
         resolve({ jobId, exitCode: null, stdout, stderr, durationMs, timedOut: true });

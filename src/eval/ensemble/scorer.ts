@@ -74,9 +74,22 @@ function scoreEnsemble(
  * @param evaluations - Model evaluations to ensemble
  * @param regime - Optional volatility regime for regime-conditioned weights
  */
+const MIN_CALIBRATION_SAMPLES = 30;
+
 export function computeEnsemble(evaluations: ModelEvaluation[], regime?: string): EnsembleScore {
   const weights = getWeights(regime);
-  return scoreEnsemble(evaluations, weights);
+  const score = scoreEnsemble(evaluations, weights);
+
+  // Sample size confidence gate: shrink score when calibration data is thin
+  if (weights.sample_size < MIN_CALIBRATION_SAMPLES && weights.source !== "default") {
+    const gate = Math.max(0.3, weights.sample_size / MIN_CALIBRATION_SAMPLES);
+    score.trade_score = Math.round(score.trade_score * gate * 100) / 100;
+    score.should_trade = score.should_trade && score.trade_score >= 40;
+    score.confidence_gate = Math.round(gate * 100) / 100;
+    score.sample_size = weights.sample_size;
+  }
+
+  return score;
 }
 
 /**

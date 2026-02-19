@@ -48,6 +48,10 @@ vi.mock("../../db/database.js", () => ({
   getLatestHollySymbols: vi.fn(() => []),
   querySignals: vi.fn(() => []),
   getSignalStats: vi.fn(() => ({ total: 0, tradeable: 0, blocked: 0, long: 0, short: 0 })),
+  getActiveMcpSessions: vi.fn(() => []),
+  insertMcpSession: vi.fn(),
+  updateMcpSessionActivity: vi.fn(),
+  closeMcpSession: vi.fn(),
 }));
 
 // Mock status provider

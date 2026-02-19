@@ -30,4 +30,8 @@ export interface EnsembleScore {
   unanimous: boolean;
   majority_trade: boolean;
   weights_used: { claude: number; gpt4o: number; gemini: number };
+  /** 0–1 confidence multiplier from sample size gate (undefined = no gating applied). */
+  confidence_gate?: number;
+  /** Calibration sample size when gating was applied. */
+  sample_size?: number;
 }

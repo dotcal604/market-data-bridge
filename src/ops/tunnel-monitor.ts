@@ -228,3 +228,15 @@ export function getTunnelMetrics(): TunnelMetrics {
     tunnelConnected: consecutiveFailures === 0,
   };
 }
+
+/** Reset all tunnel state — for testing only */
+export function resetTunnelState(): void {
+  tunnelConnectedMs = 0;
+  tunnelDisconnectedMs = 0;
+  tunnelLastStateChange = Date.now();
+  tunnelLastKnownState = true;
+  consecutiveFailures = 0;
+  lastProbeLatencyMs = 0;
+  lastProbeTimestamp = null;
+  restartAttempts = 0;
+}

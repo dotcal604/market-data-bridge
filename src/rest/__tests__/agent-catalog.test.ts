@@ -6,7 +6,7 @@ describe("Action Catalog", () => {
     it("has an entry for every action in the actions object", () => {
       // Get all action keys from the catalog
       const catalogKeys = Object.keys(actionsMeta).sort();
-      
+
       // Expected actions based on the actions object (104 total)
       const expectedActions = [
         "auto_eval_status",
@@ -25,14 +25,10 @@ describe("Action Catalog", () => {
         "divoom_send_text",
         "divoom_set_brightness",
         "divoom_status",
-        "daily_summary",
         "drift_alerts",
         "drift_check",
         "drift_report",
         "edge_report",
-        "eval_outcomes",
-        "eval_reasoning",
-        "eval_stats",
         "executions_history",
         "flatten_positions",
         "get_account_snapshot_stream",
@@ -93,8 +89,6 @@ describe("Action Catalog", () => {
         "holly_trade_stats",
         "holly_trades",
         "holly_exit_autopsy",
-        "inbox_digest",
-        "inbox_prune",
         "inbox_stats",
         "journal_create",
         "journal_get",
@@ -150,9 +144,8 @@ describe("Action Catalog", () => {
         "unsubscribe_account_updates",
         "unsubscribe_real_time_bars",
         "update_risk_config",
-        "weight_history",
       ].sort();
-      
+
       expect(catalogKeys).toEqual(expectedActions);
     });
 
@@ -171,11 +164,11 @@ describe("Action Catalog", () => {
 
     it("returns valid JSON structure", () => {
       const catalog = getActionCatalog();
-      
+
       // Should be serializable
       const json = JSON.stringify(catalog);
       expect(json).toBeTruthy();
-      
+
       // Should be parseable
       const parsed = JSON.parse(json);
       expect(parsed).toEqual(catalog);
@@ -338,7 +331,7 @@ describe("Action Catalog", () => {
     it("returns an object with all action metadata", () => {
       const catalog = getActionCatalog();
       expect(Object.keys(catalog).length).toBeGreaterThanOrEqual(100);
-      
+
       for (const [action, meta] of Object.entries(catalog)) {
         expect(meta).toHaveProperty("description");
         expect(typeof meta.description).toBe("string");
@@ -356,7 +349,7 @@ describe("Action Catalog", () => {
     it("all descriptions are unique (no copy-paste errors)", () => {
       const descriptions = Object.values(actionsMeta).map((m) => m.description);
       const uniqueDescriptions = new Set(descriptions);
-      
+
       // Allow some similar descriptions, but most should be unique
       // We expect at least 85 unique descriptions out of 90 actions
       expect(uniqueDescriptions.size).toBeGreaterThanOrEqual(85);

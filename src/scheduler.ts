@@ -9,6 +9,7 @@ import { config } from "./config.js";
 import { checkTunnelHealth } from "./ops/tunnel-monitor.js";
 import { sampleAvailability, pruneOldSamples, SAMPLE_INTERVAL_MS } from "./ops/availability.js";
 import { runAnalyticsScript, getKnownScripts } from "./ops/analytics-runner.js";
+import { recordIncident } from "./ops/metrics.js";
 import { logger } from "./logging.js";
 
 const log = logger.child({ subsystem: "scheduler" });
@@ -120,11 +121,15 @@ function checkDrift() {
         },
         `DRIFT ALERT: Regime shift detected — ${shiftedModels.length} model(s) degrading`,
       );
+      recordIncident("drift_regime_shift", "warning",
+        `Regime shift: ${shiftedModels.length} model(s) degrading — accuracy ${report.overall_accuracy}`);
     } else if (!report.regime_shift_detected && prev.regime_shift_detected) {
       log.info(
         { regime_shift: false, accuracy: report.overall_accuracy },
         "Drift alert cleared — regime shift resolved",
       );
+      recordIncident("drift_cleared", "info",
+        `Regime shift resolved — accuracy ${report.overall_accuracy}`);
     } else if (Math.abs(report.overall_accuracy - prev.overall_accuracy) > 0.05) {
       // Accuracy moved more than 5% — worth noting
       const direction = report.overall_accuracy < prev.overall_accuracy ? "degraded" : "improved";
@@ -140,6 +145,8 @@ function checkDrift() {
         { alert_count: alerts.length, alerts: alerts.map((a) => ({ type: a.alert_type, model: a.model_id, value: a.metric_value })) },
         `Drift alerts generated: ${alerts.length} threshold(s) breached`,
       );
+      recordIncident("drift_threshold_breach", "warning",
+        `${alerts.length} drift threshold(s) breached: ${alerts.map((a) => `${a.model_id}/${a.alert_type}`).join(", ")}`);
     }
 
     lastDriftState = {

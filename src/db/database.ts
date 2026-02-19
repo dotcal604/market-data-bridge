@@ -990,6 +990,14 @@ export function queryAccountSnapshots(limit: number = 100) {
   return stmts.queryAccountSnapshots.all(limit);
 }
 
+/** Get the most recent net_liquidation from account snapshots (for live equity in risk gate). */
+export function getLatestNetLiquidation(): number | null {
+  const row = db.prepare(
+    `SELECT net_liquidation FROM account_snapshots WHERE net_liquidation IS NOT NULL ORDER BY created_at DESC LIMIT 1`
+  ).get() as { net_liquidation: number } | undefined;
+  return row?.net_liquidation ?? null;
+}
+
 export function getOrderByOrderId(orderId: number) {
   return stmts.getOrderByOrderId.get(orderId);
 }

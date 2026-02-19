@@ -6,6 +6,8 @@ vi.hoisted(() => {
   process.env.TZ = "America/New_York";
   // Force live port so paper-mode bypass doesn't skip risk checks in tests
   process.env.IBKR_PORT = "7496";
+  // Use in-memory DB so live account snapshots don't affect equity calculations
+  process.env.DB_PATH = ":memory:";
 });
 
 import {

@@ -78,20 +78,31 @@ vi.mock("../eval/drift-alerts.js", () => ({
 
 // Mock tunnel monitor
 vi.mock("../ops/tunnel-monitor.js", () => ({
-  checkTunnelHealth: vi.fn(async () => {}),
+  checkTunnelHealth: vi.fn(async () => { }),
+}));
+
+// Mock availability sampling
+vi.mock("../ops/availability.js", () => ({
+  sampleAvailability: vi.fn(async () => { }),
+  pruneOldSamples: vi.fn(),
+  SAMPLE_INTERVAL_MS: 30_000,
 }));
 
 // Mock logger
-vi.mock("../logging.js", () => ({
-  logger: {
-    child: vi.fn(() => ({
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-      debug: vi.fn(),
-    })),
-  },
-}));
+vi.mock("../logging.js", () => {
+  const mockChild = {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  };
+  return {
+    logger: {
+      child: vi.fn(() => mockChild),
+    },
+    logAnalytics: mockChild,
+  };
+});
 
 describe("Scheduler", () => {
   beforeEach(() => {
@@ -115,8 +126,8 @@ describe("Scheduler", () => {
 
       startScheduler(5 * 60 * 1000); // 5 minutes
 
-      // Should create 5 intervals: snapshot, flatten, drift, inbox prune, tunnel
-      expect(setIntervalSpy).toHaveBeenCalledTimes(5);
+      // Should create 8 intervals: snapshot, flatten, drift, inbox prune, tunnel, availability, availability prune, analytics
+      expect(setIntervalSpy).toHaveBeenCalledTimes(8);
 
       // Should create 3 timeouts: initial drift check (60s) + initial prune check (30s) + initial tunnel check (30s)
       expect(setTimeoutSpy).toHaveBeenCalledTimes(3);
@@ -129,8 +140,8 @@ describe("Scheduler", () => {
       startScheduler();
       stopScheduler();
 
-      // Should clear 5 intervals: snapshot, flatten, drift, inbox prune, tunnel
-      expect(clearIntervalSpy).toHaveBeenCalledTimes(5);
+      // Should clear 8 intervals: snapshot, flatten, drift, inbox prune, tunnel, availability, availability prune, analytics
+      expect(clearIntervalSpy).toHaveBeenCalledTimes(8);
     });
 
     it("should not create duplicate timers if startScheduler() called twice", () => {
@@ -138,7 +149,7 @@ describe("Scheduler", () => {
 
       startScheduler();
       const firstCallCount = setIntervalSpy.mock.calls.length;
-      
+
       startScheduler();
       const secondCallCount = setIntervalSpy.mock.calls.length;
 
@@ -474,11 +485,11 @@ describe("Scheduler", () => {
 
       // Advance another 30 min interval (still off-hours)
       await vi.advanceTimersByTimeAsync(30 * 60 * 1000);
-      
+
       // Call count should not have increased during off-hours
       expect(vi.mocked(computeDriftReport).mock.calls.length).toBe(callsBeforeNextInterval);
       expect(vi.mocked(checkDriftAlerts).mock.calls.length).toBe(0);
-      
+
       // Drift state should not have changed from initial state
       expect(getLastDriftState()).toEqual(initialState);
     });

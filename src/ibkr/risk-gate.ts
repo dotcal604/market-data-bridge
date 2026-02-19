@@ -1,9 +1,27 @@
-import { getRiskConfigRows } from "../db/database.js";
+import { getRiskConfigRows, getLatestNetLiquidation } from "../db/database.js";
 import { RISK_CONFIG_DEFAULTS } from "../db/schema.js";
 import { logRisk } from "../logging.js";
 import { config } from "../config.js";
 
+// Lazy import to avoid pulling in ws/connection dependency chain at module load time
+function emitIncident(type: string, severity: "info" | "warning" | "critical", detail: string): void {
+  try {
+    const { recordIncident } = require("../ops/metrics.js");
+    recordIncident(type, severity, detail);
+  } catch { /* metrics module may not be loaded yet during startup/tests */ }
+}
+
 const ACCOUNT_EQUITY_BASE = parseFloat(process.env.RISK_ACCOUNT_EQUITY_BASE ?? "25000");
+
+/** Live equity from latest account snapshot, falling back to env var on cold start. */
+function getAccountEquity(): number {
+  try {
+    const live = getLatestNetLiquidation();
+    return live ?? ACCOUNT_EQUITY_BASE;
+  } catch {
+    return ACCOUNT_EQUITY_BASE; // DB not initialized (tests, startup)
+  }
+}
 
 const LIMITS = {
   maxOrderSize: parseInt(process.env.RISK_MAX_ORDER_SIZE ?? "1000", 10),
@@ -178,27 +196,31 @@ export function checkRisk(params: RiskCheckParams): RiskCheckResult {
 
   ensureToday();
   const effective = getEffectiveRiskConfig();
+  const equity = getAccountEquity();
   const dynamicMaxNotional = Math.min(
     LIMITS.maxNotionalValue,
-    ACCOUNT_EQUITY_BASE * Math.min(effective.max_position_pct, effective.max_concentration_pct) * effective.volatility_scalar
+    equity * Math.min(effective.max_position_pct, effective.max_concentration_pct) * effective.volatility_scalar
   );
-  const dynamicMaxDailyLoss = Math.min(SESSION_LIMITS.maxDailyLoss, ACCOUNT_EQUITY_BASE * effective.max_daily_loss_pct);
+  const dynamicMaxDailyLoss = Math.min(SESSION_LIMITS.maxDailyLoss, equity * effective.max_daily_loss_pct);
 
   if (session.locked) {
     const reason = `Session locked: ${session.lockReason ?? "manual override"}`;
     logRisk.warn({ ...params }, reason);
+    emitIncident("risk_session_locked", "warning", reason);
     return { allowed: false, reason };
   }
 
   if (session.realizedPnl <= -dynamicMaxDailyLoss) {
     const reason = `Daily loss limit hit: $${session.realizedPnl.toFixed(2)} realized (max -$${dynamicMaxDailyLoss.toFixed(2)})`;
     logRisk.warn({ ...params, pnl: session.realizedPnl }, reason);
+    emitIncident("risk_daily_loss_limit", "critical", reason);
     return { allowed: false, reason };
   }
 
   if (session.tradeCount >= SESSION_LIMITS.maxDailyTrades) {
     const reason = `Daily trade limit hit: ${session.tradeCount}/${SESSION_LIMITS.maxDailyTrades} trades`;
     logRisk.warn({ ...params, count: session.tradeCount }, reason);
+    emitIncident("risk_trade_limit", "warning", reason);
     return { allowed: false, reason };
   }
 
@@ -209,6 +231,7 @@ export function checkRisk(params: RiskCheckParams): RiskCheckResult {
       const remaining = Math.ceil((cooldownMs - elapsed) / 60_000);
       const reason = `Cooldown active: ${session.consecutiveLosses} consecutive losses — ${remaining} min remaining`;
       logRisk.warn({ ...params, consecutive: session.consecutiveLosses, remaining }, reason);
+      emitIncident("risk_cooldown", "warning", reason);
       return { allowed: false, reason };
     }
   }
@@ -224,6 +247,7 @@ export function checkRisk(params: RiskCheckParams): RiskCheckResult {
   if (minutesBeforeClose <= SESSION_LIMITS.lateDayLockoutMinutes && minutesBeforeClose >= 0) {
     const reason = `Late-day lockout: ${minutesBeforeClose} min before close (lockout at ${SESSION_LIMITS.lateDayLockoutMinutes} min)`;
     logRisk.warn({ ...params, minutesBeforeClose }, reason);
+    emitIncident("risk_late_lockout", "info", reason);
     return { allowed: false, reason };
   }
 
@@ -316,14 +340,16 @@ export function getSessionState(): SessionState & { limits: typeof SESSION_LIMIT
 
 export function getRiskLimits() {
   const effective = getEffectiveRiskConfig();
+  const equity = getAccountEquity();
   return {
     ...LIMITS,
     ...SESSION_LIMITS,
+    accountEquity: equity,
     maxNotionalValue: Math.min(
       LIMITS.maxNotionalValue,
-      ACCOUNT_EQUITY_BASE * Math.min(effective.max_position_pct, effective.max_concentration_pct) * effective.volatility_scalar
+      equity * Math.min(effective.max_position_pct, effective.max_concentration_pct) * effective.volatility_scalar
     ),
-    maxDailyLoss: Math.min(SESSION_LIMITS.maxDailyLoss, ACCOUNT_EQUITY_BASE * effective.max_daily_loss_pct),
+    maxDailyLoss: Math.min(SESSION_LIMITS.maxDailyLoss, equity * effective.max_daily_loss_pct),
     riskConfig: effective,
   };
 }
