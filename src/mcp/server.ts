@@ -17,7 +17,8 @@ import {
   runScreener,
   runScreenerWithQuotes,
 } from "../providers/yahoo.js";
-import { isConnected } from "../ibkr/connection.js";
+import { isConnected, getConnectionStatus } from "../ibkr/connection.js";
+import { config } from "../config.js";
 import { ibkrTool } from "./rest-proxy.js";
 import { getAccountSummary, getPositions, getPnL } from "../ibkr/account.js";
 import { getOpenOrders, getCompletedOrders, getExecutions, placeOrder, placeBracketOrder, placeAdvancedBracket, modifyOrder, cancelOrder, cancelAllOrders, flattenAllPositions, validateOrder } from "../ibkr/orders.js";
@@ -94,7 +95,6 @@ import { computeEnsembleWithWeights } from "../eval/ensemble/scorer.js";
 import { getWeights } from "../eval/ensemble/weights.js";
 import { tuneRiskParams } from "../eval/risk-tuning.js";
 import { getMetrics, getRecentIncidents } from "../ops/metrics.js";
-import { getConnectionStatus } from "../ibkr/connection.js";
 import { checkDriftAlerts } from "../eval/drift-alerts.js";
 import { upsertRiskConfig } from "../db/database.js";
 import { RISK_CONFIG_DEFAULTS, type RiskConfigParam } from "../db/schema.js";
@@ -127,6 +127,32 @@ export function createMcpServer(): McpServer {
     name: "market-data-bridge",
     version: "2.0.0",
   });
+
+  // --- Tool: debug_runtime --- Proves what THIS process is actually using
+  server.tool(
+    "debug_runtime",
+    "Returns runtime diagnostics: PID, env vars, clientId, connection state. Use to prove which process is serving tools.",
+    {},
+    async () => {
+      const conn = getConnectionStatus();
+      return {
+        content: [{ type: "text", text: JSON.stringify({
+          pid: process.pid,
+          ppid: process.ppid,
+          mode: process.argv.includes("--mode")
+            ? process.argv[process.argv.indexOf("--mode") + 1] : "unknown",
+          clientId: conn.clientId,
+          reconnectAttempts: conn.reconnectAttempts,
+          host: conn.host,
+          port: conn.port,
+          connected: conn.connected,
+          accountMode: conn.mode,
+          uptime_s: Math.round(process.uptime()),
+          started: new Date(Date.now() - process.uptime() * 1000).toISOString(),
+        }, null, 2) }],
+      };
+    }
+  );
 
   // --- Tool: get_status ---
   server.tool(

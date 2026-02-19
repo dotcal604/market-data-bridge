@@ -42,6 +42,16 @@ async function sleep(ms: number): Promise<void> {
 
 async function main() {
   const mode = parseMode();
+
+  // Minimal startup line (always). Verbose env dump only with MCP_DEBUG=1.
+  process.stderr.write(`[MCP] PID=${process.pid} PPID=${process.ppid} mode=${mode} ts=${new Date().toISOString()}\n`);
+  if (process.env.MCP_DEBUG === "1") {
+    process.stderr.write(
+      `[MCP-DIAG] clientId=${config.ibkr.clientId} port=${config.ibkr.port} ` +
+      `DB_PATH=${process.env.DB_PATH ?? "(unset)"} FLATTEN=${process.env.FLATTEN_ENABLED ?? "(unset)"}\n`
+    );
+  }
+
   logger.info({ mode }, "Market Bridge starting");
 
   if (process.uptime() < 5) {

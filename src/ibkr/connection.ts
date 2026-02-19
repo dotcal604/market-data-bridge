@@ -152,27 +152,30 @@ function computeReconnectDelayMs(attempt: number): number {
 const MIN_TWS_VERSION = 163; // TWS 10.30 reports server version 163
 
 /**
- * Deterministic clientId based on transport mode to prevent collisions.
+ * Compute a unique-ish clientId for this process.
  *
- * TWS allows one connection per clientId. When Claude Desktop (MCP/stdio)
- * and Claude Code (REST) both start from the same codebase, they must use
- * different IDs. Using Math.random() was flaky — collisions still happened.
+ * Layout:  base (from IBKR_CLIENT_ID env) + modeOffset (0/1/2) + pidSlot (0..12, step 3)
  *
- * Strategy: use the process's --mode flag to pick a deterministic base,
- * then allow a small retry window on error 326.
+ * - base=0,  mode=both → bridge     clientId ≈ 2 + pidSlot
+ * - base=5,  mode=mcp  → Code MCP   clientId ≈ 5 + pidSlot
+ * - base=10, mode=mcp  → Desktop    clientId ≈ 10 + pidSlot
  *
- *   MCP-only  → base 0  (Desktop's stdio process)
- *   REST-only → base 1  (Claude Code's dev server)
- *   both      → base 2  (npm run dev — single process)
+ * PID-based slot ensures concurrent processes (e.g. Desktop spawning 3)
+ * start on different clientIds without collision.
+ * Error-326 retry still bumps by +3, staying in the same mod-3 lane.
  *
- * IBKR_CLIENT_ID env var shifts the base (e.g., 10 → MCP=10, REST=11, both=12).
+ * Range: base + 0..2 + 0..12 + retries(0..15) = base + 0..29. TWS accepts 0–999.
  */
 function resolveClientId(): number {
   const base = config.ibkr.clientId; // from IBKR_CLIENT_ID env var
   const modeIdx = process.argv.indexOf("--mode");
   const mode = modeIdx !== -1 ? process.argv[modeIdx + 1]?.toLowerCase() : "both";
-  const offset = mode === "mcp" ? 0 : mode === "rest" ? 1 : 2;
-  return base + offset;
+  const modeOffset = mode === "mcp" ? 0 : mode === "rest" ? 1 : 2;
+  // PID-based slot spreads concurrent processes across clientId space.
+  // slot = (PID % 5) * 3  →  0, 3, 6, 9, 12
+  // Mod-3 lane separation preserved, so error-326 retries (+3) never cross modes.
+  const slot = (process.pid % 5) * 3;
+  return base + modeOffset + slot;
 }
 
 let currentClientId = resolveClientId();
