@@ -552,19 +552,19 @@ router.get("/account/pnl", async (_req, res) => {
 // Must be defined BEFORE /:symbol to avoid Express matching "intraday" as a symbol param
 router.get("/account/pnl/intraday", (_req, res) => {
   try {
-    const snapshots = queryAccountSnapshots(300) as Array<{ created_at: string; [k: string]: unknown }>;
-    
+    const snapshots = queryAccountSnapshots(300) as Array<{ created_at: string;[k: string]: unknown }>;
+
     const now = new Date();
     const et = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" }));
     const todayET = `${et.getFullYear()}-${String(et.getMonth() + 1).padStart(2, '0')}-${String(et.getDate()).padStart(2, '0')}`;
-    
+
     const todaySnapshots = snapshots.filter((s) => {
       const snapshotDate = new Date(s.created_at);
       const snapshotET = new Date(snapshotDate.toLocaleString("en-US", { timeZone: "America/New_York" }));
       const snapshotDateStr = `${snapshotET.getFullYear()}-${String(snapshotET.getMonth() + 1).padStart(2, '0')}-${String(snapshotET.getDate()).padStart(2, '0')}`;
       return snapshotDateStr === todayET;
     });
-    
+
     res.json({ snapshots: todaySnapshots, count: todaySnapshots.length });
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Unknown error";
@@ -1222,28 +1222,6 @@ router.post("/session/reset", (_req, res) => {
   res.json(getSessionState());
 });
 
-// GET /api/account/pnl/intraday — today's account snapshots for equity curve
-router.get("/account/pnl/intraday", (_req, res) => {
-  try {
-    const now = new Date();
-    const et = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" }));
-    const year = et.getFullYear();
-    const month = String(et.getMonth() + 1).padStart(2, "0");
-    const day = String(et.getDate()).padStart(2, "0");
-    const todayStr = `${year}-${month}-${day}`;
-
-    const snapshots = queryAccountSnapshots(1000);
-    const todaySnapshots = (snapshots as any[]).filter((s) => {
-      const createdStr = s.created_at.substring(0, 10); // "YYYY-MM-DD HH:MM:SS" -> "YYYY-MM-DD"
-      return createdStr === todayStr;
-    });
-
-    res.json({ count: todaySnapshots.length, snapshots: todaySnapshots });
-  } catch (e: any) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
 // GET /api/risk/config — current persisted risk config + effective guardrail values
 router.get("/risk/config", (_req, res) => {
   try {
@@ -1296,7 +1274,7 @@ router.post("/risk/size-position", async (req, res) => {
   }
   try {
     const { symbol, entryPrice, stopPrice, riskPercent, riskAmount, maxCapitalPercent } = req.body ?? {};
-    
+
     // Validate required fields
     if (!symbol) {
       res.status(400).json({ error: "symbol is required" });
