@@ -3,6 +3,7 @@
 import { AccountSummary } from "@/components/account/account-summary";
 import { PositionsTable } from "@/components/account/positions-table";
 import { FlattenControls } from "@/components/account/flatten-controls";
+import { PortfolioExposureCard } from "@/components/account/portfolio-exposure";
 
 export default function AccountPage() {
   return (
@@ -15,6 +16,8 @@ export default function AccountPage() {
       </div>
 
       <AccountSummary />
+
+      <PortfolioExposureCard />
 
       <FlattenControls />
 

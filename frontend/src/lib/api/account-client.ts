@@ -30,6 +30,19 @@ export interface Quote {
   source: string;
 }
 
+export interface PortfolioExposure {
+  grossExposure: number;
+  netExposure: number;
+  percentDeployed: number;
+  largestPositionPercent: number;
+  largestPosition: string | null;
+  sectorBreakdown: Record<string, number>;
+  betaWeightedExposure: number;
+  portfolioHeat: number;
+  positionCount: number;
+  netLiquidation: number;
+}
+
 export const accountClient = {
   async getSummary(): Promise<AccountSummaryResponse> {
     return fetchJSON<AccountSummaryResponse>(`${API_BASE}/account/summary`);
@@ -57,5 +70,9 @@ export const accountClient = {
 
   async getIntradayPnL(): Promise<IntradayPnLResponse> {
     return fetchJSON<IntradayPnLResponse>(`${API_BASE}/account/pnl/intraday`);
+  },
+
+  async getPortfolioExposure(): Promise<PortfolioExposure> {
+    return fetchJSON<PortfolioExposure>(`${API_BASE}/portfolio/exposure`);
   },
 };

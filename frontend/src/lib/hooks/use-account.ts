@@ -190,3 +190,11 @@ export function useIntradayPnL(refetchInterval = 30_000) {
     refetchInterval,
   });
 }
+
+export function usePortfolioExposure(refetchInterval = 30_000) {
+  return useQuery({
+    queryKey: ["portfolio-exposure"],
+    queryFn: () => accountClient.getPortfolioExposure(),
+    refetchInterval,
+  });
+}
