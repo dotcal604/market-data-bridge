@@ -1,3 +1,11 @@
+/**
+ * Estimate float rotation (volume / float).
+ * Uses market cap and price to estimate float (assuming 80% float).
+ * @param volume Current volume
+ * @param marketCap Market capitalization
+ * @param last Current price
+ * @returns Float rotation ratio
+ */
 export function computeFloatRotation(
   volume: number,
   marketCap: number | null,

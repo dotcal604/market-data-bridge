@@ -1,3 +1,11 @@
+/**
+ * Compute price extension (distance from open/close) in ATR units.
+ * @param last Current price
+ * @param closePrev Previous close
+ * @param open Open price
+ * @param atr Average True Range
+ * @returns Extension in ATR units
+ */
 export function computePriceExtension(
   last: number,
   closePrev: number,

@@ -24,6 +24,11 @@ export interface ContractDetailsData {
   liquidHours: string;
 }
 
+/**
+ * Fetch full contract details from IBKR.
+ * @param params Search parameters (symbol, secType, exchange, currency)
+ * @returns Promise resolving to array of ContractDetailsData
+ */
 export async function getContractDetails(params: {
   symbol: string;
   secType?: string;

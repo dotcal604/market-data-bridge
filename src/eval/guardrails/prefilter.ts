@@ -7,6 +7,9 @@ export interface PrefilterResult {
 
 /**
  * Structural pre-filters that reject a trade BEFORE spending on model calls.
+ * Checks spread, volume, and extension extremes.
+ * @param features Computed feature vector
+ * @returns Prefilter result (passed/blocked + flags)
  */
 export function runPrefilters(features: FeatureVector): PrefilterResult {
   const flags: string[] = [];

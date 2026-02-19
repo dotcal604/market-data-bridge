@@ -128,6 +128,11 @@ function withErrorHandling<T = any>(toolName: string, handler: ToolHandler<T>): 
   };
 }
 
+/**
+ * Initialize and configure the Model Context Protocol (MCP) server.
+ * Registers all tools for market data, trading, analysis, and operations.
+ * @returns Configured McpServer instance
+ */
 export function createMcpServer(): McpServer {
   const server = new McpServer({
     name: "market-data-bridge",

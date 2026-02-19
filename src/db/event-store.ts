@@ -99,6 +99,7 @@ export class EventStore {
   /**
    * Append a new event to the log.
    * This is an O(1) operation.
+   * @param event The event to append
    */
   public publish(event: TradingEvent): void {
     const stmt = this.db.prepare(`
@@ -118,6 +119,7 @@ export class EventStore {
 
   /**
    * Subscribe to the event stream for Read Model updates.
+   * @param listener Callback function receiving events
    */
   public subscribe(listener: (event: TradingEvent) => void): void {
     this.listeners.push(listener);
@@ -156,6 +158,8 @@ export class EventStore {
 
   /**
    * Get events for a specific order (e.g., for audit trails).
+   * @param orderId Order ID to filter by
+   * @returns Array of stored events
    */
   public getEventsForOrder(orderId: string): StoredEvent[] {
     // This is a more complex query, typically used for debugging or specific audits

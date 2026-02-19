@@ -45,6 +45,11 @@ function toOptionContract(params: {
   };
 }
 
+/**
+ * Request real-time PnL updates for a single position.
+ * @param symbol Stock symbol
+ * @returns Promise resolving to PnL data object
+ */
 export async function reqPnLSingleBySymbol(symbol: string): Promise<{
   symbol: string;
   conId: number;
@@ -125,6 +130,11 @@ export async function reqPnLSingleBySymbol(symbol: string): Promise<{
   });
 }
 
+/**
+ * Search for contracts matching a pattern.
+ * @param pattern Search string (e.g. "AAPL")
+ * @returns Promise resolving to list of contract descriptions
+ */
 export async function reqMatchingSymbols(pattern: string): Promise<unknown[]> {
   requireConnected();
   const ib = getIB();
@@ -165,6 +175,11 @@ export async function reqMatchingSymbols(pattern: string): Promise<unknown[]> {
   });
 }
 
+/**
+ * Set the market data type (1=Live, 2=Frozen, 3=Delayed, 4=DelayedFrozen).
+ * @param marketDataType Type code
+ * @returns Promise resolving to confirmation object
+ */
 export async function reqMarketDataType(marketDataType: number): Promise<{ marketDataType: number; reqId: number }> {
   requireConnected();
   const ib = getIB();
@@ -203,6 +218,11 @@ export async function reqMarketDataType(marketDataType: number): Promise<{ marke
   });
 }
 
+/**
+ * Request auto-binding of open orders.
+ * @param autoBind True to enable
+ * @returns Promise resolving to confirmation object
+ */
 export async function reqAutoOpenOrders(autoBind: boolean): Promise<{ enabled: boolean }> {
   requireConnected();
   const ib = getIB();
@@ -210,6 +230,11 @@ export async function reqAutoOpenOrders(autoBind: boolean): Promise<{ enabled: b
   return { enabled: autoBind };
 }
 
+/**
+ * Get the earliest available data timestamp for a contract.
+ * @param params Search parameters
+ * @returns Promise resolving to head timestamp
+ */
 export async function reqHeadTimestampBySymbol(params: {
   symbol: string;
   whatToShow: "TRADES" | "MIDPOINT" | "BID" | "ASK";
@@ -255,6 +280,11 @@ export async function reqHeadTimestampBySymbol(params: {
   });
 }
 
+/**
+ * Request price histogram data.
+ * @param params Search parameters
+ * @returns Promise resolving to histogram entries
+ */
 export async function reqHistogramDataBySymbol(params: {
   symbol: string;
   useRTH: boolean;
@@ -300,6 +330,11 @@ export async function reqHistogramDataBySymbol(params: {
   });
 }
 
+/**
+ * Calculate implied volatility for an option.
+ * @param params Option parameters and pricing
+ * @returns Promise resolving to calculation results
+ */
 export async function calculateImpliedVolatility(params: {
   symbol: string;
   expiry: string;
@@ -373,6 +408,11 @@ export async function calculateImpliedVolatility(params: {
   });
 }
 
+/**
+ * Calculate option price based on volatility.
+ * @param params Option parameters and volatility
+ * @returns Promise resolving to calculation results
+ */
 export async function calculateOptionPrice(params: {
   symbol: string;
   expiry: string;
@@ -446,6 +486,10 @@ export async function calculateOptionPrice(params: {
   });
 }
 
+/**
+ * Get current server time from IBKR.
+ * @returns Promise resolving to current time
+ */
 export async function reqCurrentTime(): Promise<{ epochSeconds: number; isoTime: string }> {
   requireConnected();
   const ib = getIB();
@@ -484,6 +528,11 @@ export async function reqCurrentTime(): Promise<{ epochSeconds: number; isoTime:
   });
 }
 
+/**
+ * Fetch market rule details (price increments, etc).
+ * @param ruleId Rule ID from contract details
+ * @returns Promise resolving to market rule info
+ */
 export async function reqMarketRule(ruleId: number): Promise<{ ruleId: number; increments: unknown[] }> {
   requireConnected();
   const ib = getIB();
@@ -522,6 +571,11 @@ export async function reqMarketRule(ruleId: number): Promise<{ ruleId: number; i
   });
 }
 
+/**
+ * Fetch smart components for an exchange.
+ * @param exchange Exchange code (e.g. "SMART")
+ * @returns Promise resolving to component map
+ */
 export async function reqSmartComponents(exchange: string): Promise<{ exchange: string; components: Array<{ bitNumber: number; exchange: string; exchangeLetter: string }> }> {
   requireConnected();
   const ib = getIB();
@@ -567,6 +621,10 @@ export async function reqSmartComponents(exchange: string): Promise<{ exchange: 
   });
 }
 
+/**
+ * Get list of exchanges that support market depth.
+ * @returns Promise resolving to list of exchanges
+ */
 export async function reqMktDepthExchanges(): Promise<{ exchanges: unknown[] }> {
   requireConnected();
   const ib = getIB();
@@ -606,6 +664,11 @@ export async function reqMktDepthExchanges(): Promise<{ exchanges: unknown[] }> 
   });
 }
 
+/**
+ * Request fundamental data (financial reports, etc).
+ * @param params Search parameters (symbol, reportType)
+ * @returns Promise resolving to XML report data
+ */
 export async function reqFundamentalDataBySymbol(params: {
   symbol: string;
   reportType: string;

@@ -26,6 +26,10 @@ const ACCOUNT_TAGS = [
   "AvailableFunds",
 ].join(",");
 
+/**
+ * Fetch account summary (NetLiquidation, BuyingPower, etc).
+ * @returns Promise resolving to AccountSummaryData
+ */
 export async function getAccountSummary(): Promise<AccountSummaryData> {
   const ib = getIB();
   const reqId = getNextReqId();
@@ -138,6 +142,10 @@ export interface PositionData {
   avgCost: number;
 }
 
+/**
+ * Fetch current open positions.
+ * @returns Promise resolving to array of PositionData
+ */
 export async function getPositions(): Promise<PositionData[]> {
   const ib = getIB();
 
@@ -210,6 +218,10 @@ export interface PnLData {
   timestamp: string;
 }
 
+/**
+ * Fetch daily and unrealized PnL for the account.
+ * @returns Promise resolving to PnLData
+ */
 export async function getPnL(): Promise<PnLData> {
   const ib = getIB();
   const reqId = getNextReqId();

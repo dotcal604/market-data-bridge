@@ -183,18 +183,36 @@ export class ReadModelStore {
 
   // ── Public Accessors (The "Read" API) ──────────────────────────────────────
 
+  /**
+   * Get the current state of an order.
+   * @param orderId Order ID
+   * @returns Order state or undefined
+   */
   public getOrder(orderId: string): OrderState | undefined {
     return this.orders.get(orderId);
   }
 
+  /**
+   * Get the current position for a symbol.
+   * @param symbol Stock symbol
+   * @returns Position state or undefined
+   */
   public getPosition(symbol: string): PositionState | undefined {
     return this.positions.get(symbol);
   }
 
+  /**
+   * Get all tracked positions.
+   * @returns Array of position states
+   */
   public getAllPositions(): PositionState[] {
     return Array.from(this.positions.values());
   }
 
+  /**
+   * Get global system state (regime, risk stats).
+   * @returns System state object
+   */
   public getSystemState(): SystemState {
     return { ...this.system };
   }

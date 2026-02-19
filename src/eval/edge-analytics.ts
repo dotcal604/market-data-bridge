@@ -376,6 +376,10 @@ function mulberry32(seed: number): () => number {
  * resample, then reports 2.5th / 97.5th percentile bounds.
  *
  * Pure function — deterministic with seed.
+ * @param rMultiples Array of trade outcomes (R-multiples)
+ * @param nResamples Number of bootstrap iterations (default 1000)
+ * @param seed Random seed for reproducibility
+ * @returns Array of confidence intervals for key metrics
  */
 export function computeBootstrapCI(
   rMultiples: number[],
@@ -485,6 +489,11 @@ export function computeBootstrapCI(
  * 1) Resample trades with replacement.
  * 2) Build equity curve from sampled R-multiples.
  * 3) Track maximum drawdown and final equity.
+ * @param rMultiples Array of trade outcomes
+ * @param nSimulations Number of simulations (default 1000)
+ * @param nTrades Trades per simulation (defaults to input length)
+ * @param seed Random seed
+ * @returns Monte Carlo risk metrics
  */
 export function computeMonteCarloDD(
   rMultiples: number[],
@@ -555,6 +564,8 @@ export function computeMonteCarloDD(
 /**
  * Walk-forward validation: train on N trades, test on M trades, step forward.
  * Tests whether optimized weights produce real out-of-sample edge.
+ * @param opts Configuration (days lookback, train/test split size)
+ * @returns Walk-forward analysis result
  */
 export function runWalkForward(opts: {
   days?: number;
@@ -852,6 +863,8 @@ function computeFeatureAttribution(rows: OutcomeRow[]): FeatureAttribution[] {
 /**
  * Compute full edge report: rolling metrics, current stats,
  * walk-forward validation, and feature attribution.
+ * @param opts Configuration options
+ * @returns Comprehensive edge report
  */
 export function computeEdgeReport(opts: {
   days?: number;

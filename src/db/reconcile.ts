@@ -24,6 +24,7 @@ import { logReconcile } from "../logging.js";
  *   - WARN: unknown orders not in local DB
  *   - ERROR: position mismatch
  *   Update DB to match reality, snapshot positions.
+ * @returns Promise resolving when reconciliation is complete
  */
 export async function runReconciliation(): Promise<void> {
   if (!isConnected()) {

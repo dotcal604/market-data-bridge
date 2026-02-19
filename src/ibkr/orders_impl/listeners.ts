@@ -22,11 +22,16 @@ let persistentListenersAttached = false;
  * to a fresh `ib` instance after a reconnect. Without this, listeners
  * remain on the dead (destroyed) IBApi object and order/execution events
  * are silently lost.
+ * @returns void
  */
 export function resetPersistentListenerGuard(): void {
   persistentListenersAttached = false;
 }
 
+/**
+ * Attach global event listeners for order updates, executions, and commissions.
+ * These listeners persist across reconnections and ensure DB sync.
+ */
 export function attachPersistentOrderListeners() {
   if (persistentListenersAttached) return;
   persistentListenersAttached = true;

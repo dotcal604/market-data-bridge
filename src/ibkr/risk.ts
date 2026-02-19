@@ -64,6 +64,11 @@ function loadTunedRiskConfig(): { max_position_pct: number; volatility_scalar: n
   }
 }
 
+/**
+ * Calculate recommended position size based on risk parameters and volatility.
+ * @param request Position sizing parameters
+ * @returns Detailed position sizing analysis
+ */
 export async function calculatePositionSize(
   request: PositionSizeRequest
 ): Promise<PositionSizeResponse> {

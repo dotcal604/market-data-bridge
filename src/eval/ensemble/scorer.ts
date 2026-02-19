@@ -73,6 +73,7 @@ function scoreEnsemble(
  * uses regime-specific weights if available.
  * @param evaluations - Model evaluations to ensemble
  * @param regime - Optional volatility regime for regime-conditioned weights
+ * @returns Ensemble score and consensus metrics
  */
 const MIN_CALIBRATION_SAMPLES = 30;
 
@@ -95,6 +96,9 @@ export function computeEnsemble(evaluations: ModelEvaluation[], regime?: string)
 /**
  * Compute ensemble score with explicit custom weights.
  * Used by weight simulation endpoint to re-score historical evals.
+ * @param evaluations Model evaluations
+ * @param weights Explicit weights to use
+ * @returns Ensemble score
  */
 export function computeEnsembleWithWeights(
   evaluations: ModelEvaluation[],

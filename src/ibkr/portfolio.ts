@@ -85,6 +85,12 @@ function correlation(xs: readonly number[], ys: readonly number[]): number {
 
 // ─── ATR Calculation ──────────────────────────────────────────
 
+/**
+ * Calculate Average True Range (ATR).
+ * @param bars Array of BarData
+ * @param period Lookback period (default 14)
+ * @returns ATR value
+ */
 export function calculateATR(bars: BarData[], period: number = 14): number {
   if (bars.length < 2) return 0;
 
@@ -110,6 +116,12 @@ export function calculateATR(bars: BarData[], period: number = 14): number {
 
 // ─── Beta Calculation ─────────────────────────────────────────
 
+/**
+ * Calculate Beta relative to a benchmark (SPY).
+ * @param symbol Target symbol
+ * @param benchmarkSymbol Benchmark symbol (default SPY)
+ * @returns Beta coefficient (default 1.0 on failure)
+ */
 export async function calculateBeta(symbol: string, benchmarkSymbol: string = "SPY"): Promise<number> {
   try {
     const [symbolBars, benchmarkBars] = await Promise.all([
@@ -174,6 +186,12 @@ export interface PortfolioStressTestResult {
   warnings: string[];
 }
 
+/**
+ * Simulate portfolio performance under market shock.
+ * @param shockPercent Market move percentage (e.g. -5.0)
+ * @param betaAdjusted Apply beta weighting to positions
+ * @returns Stress test results
+ */
 export async function runPortfolioStressTest(shockPercent: number, betaAdjusted: boolean): Promise<PortfolioStressTestResult> {
   const [positions, accountSummary] = await Promise.all([getPositions(), getAccountSummary()]);
 
@@ -280,6 +298,10 @@ interface PositionWithValue extends PositionData {
   atr: number;
 }
 
+/**
+ * Calculate portfolio exposure metrics (gross, net, sector breakdown).
+ * @returns Portfolio exposure analysis
+ */
 export async function computePortfolioExposure(): Promise<PortfolioExposureResponse> {
   const [positions, summary] = await Promise.all([
     getPositions(),

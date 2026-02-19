@@ -33,6 +33,8 @@ export class OrderBookFeatures {
   /**
    * Calculates the Order Book Imbalance (OBI) at the top level (L1).
    * Complexity: O(1)
+   * @param book Order book state
+   * @returns OBI score [-1, 1]
    */
   public static calculateOBI(book: OrderBookState): number {
     if (!book.bids.length || !book.asks.length) return 0;
@@ -52,6 +54,9 @@ export class OrderBookFeatures {
    * Gives less weight to deeper levels as they are less likely to be executed against.
    * Formula: WOBI = Σ (w_i * OBI_i) / Σ w_i
    * Weight w_i decays exponentially with depth: w_i = e^(-0.5 * i)
+   * @param book Order book state
+   * @param depth Depth levels to include
+   * @returns Weighted OBI score [-1, 1]
    */
   public static calculateWOBI(book: OrderBookState, depth: number = 5): number {
     let weightedImbalanceSum = 0;
@@ -82,6 +87,7 @@ export class OrderBookFeatures {
    * 
    * @param buyVolumeWindow - Array of recent buy volumes per bucket
    * @param sellVolumeWindow - Array of recent sell volumes per bucket
+   * @returns VPIN score [0, 1]
    */
   public static calculateVPIN(buyVolumeWindow: number[], sellVolumeWindow: number[]): number {
     if (buyVolumeWindow.length !== sellVolumeWindow.length || buyVolumeWindow.length === 0) return 0;
@@ -106,6 +112,8 @@ export class OrderBookFeatures {
 /**
  * Adapter function to convert IBKR MarketDepthSnapshot to OrderBookState.
  * This bridges the gap between IBKR market data format and our feature computation format.
+ * @param snapshot IBKR market depth snapshot
+ * @returns Standardized OrderBookState
  */
 export function marketDepthToOrderBook(snapshot: {
   symbol: string;
@@ -125,6 +133,9 @@ export function marketDepthToOrderBook(snapshot: {
  * Compute all order book features from a single snapshot.
  * Convenience function that calculates OBI, WOBI for a given book state.
  * Note: VPIN requires historical trade flow data and cannot be computed from a single snapshot.
+ * @param book Order book state
+ * @param depth Depth levels to calculate
+ * @returns Object with OBI and WOBI
  */
 export function computeOrderBookFeatures(book: OrderBookState, depth: number = 5): {
   obi: number;

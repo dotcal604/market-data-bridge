@@ -49,6 +49,9 @@ export class VWAPSlicer extends EventEmitter {
     this.emit('status', this.state);
   }
 
+  /**
+   * Start the execution loop.
+   */
   public start() {
     if (this.state !== 'IDLE') return;
     this.state = 'RUNNING';

@@ -30,7 +30,9 @@ function safeParseJsonArray(raw: string): string[] {
 
 let messages: CollabMessage[] = [];
 
-// Load persisted messages from DB on startup
+/**
+ * Initialize in-memory message store from database persistence.
+ */
 export function initCollabFromDb() {
   try {
     const rows = loadRecentCollab(MAX_MESSAGES);
@@ -56,6 +58,11 @@ export interface ReadOptions {
   limit?: number;
 }
 
+/**
+ * Read messages from the collaboration channel.
+ * @param opts Filter options (since, author, tag, limit)
+ * @returns Array of messages
+ */
 export function readMessages(opts: ReadOptions = {}): CollabMessage[] {
   let result = messages;
 
@@ -81,6 +88,11 @@ export interface PostInput {
   tags?: string[];
 }
 
+/**
+ * Post a new message to the collaboration channel.
+ * @param input Message content and metadata
+ * @returns The created message
+ */
 export function postMessage(input: PostInput): CollabMessage {
   if (!input.content || input.content.trim().length === 0) {
     throw new Error("Message content cannot be empty");
@@ -124,6 +136,10 @@ export function postMessage(input: PostInput): CollabMessage {
   return msg;
 }
 
+/**
+ * Clear all messages from the collaboration channel.
+ * @returns Object containing cleared count
+ */
 export function clearMessages(): { cleared: number } {
   const count = messages.length;
   messages = [];
@@ -135,6 +151,10 @@ export function clearMessages(): { cleared: number } {
   return { cleared: count };
 }
 
+/**
+ * Get message statistics.
+ * @returns Object with total count and breakdown by author
+ */
 export function getStats(): { totalMessages: number; byAuthor: Record<string, number> } {
   const byAuthor: Record<string, number> = {};
   for (const m of messages) {

@@ -15,8 +15,13 @@ export interface GuardrailResult {
 
 /**
  * Post-ensemble behavioral guardrails.
- * getRecentOutcomesFn is injected to avoid circular dependency with DB.
- * getDriftReportFn is injected to check for regime shifts.
+ * Checks trading window, loss streaks, sample size, and model disagreement.
+ *
+ * @param ensemble Computed ensemble score
+ * @param getRecentOutcomesFn Injection for fetching recent outcomes (avoids circular dependency)
+ * @param getOutcomeCountFn Injection for fetching total outcome count
+ * @param getDriftReportFn Injection for checking regime drift
+ * @returns Guardrail result (allowed/blocked + flags)
  */
 export function runGuardrails(
   ensemble: EnsembleScore,

@@ -91,6 +91,10 @@ function inferConviction(
 /**
  * Extract structured reasoning from a model's reasoning text.
  * Designed to be fast (no LLM call) and resilient to varied phrasings.
+ * @param reasoning Raw reasoning text from LLM
+ * @param confidence Confidence score (0-100)
+ * @param tradeScore Trade score (0-100)
+ * @returns Structured reasoning object
  */
 export function extractStructuredReasoning(
   reasoning: string | null,

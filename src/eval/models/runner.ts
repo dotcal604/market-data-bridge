@@ -15,6 +15,12 @@ export interface RunnerResult {
 /**
  * Run all 3 models in parallel with identical prompt.
  * Uses Promise.allSettled — one model failing doesn't block others.
+ * @param symbol Stock symbol
+ * @param direction "long" or "short"
+ * @param entryPrice Entry price
+ * @param stopPrice Stop price
+ * @param features Computed features
+ * @returns Array of ModelEvaluation results
  */
 export async function evaluateAllModels(
   symbol: string,

@@ -97,6 +97,11 @@ let scannerFetching: Promise<string> | null = null;
 
 // ── Real-Time Bars ──────────────────────────────────────────────────────────
 
+/**
+ * Start a real-time bar subscription (5-second bars).
+ * @param params Subscription parameters
+ * @returns Subscription info
+ */
 export function subscribeRealTimeBars(params: {
   symbol: string;
   secType?: string;
@@ -182,6 +187,11 @@ export function subscribeRealTimeBars(params: {
   return toInfo(reqId, state);
 }
 
+/**
+ * Cancel a real-time bar subscription.
+ * @param id Subscription ID
+ * @returns True if found and cancelled
+ */
 export function unsubscribeRealTimeBars(id: string): boolean {
   const reqId = idToReqId.get(id);
   if (reqId === undefined) return false;
@@ -199,6 +209,12 @@ export function unsubscribeRealTimeBars(id: string): boolean {
   return true;
 }
 
+/**
+ * Get recent bars for a subscription.
+ * @param id Subscription ID
+ * @param limit Max number of bars to return (default 60)
+ * @returns Array of RealTimeBar
+ */
 export function getRealTimeBars(id: string, limit?: number): RealTimeBar[] {
   const reqId = idToReqId.get(id);
   if (reqId === undefined) throw new Error(`Subscription ${id} not found`);
@@ -210,6 +226,11 @@ export function getRealTimeBars(id: string, limit?: number): RealTimeBar[] {
 
 // ── Account Updates ─────────────────────────────────────────────────────────
 
+/**
+ * Subscribe to streaming account updates.
+ * @param account Account ID
+ * @returns Subscription info
+ */
 export function subscribeAccountUpdates(account: string): SubscriptionInfo {
   if (!isConnected()) throw new Error("IBKR not connected");
   if (!account) throw new Error("account is required");
@@ -300,6 +321,10 @@ export function subscribeAccountUpdates(account: string): SubscriptionInfo {
   return { id, type: "accountUpdates", reqId: -1, account, createdAt: snapshot.lastUpdated };
 }
 
+/**
+ * Cancel account updates subscription.
+ * @returns True if cancelled
+ */
 export function unsubscribeAccountUpdates(): boolean {
   if (!accountSub) return false;
   accountSub.cleanup();
@@ -308,12 +333,20 @@ export function unsubscribeAccountUpdates(): boolean {
   return true;
 }
 
+/**
+ * Get latest account snapshot.
+ * @returns Account snapshot or null if not subscribed
+ */
 export function getAccountSnapshot(): AccountUpdateSnapshot | null {
   return accountSub?.snapshot ?? null;
 }
 
 // ── Scanner Parameters (cached one-shot) ────────────────────────────────────
 
+/**
+ * Fetch scanner parameters XML.
+ * @returns Promise resolving to XML string
+ */
 export async function getScannerParameters(): Promise<string> {
   if (!isConnected()) throw new Error("IBKR not connected");
 
@@ -369,6 +402,10 @@ export async function getScannerParameters(): Promise<string> {
 
 // ── Lifecycle ───────────────────────────────────────────────────────────────
 
+/**
+ * List all active subscriptions.
+ * @returns Array of SubscriptionInfo
+ */
 export function listSubscriptions(): SubscriptionInfo[] {
   const result: SubscriptionInfo[] = [];
 
@@ -390,6 +427,11 @@ export function listSubscriptions(): SubscriptionInfo[] {
   return result;
 }
 
+/**
+ * Get details for a specific subscription.
+ * @param id Subscription ID
+ * @returns Subscription info or null
+ */
 export function getSubscription(id: string): SubscriptionInfo | null {
   const reqId = idToReqId.get(id);
   if (reqId !== undefined) {
@@ -405,6 +447,9 @@ export function getSubscription(id: string): SubscriptionInfo | null {
   return null;
 }
 
+/**
+ * Cancel all active subscriptions.
+ */
 export function unsubscribeAll(): void {
   for (const [, state] of rtbSubs) {
     state.cleanup();

@@ -1,5 +1,12 @@
 import { logger } from "../logging.js";
 
+/**
+ * Wrap a promise with a timeout.
+ * @param promise The promise to await
+ * @param ms Timeout in milliseconds
+ * @param label Label for error message
+ * @returns Result of the promise
+ */
 export async function withTimeout<T>(
   promise: Promise<T>,
   ms: number,
@@ -16,6 +23,12 @@ export async function withTimeout<T>(
   }
 }
 
+/**
+ * Retry an async operation with exponential backoff.
+ * @param fn Async function to retry
+ * @param opts Retry options (retries, delayMs, label)
+ * @returns Result of the function
+ */
 export async function withRetry<T>(
   fn: () => Promise<T>,
   opts: { retries?: number; delayMs?: number; label?: string } = {},

@@ -11,6 +11,8 @@ export interface MarketContext {
 /**
  * Fetch SPY and QQQ quotes to determine market alignment.
  * Uses direct Yahoo provider import (no HTTP hop).
+ * @param direction Trade direction ("long" or "short")
+ * @returns Market context (SPY/QQQ change and alignment status)
  */
 export async function computeMarketAlignment(direction: string): Promise<MarketContext> {
   const [spyQuote, qqqQuote] = await Promise.all([
