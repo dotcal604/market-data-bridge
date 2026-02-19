@@ -18,6 +18,10 @@ const dbDir = path.dirname(dbPath);
 if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
 const db: DatabaseType = new Database(dbPath);
 
+/**
+ * Get the singleton database connection instance.
+ * @returns better-sqlite3 Database instance
+ */
 export function getDb(): DatabaseType {
   return db;
 }
@@ -689,10 +693,18 @@ pruneInbox: db.prepare(`DELETE FROM inbox WHERE created_at < datetime('now', '-'
 
 // ── Helper Functions ─────────────────────────────────────────────────────
 
+/**
+ * Generate a unique correlation ID for linking orders.
+ * @returns UUID v4 string
+ */
 export function generateCorrelationId(): string {
   return randomUUID();
 }
 
+/**
+ * Insert a new order record into the database.
+ * @param data Order details
+ */
 export function insertOrder(data: {
   order_id: number;
   symbol: string;
@@ -737,6 +749,13 @@ export function insertOrder(data: {
   });
 }
 
+/**
+ * Update the status of an existing order.
+ * @param orderId Order ID
+ * @param status New status
+ * @param filled Quantity filled (optional)
+ * @param avgPrice Average fill price (optional)
+ */
 export function updateOrderStatus(orderId: number, status: string, filled?: number, avgPrice?: number) {
   if (filled !== undefined) {
     stmts.updateOrderStatus.run({
@@ -750,6 +769,10 @@ export function updateOrderStatus(orderId: number, status: string, filled?: numb
   }
 }
 
+/**
+ * Insert a new execution record.
+ * @param data Execution details
+ */
 export function insertExecution(data: {
   exec_id: string;
   order_id: number;
@@ -780,10 +803,20 @@ export function insertExecution(data: {
   });
 }
 
+/**
+ * Update commission and realized P&L for an execution.
+ * @param execId Execution ID
+ * @param commission Commission amount
+ * @param realizedPnl Realized P&L (optional)
+ */
 export function updateExecutionCommission(execId: string, commission: number, realizedPnl: number | null) {
   stmts.updateExecutionCommission.run({ exec_id: execId, commission, realized_pnl: realizedPnl ?? null });
 }
 
+/**
+ * Insert a message into the collaboration channel.
+ * @param msg Message details
+ */
 export function insertCollabMessage(msg: {
   id: string;
   author: string;
@@ -802,6 +835,11 @@ export function insertCollabMessage(msg: {
   });
 }
 
+/**
+ * Load recent collaboration messages.
+ * @param limit Max messages to return
+ * @returns Array of messages (oldest first)
+ */
 export function loadRecentCollab(limit: number = 200): Array<{
   id: string; author: string; content: string; reply_to: string | null; tags: string | null; created_at: string;
 }> {
@@ -809,6 +847,10 @@ export function loadRecentCollab(limit: number = 200): Array<{
   return rows.reverse(); // DB returns newest first, we want oldest first
 }
 
+/**
+ * Clear all collaboration messages.
+ * @returns Number of deleted messages
+ */
 export function clearCollabDb(): number {
   const info = stmts.deleteAllCollab.run();
   return info.changes;
@@ -826,6 +868,10 @@ export interface InboxItemRow {
   created_at: string;
 }
 
+/**
+ * Insert a new inbox item.
+ * @param item Inbox item details
+ */
 export function insertInboxItem(item: {
   id: string;
   type: string;
@@ -844,25 +890,46 @@ export function insertInboxItem(item: {
   });
 }
 
+/**
+ * Load recent inbox items.
+ * @param limit Max items to return
+ * @returns Array of items (oldest first)
+ */
 export function loadRecentInbox(limit: number = 500): InboxItemRow[] {
   const rows = stmts.getRecentInbox.all(limit) as InboxItemRow[];
   return rows.reverse(); // oldest first
 }
 
+/**
+ * Mark a specific inbox item as read.
+ * @param id Item ID
+ */
 export function markInboxItemRead(id: string): void {
   stmts.markInboxRead.run(id);
 }
 
+/**
+ * Mark all inbox items as read.
+ * @returns Number of updated items
+ */
 export function markAllInboxItemsRead(): number {
   const info = stmts.markAllInboxRead.run();
   return info.changes;
 }
 
+/**
+ * Delete all inbox items.
+ * @returns Number of deleted items
+ */
 export function clearInboxDb(): number {
   const info = stmts.deleteAllInbox.run();
   return info.changes;
 }
 
+/**
+ * Get total and unread counts for inbox.
+ * @returns Object with total and unread counts
+ */
 export function getInboxCounts(): { total: number; unread: number } {
   const row = stmts.countInbox.get() as { total: number; unread: number };
   return { total: row.total ?? 0, unread: row.unread ?? 0 };
@@ -874,16 +941,30 @@ export function pruneInboxDb(days: number = 7): number {
   return info.changes;
 }
 
+/**
+ * Snapshot current positions state.
+ * @param positions Array of position objects
+ * @param source Source of snapshot (e.g. "reconcile")
+ */
 export function insertPositionSnapshot(positions: any[], source: string = "reconcile") {
   stmts.insertPositionSnapshot.run({ positions: JSON.stringify(positions), source });
 }
 
+/**
+ * Get the most recent positions snapshot.
+ * @returns Array of positions or null
+ */
 export function getLatestPositionSnapshot(): any[] | null {
   const row = stmts.getLatestPositionSnapshot.get() as any;
   if (!row) return null;
   return JSON.parse(row.positions);
 }
 
+/**
+ * Insert a new trade journal entry.
+ * @param data Journal entry details
+ * @returns ID of the new entry
+ */
 export function insertJournalEntry(data: {
   symbol?: string;
   strategy_version?: string;
@@ -921,6 +1002,11 @@ export function insertJournalEntry(data: {
   return Number(info.lastInsertRowid);
 }
 
+/**
+ * Update an existing journal entry.
+ * @param id Journal entry ID
+ * @param data Fields to update
+ */
 export function updateJournalEntry(id: number, data: { outcome_tags?: string[]; notes?: string }) {
   stmts.updateJournal.run({
     id,
@@ -929,6 +1015,10 @@ export function updateJournalEntry(id: number, data: { outcome_tags?: string[]; 
   });
 }
 
+/**
+ * Snapshot account balances.
+ * @param data Account balance details
+ */
 export function insertAccountSnapshot(data: {
   net_liquidation?: number;
   total_cash_value?: number;
@@ -949,6 +1039,11 @@ export function insertAccountSnapshot(data: {
 
 // ── Query Helpers ────────────────────────────────────────────────────────
 
+/**
+ * Query historical orders.
+ * @param opts Filters (symbol, strategy, limit)
+ * @returns Array of orders
+ */
 export function queryOrders(opts: { symbol?: string; strategy?: string; limit?: number } = {}) {
   const limit = opts.limit ?? 100;
   if (opts.symbol) return stmts.queryOrdersBySymbol.all(opts.symbol, limit);
@@ -956,12 +1051,22 @@ export function queryOrders(opts: { symbol?: string; strategy?: string; limit?: 
   return stmts.queryOrders.all(limit);
 }
 
+/**
+ * Query historical executions.
+ * @param opts Filters (symbol, limit)
+ * @returns Array of executions
+ */
 export function queryExecutions(opts: { symbol?: string; limit?: number } = {}) {
   const limit = opts.limit ?? 100;
   if (opts.symbol) return stmts.queryExecutionsBySymbol.all(opts.symbol, limit);
   return stmts.queryExecutions.all(limit);
 }
 
+/**
+ * Query trade journal entries.
+ * @param opts Filters (symbol, strategy, limit)
+ * @returns Array of journal entries
+ */
 export function queryJournal(opts: { symbol?: string; strategy?: string; limit?: number } = {}) {
   const limit = opts.limit ?? 100;
   if (opts.symbol) return stmts.queryJournalBySymbol.all(opts.symbol, limit);
@@ -969,18 +1074,37 @@ export function queryJournal(opts: { symbol?: string; strategy?: string; limit?:
   return stmts.queryJournal.all(limit);
 }
 
+/**
+ * Query recent account snapshots.
+ * @param limit Max snapshots to return
+ * @returns Array of snapshots
+ */
 export function queryAccountSnapshots(limit: number = 100) {
   return stmts.queryAccountSnapshots.all(limit);
 }
 
+/**
+ * Get an order by its numeric ID.
+ * @param orderId IBKR order ID
+ * @returns Order record or undefined
+ */
 export function getOrderByOrderId(orderId: number) {
   return stmts.getOrderByOrderId.get(orderId);
 }
 
+/**
+ * Get all orders sharing a correlation ID.
+ * @param correlationId Correlation UUID
+ * @returns Array of orders
+ */
 export function getOrdersByCorrelation(correlationId: string) {
   return stmts.getOrdersByCorrelation.all(correlationId);
 }
 
+/**
+ * Find correlation IDs for active bracket orders.
+ * @returns Array of correlation IDs
+ */
 export function getLiveBracketCorrelations(): Array<{ correlation_id: string }> {
   // Find correlation_ids where child orders exist (parent_order_id set)
   // and at least one order in the group is still live.
@@ -997,10 +1121,19 @@ export function getLiveBracketCorrelations(): Array<{ correlation_id: string }> 
   `).all() as Array<{ correlation_id: string }>;
 }
 
+/**
+ * Get all currently active orders (Pending, Submitted, etc).
+ * @returns Array of active orders
+ */
 export function getLiveOrders() {
   return stmts.getLiveOrders.all();
 }
 
+/**
+ * Get a journal entry by ID.
+ * @param id Entry ID
+ * @returns Journal entry or undefined
+ */
 export function getJournalById(id: number) {
   return stmts.getJournalById.get(id);
 }
@@ -1025,52 +1158,107 @@ function runEvalInsert(table: string, row: Record<string, unknown>): void {
   db.prepare(sql).run(bound);
 }
 
+/**
+ * Insert a new evaluation record.
+ * @param row Evaluation data
+ */
 export function insertEvaluation(row: Record<string, unknown>): void {
   runEvalInsert("evaluations", row);
 }
 
+/**
+ * Insert a model output record.
+ * @param row Model output data
+ */
 export function insertModelOutput(row: Record<string, unknown>): void {
   runEvalInsert("model_outputs", row);
 }
 
+/**
+ * Insert a trade outcome record.
+ * @param row Outcome data
+ */
 export function insertOutcome(row: Record<string, unknown>): void {
   runEvalInsert("outcomes", row);
 }
 
+/**
+ * Insert extracted reasoning data.
+ * @param row Reasoning data
+ */
 export function insertEvalReasoning(row: Record<string, unknown>): void {
   runEvalInsert("eval_reasoning", row);
 }
 
+/**
+ * Get structured reasoning for an evaluation.
+ * @param evaluationId Evaluation ID
+ * @returns Array of reasoning records
+ */
 export function getReasoningForEval(evaluationId: string): Record<string, unknown>[] {
   return stmts.queryReasoningByEval.all(evaluationId) as Record<string, unknown>[];
 }
 
+/**
+ * Get evaluation by ID.
+ * @param id Evaluation ID
+ * @returns Evaluation record or undefined
+ */
 export function getEvaluationById(id: string): Record<string, unknown> | undefined {
   return stmts.getEvaluationById.get(id) as Record<string, unknown> | undefined;
 }
 
+/**
+ * Get recent evaluations.
+ * @param limit Max records
+ * @param symbol Optional symbol filter
+ * @returns Array of evaluations
+ */
 export function getRecentEvaluations(limit: number = 50, symbol?: string): Record<string, unknown>[] {
   if (symbol) return stmts.queryEvaluationsBySymbol.all(symbol, limit) as Record<string, unknown>[];
   return stmts.queryEvaluations.all(limit) as Record<string, unknown>[];
 }
 
+/**
+ * Get recent trade outcomes.
+ * @param limit Max outcomes
+ * @returns Array of outcomes
+ */
 export function getRecentOutcomes(limit: number = 20): Array<Record<string, unknown>> {
   return stmts.queryRecentOutcomes.all(limit) as Array<Record<string, unknown>>;
 }
 
+/**
+ * Count total recorded outcomes.
+ * @returns Count
+ */
 export function getOutcomeCount(): number {
   const row = stmts.countOutcomes.get() as { n?: number } | undefined;
   return row?.n ?? 0;
 }
 
+/**
+ * Get model outputs for a specific evaluation.
+ * @param evaluationId Evaluation ID
+ * @returns Array of model outputs
+ */
 export function getModelOutputsForEval(evaluationId: string): Record<string, unknown>[] {
   return stmts.queryModelOutputsByEval.all(evaluationId) as Record<string, unknown>[];
 }
 
+/**
+ * Get the outcome for an evaluation.
+ * @param evaluationId Evaluation ID
+ * @returns Outcome record or undefined
+ */
 export function getOutcomeForEval(evaluationId: string): Record<string, unknown> | undefined {
   return stmts.getOutcomeByEval.get(evaluationId) as Record<string, unknown> | undefined;
 }
 
+/**
+ * Compute aggregate evaluation statistics.
+ * @returns Stats object
+ */
 export function getEvalStats(): Record<string, unknown> {
   const totalEvals = (stmts.countEvaluations.get() as any)?.n ?? 0;
   const totalOutcomes = (stmts.countOutcomes.get() as any)?.n ?? 0;
@@ -1127,6 +1315,10 @@ export function getEvalStats(): Record<string, unknown> {
 
 // ── Eval-Execution Auto-Link Helpers ──────────────────────────────────────
 
+/**
+ * Link an evaluation to an execution order.
+ * @param row Link details
+ */
 export function insertEvalExecutionLink(row: {
   evaluation_id: string;
   order_id: number;
@@ -1147,30 +1339,65 @@ export function insertEvalExecutionLink(row: {
   });
 }
 
+/**
+ * Get links for an evaluation.
+ * @param evaluationId Evaluation ID
+ * @returns Array of links
+ */
 export function getLinksForEval(evaluationId: string): Array<Record<string, unknown>> {
   return stmts.getLinksForEval.all(evaluationId) as Array<Record<string, unknown>>;
 }
 
+/**
+ * Get links for an order.
+ * @param orderId Order ID
+ * @returns Array of links
+ */
 export function getLinksForOrder(orderId: number): Array<Record<string, unknown>> {
   return stmts.getLinksForOrder.all(orderId) as Array<Record<string, unknown>>;
 }
 
+/**
+ * Find recent evaluations for a symbol (for heuristic linking).
+ * @param symbol Stock symbol
+ * @param since ISO timestamp
+ * @returns Array of evaluations
+ */
 export function getRecentEvalsForSymbol(symbol: string, since: string): Array<Record<string, unknown>> {
   return stmts.getRecentEvalsForSymbol.all(symbol, since) as Array<Record<string, unknown>>;
 }
 
+/**
+ * Get executions that haven't been linked to an evaluation yet.
+ * @param since ISO timestamp
+ * @returns Array of executions
+ */
 export function getUnlinkedExecutions(since: string): Array<Record<string, unknown>> {
   return stmts.getUnlinkedExecutions.all(since) as Array<Record<string, unknown>>;
 }
 
+/**
+ * Get all executions for a correlation ID.
+ * @param correlationId Correlation UUID
+ * @returns Array of executions
+ */
 export function getExecutionsByCorrelation(correlationId: string): Array<Record<string, unknown>> {
   return stmts.getExecutionsByCorrelation.all(correlationId) as Array<Record<string, unknown>>;
 }
 
+/**
+ * Get execution by ID.
+ * @param execId Execution ID
+ * @returns Execution record or undefined
+ */
 export function getExecutionByExecId(execId: string): Record<string, unknown> | undefined {
   return stmts.getExecutionByExecId.get(execId) as Record<string, unknown> | undefined;
 }
 
+/**
+ * Get statistics on auto-linking performance.
+ * @returns Stats object
+ */
 export function getAutoLinkStats(): Record<string, unknown> {
   const linkStats = stmts.getAutoLinkStats.get() as any ?? { total: 0, explicit_links: 0, heuristic_links: 0, avg_confidence: null };
 
@@ -1186,6 +1413,11 @@ export function getAutoLinkStats(): Record<string, unknown> {
   };
 }
 
+/**
+ * Get recent auto-links.
+ * @param limit Max links to return
+ * @returns Array of links
+ */
 export function getRecentLinks(limit: number = 20): Array<Record<string, unknown>> {
   return stmts.getRecentLinks.all(limit) as Array<Record<string, unknown>>;
 }
@@ -1464,6 +1696,8 @@ export function getTodaysTrades(): Array<Record<string, unknown>> {
 /**
  * Get per-model confidence + r_multiple for drift calibration.
  * Joins model_outputs with outcomes for trades that have both.
+ * @param days Lookback period in days
+ * @returns Array of outcomes
  */
 export function getModelOutcomesForDrift(days: number = 90): Array<Record<string, unknown>> {
   return db.prepare(`
@@ -1500,6 +1734,10 @@ export interface RiskConfigRow {
   updated_at: string;
 }
 
+/**
+ * Get all risk configuration rows.
+ * @returns Array of RiskConfigRow
+ */
 export function getRiskConfigRows(): RiskConfigRow[] {
   return db.prepare(`
     SELECT param, value, source, updated_at
@@ -1508,11 +1746,20 @@ export function getRiskConfigRows(): RiskConfigRow[] {
   `).all() as RiskConfigRow[];
 }
 
+/**
+ * Get a specific risk config value.
+ * @param param Parameter name
+ * @returns Value or null
+ */
 export function getRiskConfigValue(param: string): number | null {
   const row = db.prepare(`SELECT value FROM risk_config WHERE param = ? ORDER BY updated_at DESC LIMIT 1`).get(param) as { value: number } | undefined;
   return row?.value ?? null;
 }
 
+/**
+ * Update or insert risk configuration parameters.
+ * @param entries Array of config entries
+ */
 export function upsertRiskConfig(entries: Array<{ param: string; value: number; source?: string }>): void {
   const stmt = db.prepare(`
     INSERT INTO risk_config (param, value, source, updated_at)
@@ -1562,10 +1809,19 @@ export function getWeightHistory(limit: number = 100): WeightHistoryRow[] {
 
 // ── TraderSync Import Helpers ─────────────────────────────────────────────
 
+/**
+ * Insert a single TraderSync trade.
+ * @param row Trade data
+ */
 export function insertTraderSyncTrade(row: Record<string, unknown>): void {
   runEvalInsert("tradersync_trades", row);
 }
 
+/**
+ * Bulk insert TraderSync trades.
+ * @param rows Array of trade data
+ * @returns Insert/skip counts
+ */
 export function bulkInsertTraderSyncTrades(rows: Array<Record<string, unknown>>): { inserted: number; skipped: number } {
   let inserted = 0;
   let skipped = 0;
@@ -1587,6 +1843,11 @@ export function bulkInsertTraderSyncTrades(rows: Array<Record<string, unknown>>)
   return { inserted, skipped };
 }
 
+/**
+ * Query TraderSync trades.
+ * @param opts Filters (symbol, side, status, days, limit)
+ * @returns Array of trades
+ */
 export function getTraderSyncTrades(opts: {
   symbol?: string;
   side?: string;
@@ -1622,6 +1883,10 @@ export function getTraderSyncTrades(opts: {
   `).all(...params, limit) as Array<Record<string, unknown>>;
 }
 
+/**
+ * Get aggregate stats for TraderSync trades.
+ * @returns Stats object
+ */
 export function getTraderSyncStats(): Record<string, unknown> {
   return db.prepare(`
     SELECT
@@ -1641,6 +1906,11 @@ export function getTraderSyncStats(): Record<string, unknown> {
   `).get() as Record<string, unknown>;
 }
 
+/**
+ * Get TraderSync trades for a specific date.
+ * @param date YYYY-MM-DD
+ * @returns Array of trades
+ */
 export function getTraderSyncByDate(date: string): Array<Record<string, unknown>> {
   return db.prepare(`
     SELECT * FROM tradersync_trades WHERE open_date = ? ORDER BY open_time ASC
@@ -1649,6 +1919,11 @@ export function getTraderSyncByDate(date: string): Array<Record<string, unknown>
 
 // ── Holly Alert Helpers ──────────────────────────────────────────────────
 
+/**
+ * Bulk insert Holly alerts.
+ * @param rows Array of alerts
+ * @returns Insert/skip counts
+ */
 export function bulkInsertHollyAlerts(rows: Array<Record<string, unknown>>): { inserted: number; skipped: number } {
   let inserted = 0;
   let skipped = 0;
@@ -1670,6 +1945,11 @@ export function bulkInsertHollyAlerts(rows: Array<Record<string, unknown>>): { i
   return { inserted, skipped };
 }
 
+/**
+ * Query Holly alerts.
+ * @param opts Filters (symbol, strategy, limit, since)
+ * @returns Array of alerts
+ */
 export function queryHollyAlerts(opts: {
   symbol?: string;
   strategy?: string;
@@ -1691,6 +1971,10 @@ export function queryHollyAlerts(opts: {
   `).all(...params, limit) as Array<Record<string, unknown>>;
 }
 
+/**
+ * Get aggregate stats for Holly alerts.
+ * @returns Stats object
+ */
 export function getHollyAlertStats(): Record<string, unknown> {
   return db.prepare(`
     SELECT
@@ -1705,6 +1989,11 @@ export function getHollyAlertStats(): Record<string, unknown> {
   `).get() as Record<string, unknown>;
 }
 
+/**
+ * Get most recent symbols from Holly alerts.
+ * @param limit Max symbols
+ * @returns Array of symbols
+ */
 export function getLatestHollySymbols(limit = 20): string[] {
   const rows = db.prepare(`
     SELECT DISTINCT symbol FROM holly_alerts ORDER BY alert_time DESC LIMIT ?
@@ -1725,6 +2014,11 @@ export interface SignalRow {
   prefilter_passed: number;
 }
 
+/**
+ * Insert a new signal (auto-eval result).
+ * @param row Signal details
+ * @returns New signal ID
+ */
 export function insertSignal(row: SignalRow): number {
   const result = db.prepare(`
     INSERT INTO signals (holly_alert_id, evaluation_id, symbol, direction, strategy, ensemble_score, should_trade, prefilter_passed)
@@ -1736,6 +2030,11 @@ export function insertSignal(row: SignalRow): number {
   return result.lastInsertRowid as number;
 }
 
+/**
+ * Query signals.
+ * @param opts Filters (symbol, direction, limit, since)
+ * @returns Array of signals
+ */
 export function querySignals(opts: {
   symbol?: string;
   direction?: string;
@@ -1754,6 +2053,10 @@ export function querySignals(opts: {
   `).all(...params, limit) as Array<Record<string, unknown>>;
 }
 
+/**
+ * Get aggregate stats for signals.
+ * @returns Stats object
+ */
 export function getSignalStats(): Record<string, unknown> {
   return db.prepare(`
     SELECT
@@ -1768,6 +2071,12 @@ export function getSignalStats(): Record<string, unknown> {
   `).get() as Record<string, unknown>;
 }
 
+/**
+ * Check if a symbol was recently evaluated.
+ * @param symbol Stock symbol
+ * @param withinMinutes Lookback minutes
+ * @returns True if recent eval exists
+ */
 export function hasRecentEvalForSymbol(symbol: string, withinMinutes: number): boolean {
   const row = db.prepare(`
     SELECT COUNT(*) as cnt FROM signals
@@ -1776,6 +2085,11 @@ export function hasRecentEvalForSymbol(symbol: string, withinMinutes: number): b
   return row.cnt > 0;
 }
 
+/**
+ * Get Holly alerts by import batch ID.
+ * @param batchId Batch ID
+ * @returns Array of alerts
+ */
 export function getHollyAlertsByBatch(batchId: string): Array<Record<string, unknown>> {
   return db.prepare(`
     SELECT * FROM holly_alerts WHERE import_batch = ? ORDER BY id
@@ -1852,6 +2166,11 @@ export interface McpSessionRow {
   closed_at: string | null;
 }
 
+/**
+ * Record a new MCP session.
+ * @param sessionId Session UUID
+ * @param transport Transport type (e.g. stdio, sse)
+ */
 export function insertMcpSession(sessionId: string, transport: string): void {
   const now = new Date().toISOString();
   stmts.insertMcpSession.run({
@@ -1862,6 +2181,10 @@ export function insertMcpSession(sessionId: string, transport: string): void {
   });
 }
 
+/**
+ * Update last active timestamp for an MCP session.
+ * @param sessionId Session UUID
+ */
 export function updateMcpSessionActivity(sessionId: string): void {
   stmts.updateMcpSessionActivity.run({
     id: sessionId,
@@ -1869,6 +2192,10 @@ export function updateMcpSessionActivity(sessionId: string): void {
   });
 }
 
+/**
+ * Mark an MCP session as closed.
+ * @param sessionId Session UUID
+ */
 export function closeMcpSession(sessionId: string): void {
   stmts.closeMcpSession.run({
     id: sessionId,
@@ -1876,10 +2203,18 @@ export function closeMcpSession(sessionId: string): void {
   });
 }
 
+/**
+ * Get currently active MCP sessions.
+ * @returns Array of active sessions
+ */
 export function getActiveMcpSessions(): McpSessionRow[] {
   return stmts.getActiveMcpSessions.all() as McpSessionRow[];
 }
 
+/**
+ * Get MCP session statistics.
+ * @returns Stats object
+ */
 export function getMcpSessionStats(): {
   total: number;
   active: number;
@@ -1894,6 +2229,10 @@ export function getMcpSessionStats(): {
   };
 }
 
+/**
+ * Check if the database is writable.
+ * @returns True if writable
+ */
 export function isDbWritable(): boolean {
   try {
     db.exec("SELECT 1");
@@ -1903,6 +2242,9 @@ export function isDbWritable(): boolean {
   }
 }
 
+/**
+ * Close the database connection.
+ */
 export function closeDb() {
   db.close();
 }

@@ -1,5 +1,11 @@
 export type TimeOfDay = "premarket" | "open_drive" | "morning" | "midday" | "power_hour" | "close";
 
+/**
+ * Classify the current time into a trading session bucket.
+ * Handles DST conversion for US Eastern Time.
+ * @param now Current date object
+ * @returns Time of day classification
+ */
 export function classifyTimeOfDay(now: Date): TimeOfDay {
   const etOffset = isUSEasternDST(now) ? -4 : -5;
   const etHours = (now.getUTCHours() + etOffset + 24) % 24;
@@ -13,6 +19,12 @@ export function classifyTimeOfDay(now: Date): TimeOfDay {
   return "close";
 }
 
+/**
+ * Calculate minutes elapsed since market open (9:30 AM ET).
+ * Negative values indicate pre-market.
+ * @param now Current date object
+ * @returns Minutes since 9:30 AM ET
+ */
 export function minutesSinceOpen(now: Date): number {
   const etOffset = isUSEasternDST(now) ? -4 : -5;
   const etHours = (now.getUTCHours() + etOffset + 24) % 24;

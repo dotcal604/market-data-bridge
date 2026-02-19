@@ -55,6 +55,8 @@ export class BayesianUpdater {
   /**
    * Get the current expected weights (E[w]) for a given regime.
    * E[w_i] = α_i / Σα_j
+   * @param regime Market regime
+   * @returns Normalized weights
    */
   public getWeights(regime: MarketRegime): Record<ModelId, number> {
     const alpha = this.priors.get(regime) || { claude: 1, gemini: 1, openai: 1 };
@@ -123,6 +125,7 @@ export class BayesianUpdater {
 
   /**
    * Serialize state to JSON for persistence.
+   * @returns JSON string
    */
   public toJSON(): string {
     return JSON.stringify(Array.from(this.priors.entries()));
@@ -130,6 +133,7 @@ export class BayesianUpdater {
 
   /**
    * Hydrate state from JSON.
+   * @param json JSON string
    */
   public fromJSON(json: string): void {
     try {

@@ -1,5 +1,11 @@
 import type { BarData } from "../types.js";
 
+/**
+ * Compute price deviation from VWAP in basis points.
+ * @param intradayBars Intraday bar history
+ * @param last Current price
+ * @returns Deviation in percentage points (e.g. 0.5 = 0.5%)
+ */
 export function computeVWAPDeviation(intradayBars: BarData[], last: number): number {
   if (intradayBars.length === 0 || last <= 0) return 0;
   let sumPV = 0;

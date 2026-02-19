@@ -53,6 +53,10 @@ export interface ExecutionRecord {
 /**
  * Find the best matching evaluation for an execution.
  * Filters by symbol + direction + time window, scores by proximity.
+ * @param execution Execution record to match
+ * @param candidates List of potential evaluations
+ * @param windowMs Time window in milliseconds (default 30 mins)
+ * @returns Best match with confidence score, or null
  */
 export function findMatchingEval(
   execution: ExecutionRecord,
@@ -100,6 +104,11 @@ export function findMatchingEval(
  * R = (exit - entry) / (entry - stop) for longs
  * R = (entry - exit) / (stop - entry) for shorts
  * Returns null if stop equals entry (division by zero).
+ * @param direction "long" or "short"
+ * @param entryPrice Entry price
+ * @param exitPrice Exit price
+ * @param stopPrice Stop loss price
+ * @returns R-multiple value or null
  */
 export function computeRMultiple(
   direction: string,
@@ -121,6 +130,8 @@ export function computeRMultiple(
 /**
  * Determine if a set of executions nets to a closed (zero) position.
  * BOT adds shares, SLD subtracts shares.
+ * @param executions List of executions (side, shares)
+ * @returns True if net shares is approximately zero
  */
 export function isPositionClosed(
   executions: Array<{ side: string; shares: number }>,
@@ -141,6 +152,7 @@ const pendingCloseChecks = new Map<string, ReturnType<typeof setTimeout>>();
 /**
  * Called from execDetails handler. Links an execution to an evaluation.
  * Strategy: explicit if eval_id exists on the order, else heuristic match.
+ * @param exec Execution record
  */
 export function tryLinkExecution(exec: ExecutionRecord): void {
   try {
@@ -198,6 +210,8 @@ export function tryLinkExecution(exec: ExecutionRecord): void {
  * Called from commissionReport handler.
  * Schedules a delayed position-close check (2s debounce per correlation_id).
  * IBKR sends realizedPNL = 1.7976931348623157e+308 when PNL unavailable — filter that.
+ * @param execId Execution ID
+ * @param realizedPnl Realized P&L from commission report
  */
 export function schedulePositionCloseCheck(execId: string, realizedPnl: number): void {
   try {
@@ -311,6 +325,7 @@ function checkAndRecordOutcome(correlationId: string, realizedPnl: number): void
 /**
  * Reconcile closed positions on startup.
  * Called from reconcile.ts when a position is detected as closed while offline.
+ * @param symbol Stock symbol
  */
 export function reconcileClosedPosition(symbol: string): void {
   try {

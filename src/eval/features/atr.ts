@@ -1,5 +1,11 @@
 import type { BarData } from "../types.js";
 
+/**
+ * Compute 14-period Average True Range (ATR).
+ * @param bars Daily bar data
+ * @param last Current price
+ * @returns ATR value and ATR as percentage of price
+ */
 export function computeATR(bars: BarData[], last: number): { atr_14: number; atr_pct: number } {
   if (bars.length < 2) return { atr_14: 0, atr_pct: 0 };
   const period = 14;

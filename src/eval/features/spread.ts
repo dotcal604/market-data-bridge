@@ -1,3 +1,10 @@
+/**
+ * Compute bid-ask spread as a percentage of price.
+ * @param bid Current bid
+ * @param ask Current ask
+ * @param last Last traded price (denominator)
+ * @returns Spread percentage
+ */
 export function computeSpreadPct(bid: number | null, ask: number | null, last: number): number {
   if (bid == null || ask == null || last <= 0) return 0;
   if (bid <= 0 || ask <= 0) return 0;

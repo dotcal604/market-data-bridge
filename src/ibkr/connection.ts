@@ -187,18 +187,27 @@ let clientIdRetries = 0;
 // the last caller's `onReconnect(cb)` silently overwrote earlier ones.
 const onReconnectCallbacks: Array<{ name: string; cb: () => void }> = [];
 
-/** Register a callback to run after reconnection.
- *  @param cb   function to call on reconnect
- *  @param name optional label for logging (defaults to "anonymous")
+/**
+ * Register a callback to be executed when the IBKR connection is re-established.
+ * @param cb Callback function
+ * @param name Optional label for logging
  */
 export function onReconnect(cb: () => void, name = "anonymous"): void {
   onReconnectCallbacks.push({ name, cb });
 }
 
+/**
+ * Get the next available request ID.
+ * @returns Unique request ID
+ */
 export function getNextReqId(): number {
   return nextReqId++;
 }
 
+/**
+ * Get the singleton IBApi instance, initializing it if necessary.
+ * @returns IBApi instance
+ */
 export function getIB(): IBApi {
   if (!ib) {
     ib = new IBApi({
@@ -297,6 +306,10 @@ export function getIB(): IBApi {
   return ib;
 }
 
+/**
+ * Alias for getIB().
+ * @returns IBApi instance
+ */
 export function getIBKRClient(): IBApi {
   return getIB();
 }
@@ -312,6 +325,10 @@ function destroyIB(): void {
   }
 }
 
+/**
+ * Schedule a reconnection attempt.
+ * @param delayMs Optional delay in milliseconds. If omitted, uses exponential backoff.
+ */
 export function scheduleReconnect(delayMs?: number): void {
   if (reconnectTimer) return;
   const attempt = reconnectAttempts;
@@ -329,6 +346,10 @@ export function scheduleReconnect(delayMs?: number): void {
   }, delay);
 }
 
+/**
+ * Connect to TWS or IB Gateway.
+ * @returns Promise that resolves when connected
+ */
 export async function connect(): Promise<void> {
   const api = getIB();
   return new Promise<void>((resolve, reject) => {
@@ -365,6 +386,9 @@ export async function connect(): Promise<void> {
   });
 }
 
+/**
+ * Disconnect from TWS or IB Gateway.
+ */
 export function disconnect(): void {
   stopHeartbeat();
   if (reconnectTimer) {
@@ -377,6 +401,10 @@ export function disconnect(): void {
   }
 }
 
+/**
+ * Check if currently connected to TWS/Gateway.
+ * @returns True if connected
+ */
 export function isConnected(): boolean {
   return connected;
 }
@@ -394,6 +422,10 @@ function accountMode(): "paper" | "live" | "unknown" {
   return "unknown";
 }
 
+/**
+ * Get detailed connection status and metrics.
+ * @returns Connection status object
+ */
 export function getConnectionStatus() {
   return {
     connected,

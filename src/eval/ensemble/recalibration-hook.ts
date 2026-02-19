@@ -79,6 +79,9 @@ function toMarketRegime(regime: string | null | undefined): MarketRegime {
 /**
  * Called after every outcome recording. Reads the eval's model outputs,
  * determines which models predicted correctly, and nudges Bayesian priors.
+ * @param evaluationId Evaluation ID
+ * @param rMultiple Trade result (R-multiple)
+ * @param tradeTaken Whether the trade was taken
  */
 export function onOutcomeRecorded(
   evaluationId: string,
@@ -224,12 +227,18 @@ function clampDelta(current: number, target: number, maxDelta: number): number {
 
 // ── Initialization ─────────────────────────────────────────────────────────
 
+/**
+ * Initialize the recalibration subsystem (load priors).
+ */
 export function initRecalibration(): void {
   loadBayesianState();
   log.info("Recalibration hook initialized");
 }
 
-/** Get current recalibration status for diagnostics */
+/**
+ * Get current recalibration status for diagnostics.
+ * @returns Status object
+ */
 export function getRecalibrationStatus(): Record<string, unknown> {
   return {
     outcomes_since_last_recal: outcomeSinceLastRecal,

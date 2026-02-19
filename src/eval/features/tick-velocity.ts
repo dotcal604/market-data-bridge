@@ -26,6 +26,8 @@ export class TickVelocity {
   /**
    * Push a new tick price. O(1) complexity.
    * Overwrites the oldest value when full.
+   * @param price Tick price
+   * @param timestamp Tick timestamp (ms)
    */
   public push(price: number, timestamp: number): void {
     this.prices[this.head] = price;
@@ -42,6 +44,7 @@ export class TickVelocity {
    * Velocity v = ΔP / Δt (price change per millisecond)
    * 
    * @param lookback Number of ticks to look back. Must be < capacity.
+   * @returns Velocity (price/ms)
    */
   public getVelocity(lookback: number = 10): number {
     if (this.count < lookback + 1) return 0;
@@ -67,6 +70,8 @@ export class TickVelocity {
    * 
    * Uses a central difference approximation if possible, or simple backward difference.
    * a ≈ (P_t - 2P_{t-1} + P_{t-2}) / dt^2 (assuming constant dt, else (v2 - v1)/dt)
+   * @param lookback Window size for velocity segments
+   * @returns Acceleration (price/ms^2)
    */
   public getAcceleration(lookback: number = 10): number {
     if (this.count < (lookback * 2) + 1) return 0;

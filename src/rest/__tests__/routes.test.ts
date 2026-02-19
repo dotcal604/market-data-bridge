@@ -8,6 +8,17 @@ import type { Express } from "express";
 vi.mock("../../ibkr/connection.js", () => ({
   isConnected: vi.fn(() => false),
   onReconnect: vi.fn(),
+  getConnectionStatus: vi.fn(() => ({
+    connected: false,
+    clientId: 0,
+    reconnectAttempts: 0,
+    host: "localhost",
+    port: 4001,
+    mode: "paper",
+    twsVersion: 1020,
+    totalDisconnects: 0,
+    uptimeSinceConnect: 0,
+  })),
 }));
 
 // Mock Yahoo provider
@@ -48,6 +59,12 @@ vi.mock("../../db/database.js", () => ({
   getLatestHollySymbols: vi.fn(() => []),
   querySignals: vi.fn(() => []),
   getSignalStats: vi.fn(() => ({ total: 0, tradeable: 0, blocked: 0, long: 0, short: 0 })),
+  getActiveMcpSessions: vi.fn(() => []),
+  insertMcpSession: vi.fn(),
+  updateMcpSessionActivity: vi.fn(),
+  closeMcpSession: vi.fn(),
+  getMcpSessionStats: vi.fn(() => ({ total: 0, active: 0, avg_duration_seconds: 0, total_tool_calls: 0 })),
+  getRecentDriftAlerts: vi.fn(() => []),
 }));
 
 // Mock status provider
@@ -237,6 +254,20 @@ vi.mock("../../mcp/server.js", () => ({
 
 vi.mock("../../ws/server.js", () => ({
   initWebSocket: vi.fn(),
+}));
+
+vi.mock("../../eval/edge-analytics.js", () => ({
+  computeEdgeReport: vi.fn(() => ({})),
+  runWalkForward: vi.fn(() => ({})),
+}));
+
+vi.mock("../../ops/metrics.js", () => ({
+  getMetrics: vi.fn(() => ({})),
+  getRecentIncidents: vi.fn(() => []),
+}));
+
+vi.mock("../../ops/readiness.js", () => ({
+  isReady: vi.fn(() => true),
 }));
 
 vi.mock("../../eval/routes.js", async () => {

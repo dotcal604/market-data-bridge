@@ -21,6 +21,13 @@ export interface ComputeResult {
   latencyMs: number;
 }
 
+/**
+ * Orchestrate feature computation for a symbol.
+ * Fetches market data and computes technical indicators.
+ * @param symbol Stock symbol
+ * @param direction Trade direction ("long" or "short")
+ * @returns Feature vector and latency
+ */
 export async function computeFeatures(
   symbol: string,
   direction: string = "long",

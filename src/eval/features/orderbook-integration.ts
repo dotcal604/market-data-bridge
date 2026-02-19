@@ -70,6 +70,10 @@ export async function fetchOrderBookFeatures(
  * 
  * This shows how to optionally enhance an evaluation with order book data
  * without breaking the main feature pipeline.
+ *
+ * @param symbol - Stock symbol
+ * @param baseFeatures - Existing feature vector
+ * @returns Augmented feature vector
  */
 export async function augmentEvaluationWithOrderBook(
   symbol: string,

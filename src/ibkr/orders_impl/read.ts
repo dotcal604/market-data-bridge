@@ -15,6 +15,10 @@ import type { OpenOrderData, CompletedOrderData, ExecutionData } from "./types.j
 
 // ── Open Orders ──────────────────────────────────────────────────────────
 
+/**
+ * Fetch all currently open orders.
+ * @returns Promise resolving to list of open orders
+ */
 export async function getOpenOrders(): Promise<OpenOrderData[]> {
   const ib = getIB();
 
@@ -87,6 +91,10 @@ export async function getOpenOrders(): Promise<OpenOrderData[]> {
 
 // ── Completed Orders ─────────────────────────────────────────────────────
 
+/**
+ * Fetch orders completed in the current session.
+ * @returns Promise resolving to list of completed orders
+ */
 export async function getCompletedOrders(): Promise<CompletedOrderData[]> {
   const ib = getIB();
 
@@ -159,6 +167,11 @@ export async function getCompletedOrders(): Promise<CompletedOrderData[]> {
 
 // ── Executions / Fills ───────────────────────────────────────────────────
 
+/**
+ * Fetch recent executions matching filter.
+ * @param filter Optional filters (symbol, secType, time)
+ * @returns Promise resolving to list of executions
+ */
 export async function getExecutions(filter?: {
   symbol?: string;
   secType?: string;
@@ -256,6 +269,10 @@ export async function getExecutions(filter?: {
 
 // ── Next Valid Order ID ──────────────────────────────────────────────────
 
+/**
+ * Request the next valid order ID from IBKR.
+ * @returns Promise resolving to new order ID
+ */
 export async function getNextValidOrderId(): Promise<number> {
   const ib = getIB();
 

@@ -17,6 +17,8 @@ export interface DriftAlert {
 /**
  * Check drift report against configured thresholds and return alerts.
  * Deduplicates same alert type within 1 hour for each model.
+ * @param report The computed drift report
+ * @returns Array of generated alerts
  */
 export function checkDriftAlerts(report: DriftReport): DriftAlert[] {
   if (!config.drift.enabled) {
@@ -103,6 +105,8 @@ export function checkDriftAlerts(report: DriftReport): DriftAlert[] {
 
 /**
  * Get recent drift alerts from database.
+ * @param limit Max number of alerts to return (default 50)
+ * @returns Array of DriftAlert objects
  */
 export function getRecentDriftAlerts(limit: number = 50): DriftAlert[] {
   const rows = dbGetRecentDriftAlerts(limit);

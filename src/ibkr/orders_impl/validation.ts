@@ -11,6 +11,11 @@ const KNOWN_ORDER_TYPES = new Set([
   "PASSV REL", "PEG BENCH",
 ]);
 
+/**
+ * Perform pre-submission validation on order parameters.
+ * @param params Order parameters
+ * @returns Validation result (valid: boolean, errors: string[])
+ */
 export function validateOrder(params: PlaceOrderParams): OrderValidationResult {
   const errors: string[] = [];
 

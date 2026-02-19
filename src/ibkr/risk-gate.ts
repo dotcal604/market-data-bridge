@@ -80,6 +80,10 @@ function getEffectiveRiskConfig(): EffectiveRiskConfig {
   };
 }
 
+/**
+ * Get current risk configuration.
+ * @returns Object with effective, floor, manual, and raw DB config
+ */
 export function getRiskGateConfig(): {
   effective: EffectiveRiskConfig;
   floors: typeof RISK_CONFIG_DEFAULTS;
@@ -169,6 +173,11 @@ export interface RiskCheckResult {
   reason?: string;
 }
 
+/**
+ * Validate a proposed order against risk limits.
+ * @param params Order parameters
+ * @returns Risk check result (allowed: boolean)
+ */
 export function checkRisk(params: RiskCheckParams): RiskCheckResult {
   // Paper trading bypasses all risk gates — safe to test freely
   const paperPorts = new Set([7497, 4002]);
@@ -271,6 +280,10 @@ export function checkRisk(params: RiskCheckParams): RiskCheckResult {
   return { allowed: true };
 }
 
+/**
+ * Update session state with a completed trade result.
+ * @param realizedPnl Profit/Loss from the trade
+ */
 export function recordTradeResult(realizedPnl: number): void {
   ensureToday();
   session.realizedPnl += realizedPnl;
@@ -290,6 +303,10 @@ export function recordTradeResult(realizedPnl: number): void {
   }
 }
 
+/**
+ * Manually lock the trading session (prevent further trades).
+ * @param reason Reason for lock
+ */
 export function lockSession(reason?: string): void {
   ensureToday();
   session.locked = true;
@@ -297,6 +314,9 @@ export function lockSession(reason?: string): void {
   logRisk.warn({ reason: session.lockReason }, "Session manually locked");
 }
 
+/**
+ * Manually unlock the trading session.
+ */
 export function unlockSession(): void {
   ensureToday();
   session.locked = false;
@@ -304,16 +324,27 @@ export function unlockSession(): void {
   logRisk.info({}, "Session unlocked");
 }
 
+/**
+ * Reset session stats (PnL, trade count, etc) to zero.
+ */
 export function resetSession(): void {
   session = freshSession(getTodayET());
   logRisk.info({}, "Session state reset");
 }
 
+/**
+ * Get current session metrics and limits.
+ * @returns Session state object
+ */
 export function getSessionState(): SessionState & { limits: typeof SESSION_LIMITS } {
   ensureToday();
   return { ...session, limits: { ...SESSION_LIMITS } };
 }
 
+/**
+ * Get all active risk limits (static + dynamic).
+ * @returns Risk limits object
+ */
 export function getRiskLimits() {
   const effective = getEffectiveRiskConfig();
   return {

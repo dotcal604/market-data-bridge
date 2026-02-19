@@ -1,3 +1,9 @@
+/**
+ * Compute Relative Strength Index (RSI) using Wilder's smoothing.
+ * @param closes Array of closing prices
+ * @param period Lookback period (default 14)
+ * @returns RSI value (0-100) or null
+ */
 export function computeRSI(closes: readonly number[], period: number = 14): number | null {
   if (period <= 0) return null;
   if (closes.length < period + 1) return null;
@@ -38,6 +44,11 @@ export function computeRSI(closes: readonly number[], period: number = 14): numb
   return Math.round(rsi * 100) / 100;
 }
 
+/**
+ * Classify RSI value into buckets.
+ * @param rsi RSI value
+ * @returns "oversold", "overbought", or "neutral"
+ */
 export function classifyRSI(rsi: number): "oversold" | "neutral" | "overbought" {
   if (rsi < 30) return "oversold";
   if (rsi > 70) return "overbought";

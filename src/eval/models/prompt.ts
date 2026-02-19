@@ -31,6 +31,15 @@ Evaluation principles:
 - Liquidity bucket affects fill quality and slippage expectations
 - Confidence should reflect data quality and ambiguity, not just opinion strength`;
 
+/**
+ * Construct the user prompt for the LLM.
+ * @param symbol Stock symbol
+ * @param direction "long" or "short"
+ * @param entryPrice Proposed entry price (optional)
+ * @param stopPrice Proposed stop loss (optional)
+ * @param features Computed technical features
+ * @returns Formatted prompt string
+ */
 export function buildUserPrompt(
   symbol: string,
   direction: string,
@@ -54,7 +63,11 @@ export function buildUserPrompt(
   return prompt;
 }
 
-/** SHA-256 hash of system + user prompt for drift detection */
+/**
+ * Generate SHA-256 hash of system + user prompt for drift detection.
+ * @param userPrompt The user prompt string
+ * @returns 16-char hex hash
+ */
 export function hashPrompt(userPrompt: string): string {
   const combined = SYSTEM_PROMPT + "\n---\n" + userPrompt;
   return createHash("sha256").update(combined).digest("hex").slice(0, 16);

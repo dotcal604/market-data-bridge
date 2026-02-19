@@ -850,6 +850,11 @@ evalRouter.get("/:id", (req, res) => {
 
 // --- Helper ---
 
+/**
+ * Extract DB-compatible feature columns from a FeatureVector.
+ * @param f Full feature vector
+ * @returns Object with keys matching DB columns
+ */
 export function extractFeatureCols(f: FeatureVector): Record<string, unknown> {
   return {
     last_price: f.last,

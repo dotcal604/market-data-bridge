@@ -123,6 +123,12 @@ function computeCalibration(rows: readonly DriftRow[]): { error: number; buckets
   };
 }
 
+/**
+ * Analyze model performance drift using recent outcomes.
+ * Computes accuracy, calibration error, and regime shift indicators.
+ * @param db Database instance (optional)
+ * @returns Drift report with per-model metrics
+ */
 export function computeDriftReport(db: DatabaseType = getDb()): DriftReport {
   const rows = loadDriftRows(db);
   if (rows.length === 0) {

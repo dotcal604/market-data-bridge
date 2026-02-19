@@ -31,6 +31,11 @@ import type {
 
 // ── Place Order ──────────────────────────────────────────────────────────
 
+/**
+ * Place a single order (MKT, LMT, STP, etc).
+ * @param params Order parameters
+ * @returns Promise resolving to placed order details
+ */
 export async function placeOrder(params: PlaceOrderParams): Promise<PlaceOrderResult> {
   const ib = getIB();
   const orderId = await getNextValidOrderId();
@@ -168,6 +173,11 @@ export async function placeOrder(params: PlaceOrderParams): Promise<PlaceOrderRe
 
 // ── Place Bracket Order ──────────────────────────────────────────────────
 
+/**
+ * Place a bracket order (Entry + Take Profit + Stop Loss).
+ * @param params Bracket order parameters
+ * @returns Promise resolving to bracket details (parent/child IDs)
+ */
 export async function placeBracketOrder(params: BracketOrderParams): Promise<BracketOrderResult> {
   const ib = getIB();
   const parentId = await getNextValidOrderId();
@@ -316,6 +326,11 @@ export async function placeBracketOrder(params: BracketOrderParams): Promise<Bra
 
 // ── Advanced Bracket Order ───────────────────────────────────────────────
 
+/**
+ * Place an advanced bracket with more complex child orders (e.g. Trailing Stop).
+ * @param params Advanced bracket parameters
+ * @returns Promise resolving to bracket details
+ */
 export async function placeAdvancedBracket(params: AdvancedBracketParams): Promise<AdvancedBracketResult> {
   const ib = getIB();
   const parentId = await getNextValidOrderId();
@@ -493,6 +508,11 @@ export async function placeAdvancedBracket(params: AdvancedBracketParams): Promi
 
 // ── Modify Order ─────────────────────────────────────────────────────────
 
+/**
+ * Modify an existing open order in-place.
+ * @param params modification parameters (orderId + fields to change)
+ * @returns Promise resolving to modification result
+ */
 export async function modifyOrder(params: ModifyOrderParams): Promise<ModifyOrderResult> {
   const ib = getIB();
 
@@ -640,6 +660,11 @@ export async function modifyOrder(params: ModifyOrderParams): Promise<ModifyOrde
 
 // ── Cancel Order ─────────────────────────────────────────────────────────
 
+/**
+ * Cancel a specific order by ID.
+ * @param orderId ID of the order to cancel
+ * @returns Promise resolving to cancellation status
+ */
 export async function cancelOrder(orderId: number): Promise<{ orderId: number; status: string }> {
   const ib = getIB();
 
@@ -687,6 +712,10 @@ export async function cancelOrder(orderId: number): Promise<{ orderId: number; s
 
 // ── Cancel All Orders ────────────────────────────────────────────────────
 
+/**
+ * Request cancellation of ALL open orders globally.
+ * @returns Promise resolving to status
+ */
 export async function cancelAllOrders(): Promise<{ status: string }> {
   const ib = getIB();
   ib.reqGlobalCancel();
@@ -695,6 +724,12 @@ export async function cancelAllOrders(): Promise<{ status: string }> {
 
 // ── Flatten All Positions ────────────────────────────────────────────────
 
+/**
+ * Flatten all open positions (close everything).
+ * 1. Cancel all open orders.
+ * 2. Place market orders to close all positions.
+ * @returns Promise resolving to flatten result (orders placed, skipped)
+ */
 export async function flattenAllPositions(): Promise<FlattenResult> {
   const positions = await getPositions();
 

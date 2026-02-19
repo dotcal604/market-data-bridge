@@ -39,6 +39,10 @@ function ensureConnected(): void {
   }
 }
 
+/**
+ * Fetch available news providers.
+ * @returns Promise resolving to list of news providers
+ */
 export async function reqNewsProviders(): Promise<NewsProviderData[]> {
   ensureConnected();
   const ib = getIBKRClient();
@@ -81,6 +85,12 @@ export async function reqNewsProviders(): Promise<NewsProviderData[]> {
   });
 }
 
+/**
+ * Fetch a specific news article.
+ * @param providerCode Provider code (e.g. "BRFG")
+ * @param articleId Article ID
+ * @returns Promise resolving to article data
+ */
 export async function reqNewsArticle(providerCode: string, articleId: string): Promise<NewsArticleData> {
   ensureConnected();
   const ib = getIBKRClient();
@@ -126,6 +136,14 @@ export async function reqNewsArticle(providerCode: string, articleId: string): P
   });
 }
 
+/**
+ * Fetch historical news headlines for a contract.
+ * @param conId Contract ID
+ * @param providerCodes Comma-separated provider codes
+ * @param startDateTime Start time (YYYY-MM-DD HH:mm:ss)
+ * @param endDateTime End time (YYYY-MM-DD HH:mm:ss)
+ * @returns Promise resolving to list of headlines
+ */
 export async function reqHistoricalNews(
   conId: number,
   providerCodes: string,
@@ -190,6 +208,10 @@ export async function reqHistoricalNews(
   });
 }
 
+/**
+ * Subscribe to IBKR news bulletins.
+ * @returns Promise resolving to initial list of bulletins
+ */
 export async function reqNewsBulletins(): Promise<NewsBulletinData[]> {
   ensureConnected();
   const ib = getIBKRClient();

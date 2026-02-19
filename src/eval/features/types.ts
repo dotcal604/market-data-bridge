@@ -34,6 +34,11 @@ export interface FeatureVector {
 
 export type ModelFeatureVector = Omit<FeatureVector, "data_source" | "bridge_latency_ms">;
 
+/**
+ * Remove metadata fields to prepare feature vector for LLM consumption.
+ * @param fv Full feature vector
+ * @returns Clean feature vector
+ */
 export function stripMetadata(fv: FeatureVector): ModelFeatureVector {
   const { data_source, bridge_latency_ms, ...rest } = fv;
   return rest;

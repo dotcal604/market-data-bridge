@@ -48,6 +48,9 @@ function loadFromDisk(): void {
   }
 }
 
+/**
+ * Initialize weights subsystem (load from disk + watch for changes).
+ */
 export function initWeights(): void {
   loadFromDisk();
   if (existsSync(WEIGHTS_PATH)) {
@@ -62,6 +65,7 @@ export function initWeights(): void {
  * Get weights for ensemble scoring. If regime is provided and overrides exist,
  * returns regime-specific weights. Otherwise returns default weights.
  * @param regime - Volatility regime: "low", "normal", or "high"
+ * @returns Active ensemble weights
  */
 export function getWeights(regime?: string): EnsembleWeights {
   const baseWeights = { ...currentWeights };
@@ -92,6 +96,7 @@ export function getWeights(regime?: string): EnsembleWeights {
  * Update weights (writes to disk, updates in-memory, records in weight_history).
  * @param newWeights - Partial weights object (missing fields use current values)
  * @param source - Source of the update (e.g., "manual", "recalibration", "simulation")
+ * @returns Updated weights object
  */
 export function updateWeights(
   newWeights: Partial<Pick<EnsembleWeights, "claude" | "gpt4o" | "gemini" | "k" | "sample_size">>,

@@ -58,6 +58,10 @@ function loadRecentRMultiples(limit: number = 100): number[] {
     .filter((value): value is number => Number.isFinite(value));
 }
 
+/**
+ * Auto-tune risk parameters based on recent trade performance (Half-Kelly).
+ * @returns Tuning result with suggested parameter updates
+ */
 export function tuneRiskParams(): RiskTuneResult {
   const rMultiples = loadRecentRMultiples(100);
   const wins = rMultiples.filter((value) => value > 0);
@@ -102,6 +106,11 @@ export function tuneRiskParams(): RiskTuneResult {
   };
 }
 
+/**
+ * Convert DB risk config rows into a flat config object with defaults.
+ * @param rows Raw rows from database
+ * @returns Normalized risk configuration object
+ */
 export function normalizeRiskConfig(rows: RiskConfigRow[]): Record<RiskConfigParam, number> {
   const normalized: Record<RiskConfigParam, number> = {
     max_position_pct: RISK_CONFIG_DEFAULTS.max_position_pct,

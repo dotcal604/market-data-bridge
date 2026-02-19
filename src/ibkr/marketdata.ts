@@ -72,6 +72,11 @@ export interface IBKRQuoteData {
   timestamp: string;
 }
 
+/**
+ * Fetch a realtime quote snapshot (bid, ask, last, etc).
+ * @param params Object containing symbol and optional secType, exchange, currency
+ * @returns Promise resolving to IBKRQuoteData
+ */
 export async function getIBKRQuote(params: {
   symbol: string;
   secType?: string;
@@ -170,6 +175,15 @@ export async function getIBKRQuote(params: {
   });
 }
 
+/**
+ * Fetch historical tick data (Trades, BidAsk, or MidPoint).
+ * @param symbol Stock symbol
+ * @param startTime Start timestamp (YYYYMMDD-HH:mm:ss)
+ * @param endTime End timestamp (YYYYMMDD-HH:mm:ss)
+ * @param type Tick type: "TRADES", "BID_ASK", or "MIDPOINT"
+ * @param count Number of ticks to fetch
+ * @returns Promise resolving to array of IBKRHistoricalTick
+ */
 export async function getHistoricalTicks(
   symbol: string,
   startTime: string,
