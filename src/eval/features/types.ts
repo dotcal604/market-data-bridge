@@ -21,6 +21,8 @@ export interface FeatureVector {
   range_position_pct: number;
   rsi: number | null;
   rsi_regime: "oversold" | "neutral" | "overbought";
+  stochastic_k: number | null;
+  stochastic_d: number | null;
   tick_velocity: number | null;
   tick_acceleration: number | null;
   volatility_regime: "low" | "normal" | "high";

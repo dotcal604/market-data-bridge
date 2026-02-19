@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { signalClient } from "../api/signal-client";
+import { useWebSocket } from "./useWebSocket";
 
 export function useSignals(params?: {
   symbol?: string;
@@ -9,6 +11,16 @@ export function useSignals(params?: {
   since?: string;
   limit?: number;
 }) {
+  const queryClient = useQueryClient();
+  const { data: wsData } = useWebSocket<unknown>("signals");
+
+  useEffect(() => {
+    if (wsData) {
+      queryClient.invalidateQueries({ queryKey: ["signals"] });
+      queryClient.invalidateQueries({ queryKey: ["signal-stats"] });
+    }
+  }, [wsData, queryClient]);
+
   return useQuery({
     queryKey: ["signals", params],
     queryFn: () => signalClient.getSignals(params),

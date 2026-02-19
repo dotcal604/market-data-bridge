@@ -8,6 +8,7 @@
 
 import { logger } from "../logging.js";
 import { trailingStopRecommendation } from "../holly/trailing-stop-executor.js";
+import { runExitAutopsy } from "../holly/exit-autopsy.js";
 import type {
   ExitPolicy,
   ExitPlanRecommendInput,
@@ -96,17 +97,26 @@ function buildGivebackGuard(riskPerShare: number, totalShares: number): Giveback
 
 /**
  * Try to detect strategy archetype from Holly exit-autopsy data.
- * Falls back to "mixed" if no historical data.
+ * Falls back to "mixed" if no historical data or insufficient trades.
  */
 function detectArchetype(
-  _strategy?: string,
+  strategy?: string,
 ): ExitPolicy["archetype"] {
-  // TODO: Wire to exit-autopsy `runExitAutopsy()` when historical data exists.
-  // For now, default to "mixed" which uses standard bracket approach.
-  // Once we have 50+ trades per strategy, this will auto-classify as:
-  //   early_peaker → aggressive TP, time stop
-  //   late_grower  → let run, trail wide
-  //   bleeder      → skip or tighten
+  if (!strategy) return "mixed";
+
+  try {
+    const report = runExitAutopsy();
+    const rec = report.exit_policy_recs.find(
+      (r) => r.strategy.toLowerCase() === strategy.toLowerCase(),
+    );
+    if (rec) {
+      log.info({ strategy, archetype: rec.archetype }, "Archetype detected from exit-autopsy");
+      return rec.archetype;
+    }
+  } catch (err) {
+    log.debug({ err, strategy }, "Exit-autopsy unavailable — using default archetype");
+  }
+
   return "mixed";
 }
 
