@@ -2,6 +2,7 @@ import Database, { type Database as DatabaseType } from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { logger } from '../logging.js';
 
 // ── Type Definitions ─────────────────────────────────────────────────────────
 
@@ -130,7 +131,7 @@ export class EventStore {
       try {
         listener(event);
       } catch (error) {
-        console.error('Error in event listener:', error);
+        logger.error({ err: error }, "Error in event listener");
       }
     }
   }

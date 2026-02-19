@@ -1,6 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import Database, { type Database as DatabaseType } from 'better-sqlite3';
 import { EventStore, type TradingEvent, type OrderPlacedPayload, type ExecutionReceivedPayload } from '../event-store.js';
+import { logger } from '../../logging.js';
+
+vi.mock('../../logging.js', () => ({
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+}));
 
 describe('EventStore', () => {
   let eventStore: EventStore;
@@ -350,8 +355,7 @@ describe('EventStore', () => {
       const listener2 = vi.fn();
       const listener3 = vi.fn();
 
-      // Spy on console.error to suppress error output in tests
-      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
 
       eventStore.subscribe(listener1);
       eventStore.subscribe(listener2);
@@ -375,9 +379,7 @@ describe('EventStore', () => {
       expect(listener1).toHaveBeenCalledTimes(1);
       expect(listener2).toHaveBeenCalledTimes(1);
       expect(listener3).toHaveBeenCalledTimes(1);
-      expect(consoleErrorSpy).toHaveBeenCalled();
-
-      consoleErrorSpy.mockRestore();
+      expect(logger.error).toHaveBeenCalled();
     });
   });
 
@@ -994,7 +996,7 @@ describe('EventStore', () => {
       eventStore.publish(event2);
 
       const receivedEvents: TradingEvent[] = [];
-      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
 
       eventStore.subscribe((event) => {
         if ((event.payload as any).orderId === 'order-1') {
@@ -1008,9 +1010,7 @@ describe('EventStore', () => {
       // Should still receive event2 despite error on event1
       expect(receivedEvents).toHaveLength(1);
       expect((receivedEvents[0].payload as any).orderId).toBe('order-2');
-      expect(consoleErrorSpy).toHaveBeenCalled();
-
-      consoleErrorSpy.mockRestore();
+      expect(logger.error).toHaveBeenCalled();
     });
 
     it('should replay events in correct order even with out-of-order timestamps', () => {

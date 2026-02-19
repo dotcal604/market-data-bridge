@@ -91,7 +91,7 @@ export class VWAPSlicer extends EventEmitter {
           await this.placeChildOrder(qtyNeeded);
         }
       })().catch((err) => {
-        console.error(`[VWAP] Slice loop error (swallowed): ${err}`);
+        logger.error({ err }, "VWAP slice loop error");
         this.state = 'FAILED';
         this.emit('status', this.state);
         clearInterval(loop);

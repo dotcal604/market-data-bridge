@@ -1,4 +1,5 @@
 import YahooFinance from "yahoo-finance2";
+import { logger } from "../logging.js";
 
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey"] });
 
@@ -341,9 +342,7 @@ export async function getOptionQuote(
 
   // Yahoo's date filter can miss due to epoch misalignment — retry unfiltered
   if (!match && contracts.length === 0) {
-    console.error(
-      `[Yahoo] Option date filter returned empty for ${symbol} ${normalizedExpiry}, retrying unfiltered`
-    );
+    logger.warn({ symbol, expiry: normalizedExpiry }, "Yahoo option date filter returned empty, retrying unfiltered");
     chain = await getOptionsChain(symbol);
     contracts = right === "C" ? chain.calls : chain.puts;
     match = contracts.find(
