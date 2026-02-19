@@ -11,8 +11,17 @@ Usage:
 import json
 import sqlite3
 from pathlib import Path
+from typing import Optional, Type
 
 import pandas as pd
+from pydantic import BaseModel
+
+try:
+    from .schema import Evaluation, ModelOutput, Outcome, WeightHistory
+except ImportError:
+    # Allow running this script directly for testing
+    from schema import Evaluation, ModelOutput, Outcome, WeightHistory
+
 
 # ── Paths ────────────────────────────────────────────────────────────────────
 
@@ -44,6 +53,47 @@ def _connect() -> sqlite3.Connection:
     conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
     return conn
+
+
+# ── Validation ───────────────────────────────────────────────────────────────
+
+def validate_schema(df: pd.DataFrame, model: Type[BaseModel], exclude: list[str] = None, strict: bool = True):
+    """
+    Validate that DataFrame columns match the Pydantic model fields.
+
+    Args:
+        df: DataFrame to validate
+        model: Pydantic model class
+        exclude: List of columns to ignore (expected to be missing)
+        strict: If True, warns if non-excluded model fields are missing in DataFrame.
+    """
+    if df.empty:
+        return
+
+    if exclude is None:
+        exclude = []
+
+    df_cols = set(df.columns)
+    model_fields = set(model.model_fields.keys())
+
+    # Expected fields are model fields minus excluded ones
+    expected_fields = model_fields - set(exclude)
+
+    # Check for missing columns
+    missing = expected_fields - df_cols
+    if strict and missing:
+        print(f"Warning: DataFrame is missing columns required by {model.__name__}: {missing}")
+
+    # We could also check for extra columns, but joined queries usually have extra columns
+    # from other tables, so we skip that check by default.
+
+
+def _build_select_cols(model: Type[BaseModel], exclude: list[str] = None) -> str:
+    """Helper to build SELECT clause from Pydantic model fields."""
+    if exclude is None:
+        exclude = []
+    cols = [c for c in model.model_fields.keys() if c not in exclude]
+    return ", ".join(cols)
 
 
 # ── Weights ──────────────────────────────────────────────────────────────────
@@ -89,12 +139,7 @@ def load_evaluations(days: int = 90, symbol: str | None = None) -> pd.DataFrame:
     """
     Load evaluations that passed pre-filter.
 
-    Returns DataFrame with columns:
-        id, symbol, direction, timestamp, last_price, rvol,
-        volatility_regime, liquidity_bucket, time_of_day, minutes_since_open,
-        ensemble_trade_score, ensemble_confidence, ensemble_expected_rr,
-        ensemble_should_trade, ensemble_unanimous, ensemble_score_spread,
-        ensemble_disagreement_penalty, guardrail_allowed, total_latency_ms
+    Returns DataFrame with columns matching Evaluation model (excluding features_json).
     """
     conn = _connect()
     conditions = ["prefilter_passed = 1"]
@@ -107,22 +152,13 @@ def load_evaluations(days: int = 90, symbol: str | None = None) -> pd.DataFrame:
         conditions.append("symbol = ?")
         params.append(symbol)
 
+    # Dynamically build SELECT list from schema, excluding large blobs
+    select_cols = _build_select_cols(Evaluation, exclude=["features_json", "weights_json", "guardrail_flags_json"])
+
     where = " AND ".join(conditions)
     df = pd.read_sql_query(
         f"""
-        SELECT
-            id, symbol, direction, timestamp, last_price, rvol,
-            vwap_deviation_pct, spread_pct, float_rotation_est,
-            volume_acceleration, atr_pct, price_extension_pct, gap_pct,
-            range_position_pct, volatility_regime, liquidity_bucket,
-            spy_change_pct, qqq_change_pct, market_alignment,
-            time_of_day, minutes_since_open,
-            ensemble_trade_score, ensemble_trade_score_median,
-            ensemble_confidence, ensemble_expected_rr,
-            ensemble_should_trade, ensemble_unanimous,
-            ensemble_majority_trade, ensemble_score_spread,
-            ensemble_disagreement_penalty, guardrail_allowed,
-            feature_latency_ms, total_latency_ms
+        SELECT {select_cols}
         FROM evaluations
         WHERE {where}
         ORDER BY timestamp DESC
@@ -132,6 +168,8 @@ def load_evaluations(days: int = 90, symbol: str | None = None) -> pd.DataFrame:
         parse_dates=["timestamp"],
     )
     conn.close()
+
+    validate_schema(df, Evaluation, exclude=["features_json", "weights_json", "guardrail_flags_json"])
     return df
 
 
@@ -140,11 +178,6 @@ def load_evaluations(days: int = 90, symbol: str | None = None) -> pd.DataFrame:
 def load_model_outputs(days: int = 90, symbol: str | None = None) -> pd.DataFrame:
     """
     Load per-model outputs joined with evaluation metadata.
-
-    Returns one row per (evaluation_id, model_id) with columns:
-        evaluation_id, model_id, trade_score, confidence, expected_rr,
-        should_trade, compliant, latency_ms, model_version,
-        symbol, direction, timestamp, time_of_day, volatility_regime
     """
     conn = _connect()
     conditions = ["e.prefilter_passed = 1"]
@@ -158,6 +191,8 @@ def load_model_outputs(days: int = 90, symbol: str | None = None) -> pd.DataFram
         params.append(symbol)
 
     where = " AND ".join(conditions)
+
+    # We still use manual selection for joins to handle aliasing and specific needs
     df = pd.read_sql_query(
         f"""
         SELECT
@@ -179,6 +214,16 @@ def load_model_outputs(days: int = 90, symbol: str | None = None) -> pd.DataFram
         parse_dates=["timestamp"],
     )
     conn.close()
+
+    # Validate against models (partial)
+    # We exclude fields not selected in the query to avoid warnings
+    validate_schema(df, ModelOutput, exclude=[
+        "id", "reasoning", "raw_response", "error",
+        "prompt_hash", "token_count", "api_response_id", "timestamp"
+    ])
+    # For Evaluation, we only select a few fields, so strict validation would be too noisy
+    validate_schema(df, Evaluation, strict=False)
+
     return df
 
 
@@ -191,16 +236,6 @@ def load_eval_outcomes(
 ) -> pd.DataFrame:
     """
     Load evaluations joined with outcomes — the core analytics table.
-
-    This is what calibration, regime analysis, and weight recalibration
-    scripts should use as their primary data source.
-
-    Returns DataFrame with columns:
-        evaluation_id, symbol, direction, timestamp,
-        ensemble_trade_score, ensemble_confidence, ensemble_expected_rr,
-        ensemble_should_trade, time_of_day, volatility_regime, liquidity_bucket,
-        rvol, trade_taken, decision_type, confidence_rating, rule_followed,
-        setup_type, r_multiple, exit_reason, recorded_at
     """
     conn = _connect()
     conditions: list[str] = []
@@ -218,6 +253,10 @@ def load_eval_outcomes(
         params.append(f"-{days}")
 
     where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+
+    # Note: we manually alias e.id as evaluation_id to match Outcome model FK
+    # but Outcome model also has 'id' (primary key of outcome table).
+
     df = pd.read_sql_query(
         f"""
         SELECT
@@ -240,6 +279,10 @@ def load_eval_outcomes(
         parse_dates=["timestamp", "recorded_at"],
     )
     conn.close()
+
+    validate_schema(df, Evaluation, strict=False)
+    validate_schema(df, Outcome, exclude=["id", "actual_entry_price", "actual_exit_price", "notes"])
+
     return df
 
 
@@ -248,12 +291,6 @@ def load_eval_outcomes(
 def load_model_outcomes(days: int = 90) -> pd.DataFrame:
     """
     Load per-model predictions alongside trade outcomes.
-
-    Used by weight recalibration to compute per-model accuracy.
-
-    Returns one row per (evaluation_id, model_id) with outcome columns:
-        evaluation_id, model_id, trade_score, confidence, should_trade, compliant,
-        symbol, timestamp, r_multiple, trade_taken
     """
     conn = _connect()
     df = pd.read_sql_query(
@@ -278,6 +315,10 @@ def load_model_outcomes(days: int = 90) -> pd.DataFrame:
         parse_dates=["timestamp"],
     )
     conn.close()
+
+    validate_schema(df, ModelOutput, strict=False)
+    validate_schema(df, Outcome, strict=False)
+
     return df
 
 
@@ -286,8 +327,12 @@ def load_model_outcomes(days: int = 90) -> pd.DataFrame:
 def load_weight_history() -> pd.DataFrame:
     """Load historical weight snapshots."""
     conn = _connect()
+
+    # Use dynamic select for weight history
+    select_cols = _build_select_cols(WeightHistory)
+
     df = pd.read_sql_query(
-        "SELECT * FROM weight_history ORDER BY created_at DESC",
+        f"SELECT {select_cols} FROM weight_history ORDER BY created_at DESC",
         conn,
         parse_dates=["created_at"],
     )
@@ -296,6 +341,8 @@ def load_weight_history() -> pd.DataFrame:
     if not df.empty and "weights_json" in df.columns:
         weights_expanded = df["weights_json"].apply(json.loads).apply(pd.Series)
         df = pd.concat([df.drop(columns=["weights_json"]), weights_expanded], axis=1)
+
+    validate_schema(df, WeightHistory, exclude=["weights_json"]) # expanded
     return df
 
 
