@@ -1,6 +1,6 @@
 # Market Data Bridge — Agent Orchestration
 
-> 15-agent fleet managed via **GitHub Agent HQ** + external tool-specific instruction files.
+> 14-agent fleet managed via **GitHub Agent HQ** + external tool-specific instruction files.
 >
 > Agent HQ provides unified Mission Control across GitHub, VS Code, and CLI. Custom agent profiles live in `.github/agents/`. File-based conditional instructions in `.github/instructions/`. See `AGENTS.md` for the full team roster, cost routing, and authority matrix.
 
@@ -27,7 +27,6 @@
 | **GHAS** | Security Auditor | CI/CD | Auto-configured |
 | **NotebookLM** | Internal Librarian | notebooklm.google.com | `GEMINI.md` |
 | **Google Antigravity** | Senior Dev / 2nd Staff Engineer | Antigravity IDE | `GEMINI.md` |
-| **Amazon Q** | CI/CD & Infra Engineer | IDE Extension / CLI | `AMAZON_Q.md` |
 | **Mintlify AI** | Technical Writer / Docs Owner | mintlify.com | `docs/` directory |
 
 ### Instruction Files Architecture
@@ -55,7 +54,6 @@ AGENTS.md          ← Always-on (multi-agent, read by all AI tools)
 CLAUDE.md          ← Always-on (Claude compatibility)
 GEMINI.md          ← Antigravity + NotebookLM
 WINDSURF.md        ← Windsurf IDE / Cascade
-AMAZON_Q.md        ← Amazon Q Developer
 HANDSHAKE.md       ← Agent cards for manual paste (Claude Desktop, ChatGPT, Jules, etc.)
 ```
 

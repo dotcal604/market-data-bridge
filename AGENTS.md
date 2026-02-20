@@ -17,14 +17,13 @@
 | 11 | **Security Auditor** | GitHub Advanced Security | Free | CI/CD / PR scan | Dependabot, code scanning, secret detection |
 | 12 | **Internal Librarian** | NotebookLM | Included in Google AI Pro | notebooklm.google.com | Architecture docs, RAG, knowledge queries |
 | 13 | **Senior Dev / 2nd Staff Engineer** | Google Antigravity | Included in Google AI Pro | Antigravity IDE | Multi-file features, autonomous execution |
-| 14 | **CI/CD & Infra Engineer** | Amazon Q Developer | Free tier (50 agent chats/mo) | IDE Extension / CLI | GitHub Actions, deploy scripts, build diagnosis |
-| 15 | **Technical Writer / Docs Owner** | Mintlify AI | Free (hobby tier) | mintlify.com + `docs/` directory | `docs/*.mdx`, `docs/docs.json`, API references |
-| 16 | **Docs Writer** | GitHub Copilot | Flat $39/mo | GitHub issue assign (`@copilot/docs-writer`) | `docs/**/*.mdx`, `docs/docs.json`, repo docs (`*.md`) |
+| 14 | **Technical Writer / Docs Owner** | Mintlify AI | Free (hobby tier) | mintlify.com + `docs/` directory | `docs/*.mdx`, `docs/docs.json`, API references |
+| 15 | **Docs Writer** | GitHub Copilot | Flat $39/mo | GitHub issue assign (`@copilot/docs-writer`) | `docs/**/*.mdx`, `docs/docs.json`, repo docs (`*.md`) |
 
 ## Monthly Compute Budget
 
 ```
-Total: ~$479/mo + Windsurf (free or Pro)
+Total: ~$479/mo + Windsurf (free or Pro) — 14 agents + 1 human
 ├── Claude Max 20x:  $200  →  Claude Code + Desktop + chat
 ├── ChatGPT Pro:     $200  →  ChatGPT + Codex (300–1500 msgs/5hr)
 ├── Copilot Pro+:     $39  →  IDE completions + agent mode
@@ -32,7 +31,7 @@ Total: ~$479/mo + Windsurf (free or Pro)
 ├── Perplexity Max:   ~$20  →  Research (not coding roster)
 ├── Windsurf:      free/$10  →  IDE-native dev + Cascade context
 ├── Mintlify:        free/$0  →  Docs site hosting + AI writer (hobby tier)
-└── Free tier:         $0  →  v0, Qodo, GHAS, Amazon Q (50 agent/mo)
+└── Free tier:         $0  →  v0, Qodo, GHAS
 ```
 
 ### Assignment Guidelines
@@ -42,14 +41,14 @@ Total: ~$479/mo + Windsurf (free or Pro)
 - **Tests and docs**: Codex, Copilot, or Qodo Gen — all handle these well
 - **Cross-language work** (TS <-> Python): Claude Code — juniors struggle with multi-language coordination
 - **Architecture decisions**: Claude Code proposes -> ChatGPT/Antigravity review -> Human approves
-- **CI/CD, GH Actions, deploy scripts**: Amazon Q (mastery domain) or Copilot (fallback)
+- **CI/CD, GH Actions, deploy scripts**: Copilot ops-engineer mode (mastery domain)
 - **UI components from design**: v0 (free tier, 10/mo) or Antigravity (multi-file flows)
 - **User-facing documentation** (`docs/*.mdx`): Mintlify AI + Codex for bulk content, or `@copilot/docs-writer` for evidence-backed updates
 - **Unproven agents** (Jules): Start with low-risk tasks (JSDoc, docs). Promote after 3 clean PRs.
 
 Route tasks to build agent mastery in their domain. When two agents can handle a task, prefer the one whose mastery domain it falls in, then the cheaper one. Reserve Claude Code Max tokens for judgment-intensive and execution-critical work.
 
-Don't rotate agents through unfamiliar domains to save tokens — mastery compounds. 10 CI tasks to Amazon Q > 2 each to 5 agents.
+Don't rotate agents through unfamiliar domains to save tokens — mastery compounds. 10 CI tasks to Copilot ops-engineer > 2 each to 5 agents.
 
 ## Cost-Aware Routing
 
@@ -62,7 +61,7 @@ Don't rotate agents through unfamiliar domains to save tokens — mastery compou
 | Multi-file features (non-critical) | Antigravity | $0 (in Google AI Pro) | Free Gemini 3 compute |
 | UI components from design | v0 | $0 (free tier) | 10/mo covers most needs |
 | Test generation | Qodo Gen | $0 (free tier) | Behavior-driven |
-| CI/CD, GH Actions, deploy scripts | Amazon Q | $0 (free tier) | 50 agent chats/mo |
+| CI/CD, GH Actions, deploy scripts | Copilot (ops-engineer) | $39 flat | Mastery domain via agent profile |
 | Mechanical work, JSDoc, docs | Jules | $0 (in Google AI Pro) | Probationary — low-risk only |
 | User-facing documentation (`docs/*.mdx`) | Mintlify AI / docs-writer | $0 / $39 flat | AI suggestions / evidence-backed updates |
 | Research/second opinions | ChatGPT | $0 (in Pro) | Already paying $200 |
@@ -74,7 +73,7 @@ Don't rotate agents through unfamiliar domains to save tokens — mastery compou
 
 **Routing priorities (in order):**
 1. **Mastery first** — Route tasks to build agent expertise in their domain. An agent doing 10 CI tasks learns GH Actions deeply vs. spreading across 5 agents
-2. **Free second** — Antigravity, Codex, Qodo, v0, Amazon Q, Jules, NotebookLM, GHAS
+2. **Free second** — Antigravity, Codex, Qodo, v0, Jules, NotebookLM, GHAS
 3. **Cheap third** — Copilot ($39 flat), ChatGPT (included in $200)
 4. **Expensive last** — Claude Code (Max 20x window is finite per 5hr/weekly)
 
@@ -93,7 +92,7 @@ Each agent — and the human — should develop deep expertise:
 | Codex | Spec execution + schemas | Zod schemas, JSDoc, TypeScript strict mode, single-file refactors |
 | Jules | Mechanical + Python | analytics/ scripts, Python data processing, bulk JSDoc |
 | Windsurf | IDE-native dev + context | Inline code generation, multi-file flows, Cascade context engine |
-| Amazon Q | CI/CD + deploy | GitHub Actions, Docker, Fly.io, npm scripts |
+| Copilot (ops-engineer) | CI/CD + deploy | GitHub Actions, PM2, ecosystem.config, npm scripts |
 | Qodo Gen | Test generation | Vitest, in-memory SQLite, edge case discovery |
 | v0 | UI components | shadcn/ui, Tailwind v4, dark theme, Recharts |
 | NotebookLM | Knowledge RAG | Architecture docs, whitepapers, codebase understanding |
@@ -101,7 +100,7 @@ Each agent — and the human — should develop deep expertise:
 | **docs-writer** | **Evidence-backed docs** | **Mintlify MDX components, docs.json, citing code/endpoints/env vars** |
 | GHAS | Security scanning | Dependabot, code scanning, secret detection |
 
-**Your mastery as the human operator is the highest-leverage investment.** Every improvement in how you write specs, delegate tasks, review output, and route work multiplies across all 14 agents. The agents get better at their domains through repetition — you get better at the meta-skill of running the team.
+**Your mastery as the human operator is the highest-leverage investment.** Every improvement in how you write specs, delegate tasks, review output, and route work multiplies across all agents. The agents get better at their domains through repetition — you get better at the meta-skill of running the team.
 
 Mastery = repeated exposure to the same tools/patterns -> fewer mistakes, faster execution, less review overhead. Don't rotate agents through unfamiliar domains just to save tokens.
 
@@ -127,7 +126,7 @@ Tier 1 — Autonomous (no review needed)
 Tier 2 — Delegated (Claude Code reviews PR before human merge)
 ├── Codex: spec execution from detailed issues
 ├── Jules: mechanical refactors, JSDoc, docs
-├── Amazon Q: CI/CD workflows, deploy scripts
+├── Copilot (ops-engineer): CI/CD workflows, deploy scripts
 ├── v0: UI component generation
 └── Windsurf: module-level inline development
 
@@ -155,7 +154,7 @@ This gives a 1:5 effective parallelism ratio without context-switching overhead,
 
 ### Viability Assessment
 
-With 14 agents, the bottleneck is human review bandwidth, not compute. Mitigation:
+With 13 coding agents, the bottleneck is human review bandwidth, not compute. Mitigation:
 1. Claude Code auto-reviews all agent PRs (catches 80% of issues)
 2. Tier 1 agents need zero review (autonomous)
 3. Tier 2 agents produce PRs reviewed in batch (Claude Code first pass, human final)
@@ -164,7 +163,7 @@ With 14 agents, the bottleneck is human review bandwidth, not compute. Mitigatio
 
 ### Weekly Rhythm
 
-- **Monday:** plan week, write detailed issues for Codex/Jules/Copilot/Amazon Q
+- **Monday:** plan week, write detailed issues for Codex/Jules/Copilot
 - **Tue-Thu:** Claude Code + Antigravity on complex work, async agents on queue
 - **Friday:** batch-review async PRs, merge, retro on agent performance
 
@@ -238,7 +237,7 @@ For each agent, a structured "job description" card. The agent's response (or it
 | Jules | Paste at jules.google when assigning | Assign test task, verify PR |
 | Windsurf | Open project in Windsurf, Cascade reads codebase | Assign test task in Cascade |
 | Antigravity | Open project in Antigravity IDE | Assign test task, verify multi-file output |
-| Amazon Q | Install extension, point at repo | Assign CI/CD test task |
+| Copilot (ops-engineer) | `.github/agents/ops-engineer.agent.md` | Assign CI/CD test issue |
 | Qodo Gen | IDE extension reads codebase | Generate tests for a module, verify quality |
 | v0 | Paste component spec at v0.dev | Generate a component, verify it matches patterns |
 | NotebookLM | Upload AGENTS.md + CLAUDE.md as sources | Ask architecture question, verify accuracy |
@@ -250,7 +249,7 @@ For each agent, a structured "job description" card. The agent's response (or it
 | Agent | Test Task | Pass Criteria |
 |-------|-----------|---------------|
 | Antigravity | "Add a loading skeleton to the analytics page" | Correct file, dark theme, named export, shadcn skeleton |
-| Amazon Q | "Add a GitHub Action that runs `npm run build` on PR" | Valid workflow YAML, triggers on PR, caches node_modules |
+| Copilot (ops-engineer) | "Add a GitHub Action that runs `npm run build` on PR" | Valid workflow YAML, triggers on PR, caches node_modules |
 | Windsurf | "Extract the score color logic into a shared utility" | Correct refactor, no behavior change, tsc clean |
 | Jules | "Add JSDoc to all exports in `src/eval/ensemble/scorer.ts`" | Accurate JSDoc, no code changes, clean PR |
 | Codex | "Create a Zod schema for the Holly alert CSV format" | Correct types, handles optional fields, tests included |
@@ -319,7 +318,6 @@ Running these tests proves coordination is viable. If an agent fails its accepta
  ┌──────────────┐     FAIL: Agent doesn't read AGENTS.md
  │ Read AGENTS.md│───> MITIGATION: Codex/Copilot auto-read it.
  │ Read CLAUDE.md│     Jules/Antigravity/Windsurf: paste in prompt.
- │               │     Amazon Q: include in workspace context.
  └──────┬───────┘
         │
         v
@@ -684,13 +682,13 @@ cd docs && npx mint dev
 | `src/ibkr/connection.ts` | Claude Code | Always (human) | Yes |
 | `src/db/reconcile.ts` | Claude Code | Always (human) | Yes |
 | `src/rest/agent.ts` (new actions) | Claude Code | Yes | No |
-| `src/ops/*`, `scripts/*`, `scheduler.ts` | Amazon Q / Copilot | Yes (Claude Code) | No |
+| `src/ops/*`, `scripts/*`, `scheduler.ts` | Copilot (ops-engineer) | Yes (Claude Code) | No |
 | `src/eval/features/*` (new features) | Codex / Antigravity | Yes (Claude Code) | No |
 | `src/__tests__/*` | Codex / Qodo Gen / Copilot | Yes | No |
 | `frontend/src/components/*` (new) | Antigravity / Codex / v0 | Yes | No |
 | `frontend/src/components/*` (existing) | Windsurf / Copilot | Yes (Claude Code) | No |
-| `ecosystem.config.cjs`, `deploy/*` | Amazon Q / Copilot | Yes | No |
-| `.github/workflows/*` | Amazon Q / Copilot | Yes (Claude Code) | No |
+| `ecosystem.config.cjs`, `deploy/*` | Copilot (ops-engineer) | Yes | No |
+| `.github/workflows/*` | Copilot (ops-engineer) | Yes (Claude Code) | No |
 | `.github/agents/*` | Claude Code | Yes | No |
 | `docs/*.mdx`, `docs/docs.json` | Mintlify AI / Codex | Yes (Claude Code) | No |
 | `AGENTS.md`, `CLAUDE.md` | Claude Code | No (self-maintained) | No |
@@ -703,7 +701,7 @@ cd docs && npx mint dev
 
 ## Definition of Ready / Done by Work Type
 
-### Ops Work (Amazon Q / Copilot)
+### Ops Work (Copilot ops-engineer)
 **Ready:** Clear problem statement, affected files listed, no execution-logic changes needed.
 **Done:** Script runs clean, no regressions in `npm test`, PM2 restart succeeds.
 
@@ -799,16 +797,6 @@ Cascade context engine for multi-file awareness. Best for hands-on-keyboard gene
 **Limitations:** Less autonomous than Claude Code or Antigravity. Overlaps with Copilot on autocomplete — use Windsurf for larger flows, Copilot for quick completions.
 
 **Free tier:** 25 prompt credits/mo, unlimited Tab completions. Pro ($10-15/mo) if usage warrants.
-
-### Amazon Q Developer — CI/CD & Infra Engineer
-
-Free tier: 50 agent chat interactions/mo. IDE extension (VS Code) + `q` CLI.
-
-**Best for:** GitHub Actions workflows, deploy scripts, ecosystem.config, broken build diagnosis.
-
-**Strengths:** Strong at GH Actions + Node.js tooling. Good at diagnosing CI failures.
-
-**Limitations:** Not on AWS infra for this project, but CI/CD knowledge transfers. Don't waste the 50 free chats on tasks Copilot can handle.
 
 ### Mintlify AI — Technical Writer / Docs Owner
 
