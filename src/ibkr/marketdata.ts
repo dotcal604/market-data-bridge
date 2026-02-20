@@ -70,6 +70,10 @@ export interface IBKRQuoteData {
   close: number | null;
   volume: number | null;
   timestamp: string;
+  /** True if the data is delayed (e.g. no real-time subscription). */
+  delayed: boolean;
+  /** Human-readable staleness context. Null for real-time IBKR data. */
+  staleness_warning: string | null;
 }
 
 /**
@@ -106,6 +110,8 @@ export async function getIBKRQuote(params: {
       close: null,
       volume: null,
       timestamp: new Date().toISOString(),
+      delayed: false,
+      staleness_warning: null,
     };
 
     const timeout = setTimeout(() => {
@@ -114,8 +120,12 @@ export async function getIBKRQuote(params: {
       cleanup();
       ib.cancelMktData(reqId);
       data.timestamp = new Date().toISOString();
+      // Timed out — data may be partial, flag it
+      if (data.last === null && data.bid === null) {
+        data.staleness_warning = "IBKR snapshot timed out with no price data.";
+      }
       resolve(data);
-    }, 15000);
+    }, 5000);
 
     const onTickPrice = (id: number, field: number, value: number) => {
       if (id !== reqId) return;
