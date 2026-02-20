@@ -19,6 +19,7 @@
 | 13 | **Senior Dev / 2nd Staff Engineer** | Google Antigravity | Included in Google AI Pro | Antigravity IDE | Multi-file features, autonomous execution |
 | 14 | **CI/CD & Infra Engineer** | Amazon Q Developer | Free tier (50 agent chats/mo) | IDE Extension / CLI | GitHub Actions, deploy scripts, build diagnosis |
 | 15 | **Technical Writer / Docs Owner** | Mintlify AI | Free (hobby tier) | mintlify.com + `docs/` directory | `docs/*.mdx`, `docs/docs.json`, API references |
+| 16 | **Docs Writer** | GitHub Copilot | Flat $39/mo | GitHub issue assign (`@copilot/docs-writer`) | `docs/**/*.mdx`, `docs/docs.json`, repo docs (`*.md`) |
 
 ## Monthly Compute Budget
 
@@ -43,7 +44,7 @@ Total: ~$479/mo + Windsurf (free or Pro)
 - **Architecture decisions**: Claude Code proposes -> ChatGPT/Antigravity review -> Human approves
 - **CI/CD, GH Actions, deploy scripts**: Amazon Q (mastery domain) or Copilot (fallback)
 - **UI components from design**: v0 (free tier, 10/mo) or Antigravity (multi-file flows)
-- **User-facing documentation** (`docs/*.mdx`): Mintlify AI + Codex for bulk content
+- **User-facing documentation** (`docs/*.mdx`): Mintlify AI + Codex for bulk content, or `@copilot/docs-writer` for evidence-backed updates
 - **Unproven agents** (Jules): Start with low-risk tasks (JSDoc, docs). Promote after 3 clean PRs.
 
 Route tasks to build agent mastery in their domain. When two agents can handle a task, prefer the one whose mastery domain it falls in, then the cheaper one. Reserve Claude Code Max tokens for judgment-intensive and execution-critical work.
@@ -63,7 +64,7 @@ Don't rotate agents through unfamiliar domains to save tokens — mastery compou
 | Test generation | Qodo Gen | $0 (free tier) | Behavior-driven |
 | CI/CD, GH Actions, deploy scripts | Amazon Q | $0 (free tier) | 50 agent chats/mo |
 | Mechanical work, JSDoc, docs | Jules | $0 (in Google AI Pro) | Probationary — low-risk only |
-| User-facing documentation (`docs/*.mdx`) | Mintlify AI | $0 (hobby tier) | AI suggestions + auto-deploy from GitHub |
+| User-facing documentation (`docs/*.mdx`) | Mintlify AI / docs-writer | $0 / $39 flat | AI suggestions / evidence-backed updates |
 | Research/second opinions | ChatGPT | $0 (in Pro) | Already paying $200 |
 | Architecture docs/RAG | NotebookLM | $0 (in Google AI Pro) | Free Gemini inference |
 | Security scanning | GHAS | $0 (free) | Automated in CI |
@@ -97,6 +98,7 @@ Each agent — and the human — should develop deep expertise:
 | v0 | UI components | shadcn/ui, Tailwind v4, dark theme, Recharts |
 | NotebookLM | Knowledge RAG | Architecture docs, whitepapers, codebase understanding |
 | Mintlify AI | Documentation | MDX authoring, docs.json nav, API reference generation, search |
+| **docs-writer** | **Evidence-backed docs** | **Mintlify MDX components, docs.json, citing code/endpoints/env vars** |
 | GHAS | Security scanning | Dependabot, code scanning, secret detection |
 
 **Your mastery as the human operator is the highest-leverage investment.** Every improvement in how you write specs, delegate tasks, review output, and route work multiplies across all 14 agents. The agents get better at their domains through repetition — you get better at the meta-skill of running the team.

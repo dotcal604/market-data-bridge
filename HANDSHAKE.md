@@ -9,7 +9,7 @@ This file contains agent cards to copy-paste into each tool's UI. After pasting,
 | 2 | Claude Code | Auto (reads AGENTS.md) | ✅ Verified |
 | 3 | Claude Desktop | Paste below in Cowork | ⏳ Pending |
 | 4 | ChatGPT | Paste below in chat | ⏳ Pending |
-| 5 | Copilot | `.github/agents/*.agent.md` (updated) | ⏳ Pending |
+| 5 | Copilot | `.github/agents/*.agent.md` (updated) | ✅ Verified (created copilot-instructions.md, 4 instruction files, updated ORCHESTRATION.md) |
 | 6 | Codex | Auto (reads AGENTS.md from repo) | ⏳ Pending |
 | 7 | Jules | Paste below at jules.google | ⏳ Pending |
 | 8 | Qodo Gen | IDE extension (reads codebase) | ⏳ Pending |

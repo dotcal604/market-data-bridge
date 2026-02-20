@@ -227,6 +227,37 @@ cd frontend && npx tsc --noEmit
 - [ ] No `console.log` — use Pino logger for backend
 ```
 
+## Issue Template: Docs Writer
+
+Documentation PRs must be evidence-backed. No vibes-based claims.
+
+```markdown
+## Doc Change: `docs/{path}.mdx` or `{path}.md`
+
+{One-sentence description of the documentation update.}
+
+### Requirements
+- **Evidence-backed claims**: all runtime descriptions must link to code or config.
+- **Cite code path**: `src/{path}/{file}.ts` lines {X-Y}
+- **Cite endpoint**: `GET /api/{endpoint}` (if applicable)
+- **Cite env var**: `{ENV_VAR_NAME}` (if applicable)
+
+### Files to Modify
+- **Modify**: `docs/{path}.mdx`
+- **Modify** (if new page): `docs/docs.json` (update navigation)
+
+### Style Guidelines
+- Use Mintlify `<Warning>`, `<Info>`, or `<Steps>` if appropriate
+- Keep tone professional and direct
+- If behavior is uncertain, use: **"TBD (verify in code)"**
+
+### Acceptance Criteria
+- [ ] Claims verified against current codebase
+- [ ] Links and anchors are correct
+- [ ] No hallucinations about future or unreleased features
+- [ ] Mintlify dev preview looks clean: `cd docs && npx mint dev`
+```
+
 ### Codex Cloud Environment
 
 Configure at [chatgpt.com/codex/settings/environments](https://chatgpt.com/codex/settings/environments):
