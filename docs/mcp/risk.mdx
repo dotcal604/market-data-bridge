@@ -1,0 +1,48 @@
+---
+title: "Risk Tools"
+description: "Session guardrails, position sizing, exit plans, and risk configuration."
+---
+
+# Risk Tools
+
+## Session risk gate
+
+| Tool | Description |
+|------|-------------|
+| `session_state` | Daily P&L, trade count, consecutive losses, cooldown, lock status |
+| `session_record_trade` | Record a trade result to update session counters |
+| `session_lock` | Manually lock session (prevents new trades) |
+| `session_unlock` | Unlock a locked session |
+| `session_reset` | Reset all counters (start of day) |
+
+## Position sizing
+
+| Tool | Description |
+|------|-------------|
+| `size_position` | Calculate shares from entry/stop with triple constraint (risk %, capital %, margin) |
+| `get_risk_config` | Current risk parameters |
+| `update_risk_config` | Modify risk limits (max position %, max daily loss %, concentration %, volatility scalar) |
+| `tune_risk_params` | Auto-tune from last 100 outcomes using half-Kelly |
+
+## Exit plans
+
+| Tool | Description |
+|------|-------------|
+| `exit_plan_create` | Create exit plan with TP ladder, trailing stop, protect trigger |
+| `exit_plan_get` | Get plan by ID or correlation_id |
+| `exit_plan_list` | List active and historical plans |
+| `exit_plan_activate` | Transition draft → active after entry fill |
+| `exit_plan_recommend` | Preview exit policy without creating a plan |
+| `exit_plan_update_policy` | Modify stop, TP targets, runner, time stop |
+| `exit_plan_record_override` | Record psychology override (tilt, freeze, revenge, etc.) |
+| `exit_plan_close` | Close plan with exit price and reason |
+| `exit_plan_stats` | Analytics: avg R, giveback ratio, override frequency |
+
+## Operations
+
+| Tool | Description |
+|------|-------------|
+| `ops_health` | Process metrics, IBKR SLA, latency, error rates |
+| `ops_incidents` | Recent disconnects, errors, timeouts |
+| `ops_uptime` | Uptime summary |
+| `ops_runbook` | Recovery procedures for common scenarios |

@@ -1,0 +1,42 @@
+---
+title: "Edge Analytics"
+description: "Validates whether ensemble scoring produces real edge."
+---
+
+# Edge Analytics (`/edge`)
+
+Answers the question: is the ensemble actually making you money, or is it noise?
+
+## Edge Score Card
+
+Composite metrics:
+- **Sharpe ratio** — risk-adjusted return
+- **Sortino ratio** — downside-adjusted return
+- **Profit factor** — gross wins / gross losses
+- **Max drawdown** — worst peak-to-trough decline
+- **Expectancy** — average dollars won per trade
+- **Edge score** — composite of all metrics
+
+## Equity Curve
+
+Cumulative R-multiple over time from ensemble-scored trades. Trending up = edge is real.
+
+## Rolling Metrics
+
+Time-series chart of rolling win rate, Sharpe, and avg R. Helps identify periods where the edge weakened.
+
+## Feature Attribution
+
+Which features predict winners? Splits trades on each feature's median and compares win rates:
+- Features with significant lift are marked **SIG**
+- Helps you understand what the models are actually keying on
+
+## Walk-Forward Validation
+
+The gold standard for edge validation:
+1. Split history into train/test windows
+2. Optimize weights on training data
+3. Test on out-of-sample data
+4. Repeat across multiple windows
+
+If out-of-sample performance holds up, the edge is real and not overfit.

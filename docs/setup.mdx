@@ -1,0 +1,123 @@
+---
+title: "Setup Guide"
+description: "Install TWS, configure the bridge, and start the frontend."
+---
+
+# Setup Guide
+
+## Prerequisites
+
+- **Node.js** v20+ (LTS)
+- **Interactive Brokers TWS** or **IB Gateway** (latest stable)
+- **npm** (comes with Node)
+- **pm2** for process management (`npm i -g pm2`)
+
+## 1. Clone and install
+
+```bash
+git clone https://github.com/dotcal604/market-data-bridge.git
+cd market-data-bridge
+npm install
+cd frontend && npm install && cd ..
+```
+
+## 2. Configure TWS
+
+In TWS, go to **Edit → Global Configuration → API → Settings**:
+
+<Steps>
+  <Step title="Enable API">
+    Check **Enable ActiveX and Socket Clients**
+  </Step>
+  <Step title="Set port">
+    - **Paper trading:** Port `7497`
+    - **Live trading:** Port `7496`
+  </Step>
+  <Step title="Allow connections">
+    Ensure **Allow connections from localhost only** is checked (or add your IP)
+  </Step>
+  <Step title="Disable read-only">
+    Uncheck **Read-Only API** if you want to place orders
+  </Step>
+</Steps>
+
+## 3. Start the bridge
+
+### Paper trading (recommended for testing)
+
+```bash
+npm run start:paper
+```
+
+### Live trading
+
+```bash
+npm run start:live
+```
+
+### With pm2 (production)
+
+```bash
+pm2 start npm --name "bridge" -- run start:paper
+pm2 save
+```
+
+The bridge starts on port **3001** with:
+- REST API at `http://localhost:3001/api`
+- WebSocket at `ws://localhost:3001/ws`
+
+## 4. Start the frontend
+
+```bash
+cd frontend
+npm run dev
+```
+
+Open `http://localhost:3000` — the dashboard connects to the bridge automatically.
+
+## 5. Configure MCP (for Claude Code)
+
+Add to your Claude Code MCP settings (`.claude/settings.json` or similar):
+
+```json
+{
+  "mcpServers": {
+    "ibkr": {
+      "command": "node",
+      "args": ["dist/mcp/index.js", "--mode", "mcp"],
+      "cwd": "/path/to/market-data-bridge"
+    }
+  }
+}
+```
+
+## Paper vs Live
+
+| Setting | Paper | Live |
+|---------|-------|------|
+| TWS port | 7497 | 7496 |
+| Gateway port | 4002 | 4001 |
+| npm script | `start:paper` | `start:live` |
+| Risk gate | Bypassed | Active |
+| Account | DUA482209 (CAD) | Your live account |
+| Auto-flatten | Disabled | Configurable |
+
+<Warning>
+Always test on paper first. The risk gate is bypassed on paper ports so you can test freely without position limits blocking you.
+</Warning>
+
+## Verify connection
+
+Once running, check the connection:
+
+1. **Frontend:** Navigate to `/status` — should show green "Connected" with your account ID
+2. **MCP:** Run the `get_status` tool — should return `ibkr.connected: true`
+3. **Bridge logs:** Check pm2 logs for `IBKR connected` message
+
+## Import historical data
+
+### TraderSync trades
+Export your trades from TraderSync as CSV, then use the `tradersync_import` MCP tool or REST endpoint.
+
+### Holly AI trades
+Export from Trade Ideas, then use `holly_trade_import_file` with the CSV path.

@@ -1,0 +1,39 @@
+---
+title: "MCP Tools Overview"
+description: "150+ tools organized by category for Claude Code and Claude Desktop."
+---
+
+# MCP Tools Overview
+
+EvalEngine exposes 150+ tools via the Model Context Protocol. These tools are available in Claude Code and Claude Desktop when the MCP server is configured.
+
+## Tool categories
+
+| Category | Tools | Purpose |
+|----------|-------|---------|
+| [Market Data](/mcp/market-data) | 15 | Quotes, bars, options, screeners, news |
+| [Orders](/mcp/orders) | 12 | Place, modify, cancel orders and brackets |
+| [Account](/mcp/account) | 10 | Positions, P&L, exposure, stress testing |
+| [Evaluations](/mcp/evaluations) | 12 | Ensemble scoring, outcomes, drift, weights |
+| [Holly](/mcp/holly) | 18 | Alerts, trades, autopsy, predictor, rules |
+| [Analytics](/mcp/analytics) | 10 | Daily summary, journal, history, edge report |
+| [Risk](/mcp/risk) | 10 | Session guards, position sizing, risk config |
+
+## First call: `get_status`
+
+Always call `get_status` first. It returns:
+- `easternTime` — current Eastern time
+- `marketSession` — pre-market, regular, after-hours, or closed
+- `ibkr.connected` — whether TWS is live
+
+If IBKR is disconnected, account/order tools will fail. Market data falls back to Yahoo.
+
+## Tool naming convention
+
+Tools use `snake_case` names grouped by function:
+- `get_*` — read data
+- `place_*` / `cancel_*` — order actions
+- `subscribe_*` / `unsubscribe_*` — streaming
+- `holly_*` — Holly AI tools
+- `session_*` — session risk gate
+- `exit_plan_*` — exit plan management

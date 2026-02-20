@@ -1,0 +1,67 @@
+---
+title: "Daily Routine"
+description: "Pre-market prep, regular session execution, and EOD review."
+---
+
+# Daily Trading Routine
+
+## Pre-market (4:00 AM – 9:30 AM ET)
+
+<Steps>
+  <Step title="Check status">
+    Navigate to `/status` or run `get_status` to confirm TWS is connected and market session is "pre-market".
+  </Step>
+  <Step title="Review overnight signals">
+    Check `/signals` for any Holly alerts that were auto-evaluated overnight. Look for scores above 70.
+  </Step>
+  <Step title="Build watchlist">
+    Use the screener at `/screener` with `day_gainers` and `most_actives` from prior session. Calculate gap % manually from current quotes vs prior close.
+  </Step>
+  <Step title="Check analytics">
+    Open `/analytics` to remind yourself of your rules:
+    - Skip 9 AM entries (your biggest leak)
+    - Lean into shorts (your edge)
+    - Filter Holly Grail over Neo
+  </Step>
+</Steps>
+
+## Regular session (9:30 AM – 4:00 PM ET)
+
+<Steps>
+  <Step title="Wait for 10 AM">
+    Your data shows 9 AM is a consistent leak. Wait for the first 30 minutes to settle.
+  </Step>
+  <Step title="Evaluate setups">
+    Use the ensemble evaluation (MCP `eval_stats` or `/evals`) to score any setup through all 3 models. Only trade scores above your threshold.
+  </Step>
+  <Step title="Size and execute">
+    Use `size_position` to calculate shares from entry/stop. Execute with `place_advanced_bracket` for full bracket protection.
+  </Step>
+  <Step title="Monitor positions">
+    `/orders` shows open orders. `/account` shows positions with portfolio exposure. The exit plan tracks your TP ladder and trailing stop.
+  </Step>
+</Steps>
+
+## Post-market (4:00 PM – 8:00 PM ET)
+
+<Steps>
+  <Step title="Review executions">
+    `/executions` shows today's fills with realized P&L and commissions.
+  </Step>
+  <Step title="Journal trades">
+    Add entries at `/journal/new` with reasoning, setup type, and outcome tags. This feeds the feature attribution model.
+  </Step>
+  <Step title="Record outcomes">
+    Link trade results to evaluations with `record_outcome` so the ensemble can learn from your actual trades.
+  </Step>
+  <Step title="Check session state">
+    `/session` shows daily P&L, trade count, and whether you hit any guardrails.
+  </Step>
+</Steps>
+
+## Weekend
+
+- Review `/analytics` for weekly trends
+- Check `/drift` for model accuracy degradation
+- Run `edge_report` to validate ensemble edge is real (walk-forward validation)
+- Consider `tune_risk_params` to auto-calibrate position sizing from recent outcomes

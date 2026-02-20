@@ -1,0 +1,103 @@
+---
+title: "Holly AI Pipeline"
+description: "How Holly alerts flow from Trade Ideas through auto-evaluation to tradeable signals."
+---
+
+# Holly AI Pipeline
+
+## Overview
+
+Holly AI is Trade Ideas' AI-powered alert system. EvalEngine ingests Holly alerts, scores them through the 3-model ensemble, and surfaces high-confidence signals.
+
+```
+Trade Ideas → CSV Export → holly_import → Auto-Eval → Signal Feed → Bracket Order
+```
+
+## Step 1: Import alerts
+
+### Manual CSV import
+Export alerts from Trade Ideas as CSV, then:
+```
+MCP tool: holly_import
+Parameter: csv (full CSV content)
+```
+
+### File import
+```
+MCP tool: holly_trade_import_file
+Parameter: file_path (/path/to/export.csv)
+```
+
+The importer parses Trade Ideas' non-standard CSV format, computes derived metrics (hold time, MFE, MAE, giveback, R-multiple), and stores in the `holly_trades` table.
+
+## Step 2: Auto-evaluation
+
+When enabled, the auto-eval pipeline automatically evaluates new Holly alerts:
+
+```
+MCP tool: auto_eval_toggle
+Parameter: enabled: true
+```
+
+Each alert goes through:
+1. **Pre-filter** — skip if symbol was recently evaluated (dedup window)
+2. **Feature extraction** — gap %, RVOL, spread, float rotation, extension
+3. **3-model ensemble** — Claude + GPT-4o + Gemini score 0–100
+4. **Weighted average** — ensemble score with disagreement penalty
+5. **Signal generation** — stored in signal feed with go/no-go verdict
+
+Check pipeline status: `auto_eval_status`
+
+## Step 3: Review signals
+
+Navigate to `/signals` to see scored alerts:
+- **Score** — ensemble weighted average (0–100)
+- **Direction** — long or short
+- **Should trade** — go/no-go based on score threshold
+- **Symbol** — with current quote data
+
+Or query via MCP: `signal_feed` with optional `since`, `symbol`, `direction` filters.
+
+## Step 4: Execute
+
+For high-confidence signals, execute with full bracket protection:
+
+```
+MCP tool: place_advanced_bracket
+Parameters:
+  symbol: "AAPL"
+  action: "BUY"
+  quantity: 100          # from size_position
+  entry: { type: "LMT", price: 185.50 }
+  takeProfit: { type: "LMT", price: 187.00 }
+  stopLoss: { type: "TRAIL", trailingPercent: 0.5 }
+```
+
+## Holly segments
+
+Your data shows a clear edge difference between Holly segments:
+
+| Segment | Win Rate | Avg R | Recommendation |
+|---------|----------|-------|----------------|
+| Holly Grail | 52.3% | +0.025 | Prioritize |
+| Holly Neo | 48.0% | −0.009 | Reduce or skip |
+
+## Key strategies
+
+Top performing Holly strategies (from your autopsy data):
+- **Tailwind** — momentum continuation
+- **Pullback Long** — dip buying in uptrend
+- **Breakdown Short** — breakdown from consolidation
+
+Check strategy rankings: `/holly/autopsy` or MCP `holly_exit_autopsy`
+
+## Analytics tools
+
+| Tool | Purpose |
+|------|---------|
+| `holly_stats` | Aggregate alert statistics |
+| `holly_trade_stats` | Historical trade metrics |
+| `holly_exit_autopsy` | Strategy leaderboard, giveback analysis |
+| `holly_extract_rules` | Reverse-engineer alert trigger conditions |
+| `holly_backtest` | Backtest extracted rules |
+| `trailing_stop_optimize` | Find optimal exit strategy per strategy |

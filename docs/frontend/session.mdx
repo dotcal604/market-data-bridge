@@ -1,0 +1,27 @@
+---
+title: "Session"
+description: "Session risk gate — daily P&L limits, trade counts, cooldowns."
+---
+
+# Session (`/session`)
+
+The session risk gate prevents overtrading and tilt.
+
+## Session State
+- **Daily P&L** — running total for the day
+- **Trade count** — how many trades taken today
+- **Consecutive losses** — streak counter
+- **Cooldown status** — whether you're in a cooldown period
+- **Lock status** — manually locked sessions
+
+## Risk Configuration
+Adjustable limits:
+- Max daily loss percentage
+- Max position size percentage
+- Max concentration percentage
+- Volatility scaling factor
+
+## Controls
+- **Lock session** — manually prevent new trades (use when tilting)
+- **Unlock session** — resume trading
+- **Reset session** — clear all counters (start of day)

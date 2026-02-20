@@ -1,0 +1,106 @@
+---
+title: "Order Execution"
+description: "Position sizing, bracket orders, and order modification."
+---
+
+# Order Execution
+
+## Position sizing
+
+Always size before you trade. The `size_position` tool calculates safe share count from three constraints:
+
+```
+MCP tool: size_position
+Parameters:
+  symbol: "MSFT"
+  entryPrice: 420.50
+  stopPrice: 418.00
+  riskPercent: 1          # max 1% of equity at risk
+  maxCapitalPercent: 10   # max 10% of equity in position
+```
+
+Returns: share count, dollar risk, capital used, margin impact.
+
+## Order types
+
+### Simple order
+```
+MCP tool: place_order
+Parameters:
+  symbol: "AAPL"
+  action: "BUY"
+  orderType: "LMT"
+  totalQuantity: 50
+  lmtPrice: 185.00
+  tif: "DAY"
+```
+
+### Bracket order (recommended)
+```
+MCP tool: place_advanced_bracket
+Parameters:
+  symbol: "AAPL"
+  action: "BUY"
+  quantity: 50
+  entry: { type: "LMT", price: 185.00 }
+  takeProfit: { type: "LMT", price: 188.00 }
+  stopLoss: { type: "STP", price: 183.50 }
+```
+
+The bracket creates three linked orders:
+1. **Entry** — your entry order
+2. **Take profit** — limit sell at target (OCA-linked to stop)
+3. **Stop loss** — stop order at invalidation (OCA-linked to TP)
+
+When either TP or SL fills, the other auto-cancels via OCA group.
+
+### Trailing stop bracket
+```
+stopLoss: {
+  type: "TRAIL",
+  trailingPercent: 0.5    # trails 0.5% behind price
+}
+```
+
+Or use fixed trailing amount:
+```
+stopLoss: {
+  type: "TRAIL",
+  trailingAmount: 1.50    # trails $1.50 behind price
+}
+```
+
+## Modifying orders
+
+Use `modify_order` to change price/quantity on an existing order **without breaking bracket links**:
+
+```
+MCP tool: modify_order
+Parameters:
+  orderId: 12345
+  lmtPrice: 186.00       # new take profit level
+```
+
+<Warning>
+Never cancel and re-place bracket legs — this breaks the OCA group. Always use `modify_order` to preserve bracket integrity.
+</Warning>
+
+## Order management
+
+| Tool | Purpose |
+|------|---------|
+| `get_open_orders` | All working orders |
+| `get_completed_orders` | Filled/cancelled orders |
+| `get_executions` | Today's fills with commissions |
+| `cancel_order` | Cancel specific order |
+| `cancel_all_orders` | Cancel everything |
+| `flatten_positions` | Emergency: close all positions at market |
+
+## Session guardrails
+
+The session risk gate tracks:
+- **Daily P&L** — locks trading at max daily loss
+- **Trade count** — limits trades per session
+- **Consecutive losses** — cooldown after loss streaks
+
+Check with `session_state`. Manual lock: `session_lock`. Reset: `session_reset`.

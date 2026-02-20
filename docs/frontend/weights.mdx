@@ -1,0 +1,23 @@
+---
+title: "Weights"
+description: "Ensemble weight management — simulate, tune, and track changes."
+---
+
+# Weights (`/weights`)
+
+Controls how much influence each model has on the ensemble score.
+
+## Current Weights
+Shows Claude, GPT-4o, and Gemini weights (sum to 1.0) plus the disagreement penalty factor (k).
+
+## Simulate
+Test different weight configurations against historical data:
+- Adjust sliders for each model
+- See simulated vs current avg score, trade rate, and accuracy
+- Compare before committing
+
+## Weight History
+Audit trail of all weight changes with timestamp, source (manual/recalibration/simulation), sample size, and the weights at each point.
+
+## Auto-tune
+`tune_risk_params` uses half-Kelly sizing from the last 100 outcomes to automatically optimize weights.

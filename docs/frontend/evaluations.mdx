@@ -1,0 +1,34 @@
+---
+title: "Evaluations"
+description: "3-model ensemble scoring and evaluation history."
+---
+
+# Evaluations (`/evals`)
+
+The evaluations page shows all trade setups scored through the 3-model ensemble.
+
+## Evaluation table
+
+Each evaluation displays:
+- **Symbol** and **direction** (long/short)
+- **Ensemble score** (0–100) — weighted average of 3 models
+- **Individual model scores** — Claude, GPT-4o, Gemini
+- **Should trade** — go/no-go verdict
+- **Features** — extracted data points (gap %, RVOL, spread, etc.)
+- **Timestamp**
+
+Click any row to view full evaluation detail at `/evals/[id]`, including per-model reasoning and feature breakdown.
+
+## Compare (`/evals/compare`)
+
+Side-by-side comparison of two evaluations to understand model disagreements and score differences.
+
+## Recording outcomes
+
+After a trade completes, link the result back with `record_outcome`:
+- R-multiple (positive = win)
+- Setup type (breakout, pullback, reversal, etc.)
+- Whether you followed your rules
+- Exit reason
+
+This data feeds the edge analytics and drift detection systems.

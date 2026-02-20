@@ -1,0 +1,34 @@
+---
+title: "Holly Autopsy"
+description: "Holly AI trade analysis — strategy leaderboard, giveback profiles, segment comparison."
+---
+
+# Holly Autopsy (`/holly/autopsy`)
+
+Deep analysis of Holly AI historical trades. Shows where profits come from and where they leak.
+
+## Strategy Leaderboard
+
+Strategies ranked by total P&L, showing:
+- Win rate, average R, Sharpe ratio
+- Profit factor (gross wins / gross losses)
+- Average giveback ratio
+- Trade count
+
+## MFE/MAE Profiles
+
+For each strategy, shows:
+- **MFE** (Maximum Favorable Excursion) — how far price moved in your favor
+- **MAE** (Maximum Adverse Excursion) — how far price moved against you
+- **Giveback ratio** — what % of MFE you returned before exiting
+
+## Segment Comparison
+
+Side-by-side cards comparing Holly Grail vs Holly Neo (and other segments) on P&L, win rate, average profit, and hold time.
+
+## Holly Performance (`/holly/performance`)
+
+Trailing stop optimization results:
+- 19 trailing stop strategies simulated against historical trades
+- Per-strategy best exit method
+- P&L improvement metrics

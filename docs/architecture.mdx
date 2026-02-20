@@ -1,0 +1,119 @@
+---
+title: "Architecture"
+description: "How data flows from TWS through the bridge to your dashboard and MCP clients."
+---
+
+# Architecture Overview
+
+```
+┌─────────────┐     ┌──────────────────────────────────┐     ┌─────────────┐
+│  TWS /      │◄───►│         Bridge (Node.js)          │◄───►│  Frontend   │
+│  IB Gateway │     │                                    │     │  Next.js    │
+│  Port 7496  │     │  REST API (:3001)                 │     │  Port 3000  │
+│  or 7497    │     │  WebSocket (:3001/ws)              │     │             │
+└─────────────┘     │  Background jobs (pm2)             │     └─────────────┘
+                    │  SQLite (bridge.db)                │
+                    └──────────┬───────────────────────┘
+                               │
+                    ┌──────────┴───────────┐
+                    │   MCP Server (stdio)  │
+                    │   150+ tools          │
+                    └──────────┬───────────┘
+                               │
+                    ┌──────────┴───────────┐
+                    │  Claude Code /        │
+                    │  Claude Desktop       │
+                    └──────────────────────┘
+```
+
+## Operating modes
+
+The bridge runs in three modes controlled by `--mode`:
+
+| Mode | What runs | Use case |
+|------|-----------|----------|
+| `--mode both` | REST + WS + background jobs + IBKR | Main production process (pm2) |
+| `--mode rest` | REST + WS + background jobs | If MCP is separate |
+| `--mode mcp` | MCP server only (stdio) | Claude Code / Claude Desktop |
+
+<Warning>
+**Only one `--mode both` process should run.** Multiple instances running background jobs (auto-flatten, Holly watcher, scheduler) will duplicate market orders.
+</Warning>
+
+## Data flow
+
+### Market data
+1. TWS streams quotes via `@stoqey/ib`
+2. Bridge caches and serves via REST (`/api/quote/:symbol`)
+3. Frontend polls via React Query hooks (5–60s intervals)
+4. WebSocket broadcasts push real-time updates to open pages
+
+### Order execution
+1. User (or MCP tool) calls `place_advanced_bracket`
+2. Bridge builds Contract + Order objects via `@stoqey/ib`
+3. TWS executes, streams back `orderStatus` events
+4. Bridge writes to event store + broadcasts via WebSocket
+5. Frontend invalidates order cache on WS message
+
+### Holly AI pipeline
+1. Trade Ideas sends Holly alerts via CSV import or watcher
+2. Bridge stores in `holly_alerts` table
+3. Auto-eval pipeline scores each alert through 3 AI models
+4. Signals above threshold appear on `/signals` page
+5. User reviews and executes via bracket order
+
+## Database
+
+Single SQLite file at `data/bridge.db` using an event-sourced architecture:
+
+| Table | Purpose |
+|-------|---------|
+| `events` | Append-only event store (orders, fills, status changes) |
+| `evaluations` | 3-model ensemble scores + reasoning |
+| `eval_outcomes` | Trade results linked back to evaluations |
+| `orders_history` | Historical order snapshots |
+| `executions_history` | Fill records with commissions |
+| `tradersync_trades` | Imported TraderSync trade data |
+| `holly_alerts` | Holly AI alert imports |
+| `holly_trades` | Holly historical trades with MFE/MAE metrics |
+| `trade_journal` | Manual journal entries with tags |
+| `session_state` | Daily session risk tracking |
+| `exit_plans` | Structured exit policies for positions |
+| `weight_history` | Ensemble weight change audit trail |
+| `drift_alerts` | Model drift detection alerts |
+
+## Key directories
+
+```
+market-data-bridge/
+├── src/                    # Backend source
+│   ├── ibkr/               # IBKR connection, orders, portfolio
+│   ├── eval/               # Ensemble evaluation engine
+│   │   ├── ensemble/       # Weight management, Bayesian updating
+│   │   └── features/       # Feature extractors (gap, rvol, spread, etc.)
+│   ├── db/                 # SQLite, event store, read models
+│   ├── mcp/                # MCP server + tool definitions
+│   ├── rest/               # Express routes
+│   ├── ws/                 # WebSocket server
+│   └── providers/          # Yahoo Finance, news providers
+├── frontend/               # Next.js 16 dashboard
+│   └── src/
+│       ├── app/            # 25 page routes
+│       ├── components/     # UI components by domain
+│       └── lib/            # API clients, hooks, utilities
+├── data/                   # SQLite database (bridge.db)
+├── analytics/              # Python analytics scripts
+└── docs/                   # This documentation (Mintlify)
+```
+
+## Client ID management
+
+Multiple processes can connect to TWS simultaneously using PID-based client ID slotting:
+
+| Process | Base ID | Range |
+|---------|---------|-------|
+| pm2 bridge (`--mode both`) | 2 | 2–17 |
+| Claude Code MCP | 5 | 5–20 |
+| Claude Desktop MCP | 10 | 10–25 |
+
+Formula: `base + modeOffset + (pid % 5) * 3`

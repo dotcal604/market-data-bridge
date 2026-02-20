@@ -1,0 +1,59 @@
+---
+title: "Holly Tools"
+description: "Holly AI alerts, trades, autopsy, predictor, and rule extraction."
+---
+
+# Holly Tools
+
+## Alert management
+
+| Tool | Description |
+|------|-------------|
+| `holly_import` | Import Holly alert CSV content |
+| `holly_alerts` | Query imported alerts with filters |
+| `holly_stats` | Aggregate alert statistics |
+| `holly_symbols` | Most recent distinct symbols from alerts |
+
+## Trade data
+
+| Tool | Description |
+|------|-------------|
+| `holly_trade_import_file` | Import Holly trades CSV from disk (computes MFE/MAE/giveback) |
+| `holly_trades` | Query trades with filters (symbol, strategy, segment, date range) |
+| `holly_trade_stats` | Aggregate trade stats (win rate, avg R, giveback, hold time) |
+
+## Analysis
+
+| Tool | Description |
+|------|-------------|
+| `holly_exit_autopsy` | Strategy leaderboard, MFE/MAE profiles, exit policy recommendations |
+| `holly_strategy_breakdown` | Per-strategy features, separation, outcome P&L |
+| `holly_extract_rules` | Reverse-engineer trigger conditions using Cohen's d |
+| `holly_backtest` | Backtest extracted rules |
+
+## Trailing stop optimization
+
+| Tool | Description |
+|------|-------------|
+| `trailing_stop_optimize` | Run all 19 trailing stop strategies against historical trades |
+| `trailing_stop_summary` | Compact comparison table of all exit strategies |
+| `trailing_stop_per_strategy` | Best trailing stop per Holly strategy |
+| `trailing_stop_params` | List all 19 parameter sets |
+
+## Predictor
+
+| Tool | Description |
+|------|-------------|
+| `holly_predictor_status` | Strategy profiles built, alert count |
+| `holly_predictor_scan` | Scan a symbol against learned profiles |
+| `holly_predictor_candidates` | Top pre-alert candidates |
+| `holly_predictor_refresh` | Rebuild predictor profiles |
+
+## Auto-evaluation pipeline
+
+| Tool | Description |
+|------|-------------|
+| `auto_eval_status` | Pipeline enabled, concurrent evals, dedup window |
+| `auto_eval_toggle` | Enable/disable auto-evaluation |
+| `signal_feed` | Query auto-evaluated signals |
+| `signal_stats` | Signal count, tradeable signals, direction breakdown |

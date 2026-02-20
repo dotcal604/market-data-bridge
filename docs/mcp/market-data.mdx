@@ -1,0 +1,51 @@
+---
+title: "Market Data Tools"
+description: "Quotes, historical bars, options, screeners, and news."
+---
+
+# Market Data Tools
+
+## Quotes
+
+| Tool | Description |
+|------|-------------|
+| `get_quote` | Quote for stock/ETF/index. Auto-routes IBKR (real-time) or Yahoo (delayed) |
+| `get_ibkr_quote` | Direct IBKR real-time snapshot (bid, ask, last, OHLC, volume) |
+| `get_stock_details` | Company info: sector, industry, market cap, PE, 52-week range |
+| `search_symbols` | Search by name or partial symbol |
+
+## Historical Data
+
+| Tool | Description |
+|------|-------------|
+| `get_historical_bars` | OHLCV candles. Intervals: 1m, 5m, 15m, 1h, 1d, 1wk, 1mo |
+| `get_historical_ticks` | Tick-by-tick data (trades, bid/ask, midpoint). IBKR only |
+| `get_head_timestamp` | Earliest available data for a symbol |
+| `get_histogram_data` | Price distribution histogram |
+
+## Options
+
+| Tool | Description |
+|------|-------------|
+| `get_options_chain` | Full chain with calls + puts, bid/ask, IV, OI |
+| `get_option_quote` | Quote for specific contract (symbol, expiry, strike, right) |
+| `calculate_implied_volatility` | IV from option price |
+| `calculate_option_price` | Theoretical price from volatility |
+
+## Screeners
+
+| Tool | Description |
+|------|-------------|
+| `run_screener` | Basic screener (day_gainers, day_losers, most_actives, etc.) |
+| `run_screener_with_quotes` | Screener with full quote data (bid/ask/OHLC/sector/PE) |
+| `get_screener_filters` | List available screener IDs |
+| `get_trending` | Currently trending symbols |
+
+## News
+
+| Tool | Description |
+|------|-------------|
+| `get_news` | Recent news articles for a symbol |
+| `get_financials` | Revenue, margins, debt, analyst targets |
+| `get_earnings` | Earnings history (actual vs estimate) |
+| `get_recommendations` | Analyst recommendation trend counts |

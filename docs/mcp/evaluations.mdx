@@ -1,0 +1,38 @@
+---
+title: "Evaluation Tools"
+description: "3-model ensemble scoring, outcomes, drift detection, and weight management."
+---
+
+# Evaluation Tools
+
+## Evaluation data
+
+| Tool | Description |
+|------|-------------|
+| `eval_stats` | Total evaluations, average scores, win rate, model accuracy |
+| `eval_outcomes` | Evaluations joined with trade outcomes (scores + R-multiples) |
+| `eval_reasoning` | Per-model key drivers, risk factors, uncertainties, conviction |
+| `record_outcome` | Record trade result for an evaluation |
+
+## Drift detection
+
+| Tool | Description |
+|------|-------------|
+| `drift_report` | Rolling accuracy, calibration error by score decile, regime detection |
+| `drift_alerts` | Recent alerts when accuracy fell below thresholds |
+| `drift_check` | Run drift report + alert check in one call |
+
+## Weight management
+
+| Tool | Description |
+|------|-------------|
+| `simulate_weights` | Test different model weights against historical data |
+| `weight_history` | Audit trail of weight changes |
+| `tune_risk_params` | Auto-tune using half-Kelly sizing from last 100 outcomes |
+
+## Edge validation
+
+| Tool | Description |
+|------|-------------|
+| `edge_report` | Sharpe, Sortino, win rate, profit factor, max DD, feature attribution, walk-forward |
+| `walk_forward` | Walk-forward backtest with train/test windows |

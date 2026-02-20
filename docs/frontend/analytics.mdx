@@ -1,0 +1,67 @@
+---
+title: "Analytics"
+description: "Your trading performance dashboard — the buy-in page."
+---
+
+# My Analytics (`/analytics`)
+
+The analytics page visualizes your actual trading data to build conviction around behavioral changes. It pulls from 1,400+ TraderSync trades and 10,000+ Holly trades.
+
+## Overview Stats
+
+Six KPI cards across the top:
+
+| Card | What it shows |
+|------|---------------|
+| **Net P&L (All Time)** | Total dollars made/lost across all trades |
+| **Last 30 Days** | Recent performance trend |
+| **Win Rate** | Overall win percentage with W/L count |
+| **Avg R-Multiple** | Risk-adjusted return per trade |
+| **Commissions** | Total commission drag (highlighted if > profit) |
+| **Holly Trades** | Holly trade count with win rate and profit factor |
+
+## Key Insights
+
+Auto-generated, color-coded insight cards that identify your specific leaks and edges:
+
+- **Red cards** — dangers (9 AM leak, commission drag, giveback problem)
+- **Green cards** — edges (short outperformance, Holly Grail advantage)
+- **Blue cards** — actions (best trading hours to concentrate on)
+
+These are computed from your actual trade data, not generic advice.
+
+## Equity Curve
+
+Cumulative daily P&L as an area chart. Shows:
+- Total trajectory of your account
+- Max drawdown annotation
+- Color-coded (green if net positive, red if net negative)
+
+## Monthly P&L
+
+Bar chart with each month's net P&L. Green bars for winning months, red for losing months. Tooltip shows trade count, win rate, and commissions per month.
+
+## Time of Day P&L
+
+Bar chart showing P&L by entry hour. Designed to make the 9 AM problem impossible to ignore:
+- 9 AM bar highlighted in bright red when negative
+- Best hour called out in the header
+- Tooltip shows trade count, win rate, and avg R per hour
+
+## Long vs Short
+
+Side-by-side comparison cards:
+- Net P&L per side
+- Win rate, avg R, avg winner, avg loser
+- Commission breakdown
+- Verdict banner showing which side has the edge
+
+## Holly AI Section
+
+When Holly trade data exists, two additional visualizations appear:
+
+### Giveback Distribution
+Bucket chart showing what percentage of trades give back 0–20%, 20–40%, etc. of their peak profit. High giveback = you're not exiting well enough.
+
+### Strategy Rankings
+Top 8 Holly strategies ranked by total P&L with inline spark bars. Each row shows trade count, win rate, Sharpe ratio, and giveback percentage.

@@ -1,0 +1,43 @@
+---
+title: "Order Tools"
+description: "Place, modify, and cancel orders on IBKR."
+---
+
+# Order Tools
+
+## Placing orders
+
+| Tool | Description |
+|------|-------------|
+| `place_order` | Single order (MKT, LMT, STP, STP LMT, TRAIL, REL, MIT, MOC, LOC, PEG MID) |
+| `place_bracket_order` | Simple bracket: entry + take profit + stop loss |
+| `place_advanced_bracket` | Full bracket with OCA group, trailing stop support, any order types |
+
+<Note>
+**Always prefer `place_advanced_bracket`** for bracket orders. It handles OCA linking, trailing stops, and proper bracket construction.
+</Note>
+
+## Managing orders
+
+| Tool | Description |
+|------|-------------|
+| `modify_order` | Modify an open order in-place (preserves bracket/OCA links) |
+| `cancel_order` | Cancel a specific order by ID |
+| `cancel_all_orders` | Cancel all open orders globally |
+
+## Viewing orders
+
+| Tool | Description |
+|------|-------------|
+| `get_open_orders` | All working orders with status |
+| `get_completed_orders` | Filled/cancelled orders with fill details |
+| `get_executions` | Today's fills with commissions and realized P&L |
+| `orders_history` | Historical orders from local database |
+| `executions_history` | Historical executions from local database |
+
+## Emergency
+
+| Tool | Description |
+|------|-------------|
+| `flatten_positions` | Close ALL positions at market + cancel all orders |
+| `flatten_config` | Get/set EOD auto-flatten schedule |

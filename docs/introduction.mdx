@@ -1,0 +1,43 @@
+---
+title: "Introduction"
+description: "EvalEngine — a 3-model ensemble trading system with IBKR integration, Holly AI signals, and a Next.js dashboard."
+---
+
+# What is EvalEngine?
+
+EvalEngine is a personal trading infrastructure that connects Interactive Brokers (TWS/Gateway) to a 3-model AI ensemble (Claude, GPT-4o, Gemini) for trade evaluation, automated signal processing, and performance analytics.
+
+## What it does
+
+- **Evaluates trades** through a 3-model ensemble that scores setups 0–100 and produces a go/no-go verdict
+- **Processes Holly AI alerts** from Trade Ideas and auto-evaluates them through the ensemble pipeline
+- **Executes bracket orders** on IBKR with position sizing, trailing stops, and exit plans
+- **Tracks performance** across 1,400+ TraderSync trades and 10,000+ Holly trades
+- **Serves 150+ MCP tools** so Claude Code and Claude Desktop can interact with markets, orders, and analytics
+
+## System components
+
+| Component | Technology | Purpose |
+|-----------|-----------|---------|
+| **Bridge** | Node.js + Express | REST API, WebSocket server, IBKR connection, background jobs |
+| **Frontend** | Next.js 16 + React 19 | 25-page dashboard with real-time updates via WebSocket |
+| **MCP Server** | @modelcontextprotocol/sdk | 150+ tools for Claude Code / Claude Desktop |
+| **Database** | better-sqlite3 | Event store, evaluations, orders, Holly trades, journal |
+| **TWS** | Interactive Brokers | Market data, order execution, account management |
+
+## Quick links
+
+<CardGroup cols={2}>
+  <Card title="Setup Guide" icon="wrench" href="/setup">
+    Install TWS, configure the bridge, start trading
+  </Card>
+  <Card title="Architecture" icon="diagram-project" href="/architecture">
+    How data flows from TWS to your dashboard
+  </Card>
+  <Card title="Analytics Dashboard" icon="chart-pie" href="/frontend/analytics">
+    Your trading performance at a glance
+  </Card>
+  <Card title="MCP Tools" icon="terminal" href="/mcp/overview">
+    150+ tools for AI-assisted trading
+  </Card>
+</CardGroup>

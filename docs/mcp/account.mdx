@@ -1,0 +1,31 @@
+---
+title: "Account Tools"
+description: "Positions, P&L, portfolio analytics, and stress testing."
+---
+
+# Account Tools
+
+## Account data
+
+| Tool | Description |
+|------|-------------|
+| `get_account_summary` | Net liquidation, cash, buying power, margin |
+| `get_positions` | All current positions with quantity and avg cost |
+| `get_pnl` | Daily P&L (daily, unrealized, realized) |
+| `get_pnl_single` | Position-level P&L for one symbol |
+
+## Portfolio analytics
+
+| Tool | Description |
+|------|-------------|
+| `portfolio_exposure` | Gross/net exposure, % deployed, sector breakdown, beta-weighted, portfolio heat |
+| `stress_test` | Stress test with configurable shock % (supports beta-adjusted shocks) |
+| `size_position` | Calculate position size from entry/stop with risk/capital/margin constraints |
+
+## Streaming
+
+| Tool | Description |
+|------|-------------|
+| `subscribe_account_updates` | Real-time account value and portfolio updates |
+| `unsubscribe_account_updates` | Cancel account subscription |
+| `get_account_snapshot` | Latest values from active subscription |

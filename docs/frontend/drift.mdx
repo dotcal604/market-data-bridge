@@ -1,0 +1,19 @@
+---
+title: "Drift Monitor"
+description: "Model accuracy degradation and calibration tracking."
+---
+
+# Drift Monitor (`/drift`)
+
+Detects when models lose accuracy over time.
+
+## Model Health Cards
+Three cards (one per model) showing rolling accuracy over last 50, 20, and 10 evaluations. Color-coded: green = healthy, yellow = warning, red = drift detected.
+
+## Drift Report
+- **Rolling accuracy** — per model over configurable windows
+- **Calibration error** — by score decile (are high scores actually winning?)
+- **Regime detection** — identifies market regime shifts
+
+## Drift Alerts
+Historical alerts triggered when accuracy or calibration metrics fell below thresholds. Shows alert type, model, metric values, and timestamps.

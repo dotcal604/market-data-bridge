@@ -1,0 +1,78 @@
+---
+title: "Exit Plans"
+description: "Structured exit policies with TP ladders, trailing stops, and psychology tracking."
+---
+
+# Exit Plans
+
+Exit plans attach to bracket orders and provide structured exit policies based on Holly autopsy data.
+
+## Creating an exit plan
+
+```
+MCP tool: exit_plan_create
+Parameters:
+  correlation_id: "bracket-123"   # from place_advanced_bracket
+  symbol: "AAPL"
+  direction: "long"
+  total_shares: 100
+  entry_price: 185.00
+  hard_stop: 183.50
+  strategy: "Tailwind"            # Holly strategy name
+```
+
+The plan auto-generates:
+- **TP ladder** — scale-out targets at 1R, 2R, 3R
+- **Trailing stop** — tightens as price moves in your favor
+- **Protect trigger** — moves stop to breakeven after 1R reached
+- **Time stop** — max hold time before forced exit
+
+## Exit plan lifecycle
+
+```
+draft → active → protecting → scaling → exited
+                                      → cancelled
+```
+
+1. **Draft** — created, waiting for entry fill
+2. **Active** — entry filled, monitoring price
+3. **Protecting** — breakeven stop activated
+4. **Scaling** — partial TP fills taken
+5. **Exited** — position closed (TP, SL, or manual)
+
+Activate after fill: `exit_plan_activate` with actual entry price.
+
+## Tracking overrides
+
+When you deviate from the plan (moved stop, took early profit, froze), record it:
+
+```
+MCP tool: exit_plan_record_override
+Parameters:
+  exit_plan_id: "uuid-here"
+  field: "hard_stop"
+  old_value: "183.50"
+  new_value: "182.00"
+  reason: "tilt"          # revenge, too_early, too_late, freeze, tilt, news, technical
+```
+
+This builds a behavioral profile — the analytics page shows override frequency and which reasons cost you the most.
+
+## Closing a plan
+
+```
+MCP tool: exit_plan_close
+Parameters:
+  id: "uuid-here"
+  exit_price: 187.25
+  reason: "tp_filled"     # tp_filled, sl_filled, manual, flatten, cancelled
+```
+
+Auto-calculates R-multiple and giveback ratio.
+
+## Analytics
+
+View exit plan performance:
+- `exit_plan_stats` — avg R-multiple, giveback ratio, override frequency
+- `exit_plan_list` — all active and historical plans
+- `/analytics` — giveback distribution chart shows where profits leak

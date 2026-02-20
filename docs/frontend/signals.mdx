@@ -1,0 +1,20 @@
+---
+title: "Signals"
+description: "Auto-evaluated trade signals from the Holly pipeline."
+---
+
+# Signals (`/signals`)
+
+Signals are Holly alerts that have been scored through the 3-model ensemble.
+
+## Signal Table
+Each signal shows:
+- **Symbol** — ticker with current quote
+- **Direction** — long or short
+- **Ensemble score** — weighted average (0–100)
+- **Should trade** — go/no-go verdict based on threshold
+- **Strategy** — Holly strategy that generated the alert
+- **Timestamp**
+
+## Filtering
+Filter by symbol, direction, or date range. Only shows signals from the auto-eval pipeline — manual evaluations appear on `/evals`.
