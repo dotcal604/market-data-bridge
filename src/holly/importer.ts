@@ -14,6 +14,7 @@ import { parse } from "csv-parse/sync";
 import { randomUUID } from "crypto";
 import { bulkInsertHollyAlerts } from "../db/database.js";
 import { logger } from "../logging.js";
+import { HollyAlertRowSchema, type HollyAlertRow } from "./alert-schema.js";
 
 const log = logger.child({ module: "holly" });
 
@@ -70,7 +71,7 @@ function parseNum(v: string | undefined): number | null {
 function normalizeRow(
   raw: Record<string, string>,
   headerMap: Map<string, string>,
-): Record<string, unknown> | null {
+): HollyAlertRow | null {
   const mapped: Record<string, unknown> = {};
   const extra: Record<string, string> = {};
 
@@ -101,7 +102,7 @@ function normalizeRow(
   const last_price = parseNum(mapped.last_price?.toString());
   const segment = mapped.segment?.toString().trim() ?? null;
 
-  return {
+  const parsed = HollyAlertRowSchema.safeParse({
     alert_time,
     symbol,
     strategy,
@@ -111,7 +112,13 @@ function normalizeRow(
     last_price,
     segment,
     extra: Object.keys(extra).length > 0 ? JSON.stringify(extra) : null,
-  };
+  });
+
+  if (!parsed.success) {
+    return null;
+  }
+
+  return parsed.data;
 }
 
 export function importHollyAlerts(csvContent: string): ImportResult {
@@ -148,8 +155,7 @@ export function importHollyAlerts(csvContent: string): ImportResult {
     try {
       const row = normalizeRow(records[i], headerMap);
       if (row) {
-        row.import_batch = batch_id;
-        rows.push(row);
+        rows.push({ ...row, import_batch: batch_id });
       } else {
         errors.push(`Row ${i + 1}: missing symbol`);
       }
