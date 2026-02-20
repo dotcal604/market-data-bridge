@@ -23,11 +23,13 @@ import {
   Microscope,
   CalendarDays,
   DollarSign,
+  PieChart,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/analytics", label: "My Analytics", icon: PieChart },
   { href: "/status", label: "Status", icon: Server },
   { href: "/market", label: "Market Data", icon: TrendingUp, children: [
     { href: "/market/options", label: "Options", icon: DollarSign },
