@@ -300,6 +300,7 @@ frontend/
 - **Orchestration**: See `ORCHESTRATION.md` for GitHub Agent HQ configuration
 - **Claude instructions**: See `CLAUDE.md` for MCP-specific Claude instructions
 - **System architecture**: See `SYSTEM_CARD.md` for detailed architecture documentation
+- **File-based instructions**: See `.github/instructions/` for conditional rules (TypeScript, frontend, tests, docs)
 
 ## Environment Variables
 

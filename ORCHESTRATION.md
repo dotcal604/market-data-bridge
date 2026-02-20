@@ -1,16 +1,63 @@
 # Market Data Bridge — Agent Orchestration
 
-> 3-agent fleet managed via **GitHub Agent HQ**: Claude Code, GitHub Copilot, and OpenAI Codex.
+> 15-agent fleet managed via **GitHub Agent HQ** + external tool-specific instruction files.
 >
-> Agent HQ provides unified Mission Control across GitHub, VS Code, and CLI. Custom agent profiles live in `.github/agents/`.
+> Agent HQ provides unified Mission Control across GitHub, VS Code, and CLI. Custom agent profiles live in `.github/agents/`. File-based conditional instructions in `.github/instructions/`. See `AGENTS.md` for the full team roster, cost routing, and authority matrix.
 
 ## Agent Fleet
 
+### Core Agents (GitHub Agent HQ)
+
 | Agent | Role | Model | Interface | Reads AGENTS.md |
 |-------|------|-------|-----------|-----------------|
-| **Claude Code** | Orchestrator — cross-file wiring, architecture, backend routes, planning, code review | Claude Opus 4.6 | CLI (local) | Yes (via claude.md) |
-| **GitHub Copilot** | UI components, multi-file refactors, follows detailed issue specs | GPT-4.1 / Claude 3.5 | GitHub Issues → Draft PRs | Via issue body |
-| **OpenAI Codex** | Long-running tasks, parallel execution, complex features, backend work | GPT-5.2-Codex | chatgpt.com/codex, @codex on issues | Yes (auto-discovery) |
+| **Claude Code** | Staff Engineer / Tech Lead — execution-critical code, integration, planning, MCP tools | Claude Opus 4.6 | CLI (local) | Yes (via CLAUDE.md) |
+| **GitHub Copilot** | Mid-Level Dev — ops, tests, features following existing patterns | GPT-4.1 / Claude 3.5 | GitHub Issues → Draft PRs, 5 custom agent modes | Via `.github/agents/` |
+| **OpenAI Codex** | Junior Dev (spec executor) — single-file changes, schemas, docs | GPT-5.2-Codex | chatgpt.com/codex, @codex on issues | Yes (auto-discovery) |
+
+### Extended Fleet (External Tools)
+
+| Agent | Role | Interface | Instructions File |
+|-------|------|-----------|-------------------|
+| **Claude Desktop** | Senior Dev (pair programming) | Chat UI / Cowork | `HANDSHAKE.md` card |
+| **ChatGPT** | Senior Consultant / Architect | Chat UI | `HANDSHAKE.md` card |
+| **Google Jules** | Junior Dev (probationary) | jules.google | `HANDSHAKE.md` card |
+| **Qodo Gen** | QA Automation Engineer | IDE Extension | Reads codebase |
+| **Windsurf** | Senior Dev (IDE-native) | Windsurf IDE | `WINDSURF.md` |
+| **v0 by Vercel** | UI/UX Designer | v0.dev | Component specs |
+| **GHAS** | Security Auditor | CI/CD | Auto-configured |
+| **NotebookLM** | Internal Librarian | notebooklm.google.com | `GEMINI.md` |
+| **Google Antigravity** | Senior Dev / 2nd Staff Engineer | Antigravity IDE | `GEMINI.md` |
+| **Amazon Q** | CI/CD & Infra Engineer | IDE Extension / CLI | `AMAZON_Q.md` |
+| **Mintlify AI** | Technical Writer / Docs Owner | mintlify.com | `docs/` directory |
+
+### Instruction Files Architecture
+
+```
+.github/
+├── copilot-instructions.md          ← Always-on (all chat requests)
+├── agents/
+│   ├── backend-dev.agent.md         ← @copilot/backend-dev
+│   ├── frontend-dev.agent.md        ← @copilot/frontend-dev
+│   ├── test-writer.agent.md         ← @copilot/test-writer
+│   ├── ops-engineer.agent.md        ← @copilot/ops-engineer
+│   └── docs-writer.agent.md         ← @copilot/docs-writer
+├── instructions/
+│   ├── typescript.instructions.md   ← Applies to src/**/*.ts
+│   ├── frontend.instructions.md     ← Applies to frontend/**/*.tsx,*.ts
+│   ├── tests.instructions.md        ← Applies to **/*.test.ts
+│   └── docs.instructions.md         ← Applies to docs/**/*.mdx
+└── workflows/
+    ├── ci.yml
+    ├── api-audit.yml
+    └── agent-auto-merge.yml
+
+AGENTS.md          ← Always-on (multi-agent, read by all AI tools)
+CLAUDE.md          ← Always-on (Claude compatibility)
+GEMINI.md          ← Antigravity + NotebookLM
+WINDSURF.md        ← Windsurf IDE / Cascade
+AMAZON_Q.md        ← Amazon Q Developer
+HANDSHAKE.md       ← Agent cards for manual paste (Claude Desktop, ChatGPT, Jules, etc.)
+```
 
 ## Decision Tree
 
