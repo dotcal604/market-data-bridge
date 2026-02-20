@@ -41,6 +41,6 @@ export const ordersClient = {
   },
 
   getQuote(symbol: string) {
-    return fetchJson<QuoteResponse>(`/api/quote/${symbol}`);
+    return fetchJson<QuoteResponse>(`/api/quote/${symbol}`, { cache: "no-store" });
   },
 };
