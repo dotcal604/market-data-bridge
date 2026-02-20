@@ -1,0 +1,65 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "venus",
+  "name": "EvalEngine",
+  "logo": {
+    "light": "/docs/logo/light.svg",
+    "dark": "/docs/logo/dark.svg"
+  },
+  "favicon": "/docs/favicon.svg",
+  "colors": {
+    "primary": "#10b981",
+    "light": "#34d399",
+    "dark": "#059669"
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Guide",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": ["docs/introduction", "docs/architecture", "docs/setup"]
+          },
+          {
+            "group": "Trading Workflows",
+            "pages": ["docs/workflows/daily-routine", "docs/workflows/holly-pipeline", "docs/workflows/order-execution", "docs/workflows/exit-plans"]
+          }
+        ]
+      },
+      {
+        "tab": "Frontend",
+        "groups": [
+          {
+            "group": "Dashboard Pages",
+            "pages": ["docs/frontend/overview", "docs/frontend/analytics", "docs/frontend/evaluations", "docs/frontend/holly", "docs/frontend/edge"]
+          },
+          {
+            "group": "Account & Orders",
+            "pages": ["docs/frontend/account", "docs/frontend/orders", "docs/frontend/executions", "docs/frontend/session"]
+          },
+          {
+            "group": "Market & Research",
+            "pages": ["docs/frontend/market", "docs/frontend/screener", "docs/frontend/signals"]
+          },
+          {
+            "group": "Model Management",
+            "pages": ["docs/frontend/model-stats", "docs/frontend/drift", "docs/frontend/weights", "docs/frontend/journal"]
+          }
+        ]
+      },
+      {
+        "tab": "MCP Tools",
+        "groups": [
+          {
+            "group": "Reference",
+            "pages": ["docs/mcp/overview", "docs/mcp/market-data", "docs/mcp/orders", "docs/mcp/account", "docs/mcp/evaluations", "docs/mcp/holly", "docs/mcp/analytics", "docs/mcp/risk"]
+          }
+        ]
+      }
+    ]
+  },
+  "footerSocials": {
+    "github": "https://github.com/dotcal604/market-data-bridge"
+  }
+}
