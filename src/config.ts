@@ -1,5 +1,25 @@
 import dotenv from "dotenv";
+import { existsSync, readFileSync } from "fs";
+
 dotenv.config();
+
+// ── ClientId collision guard ────────────────────────────────────────────
+// Each MCP client sets IBKR_CLIENT_ID via its own JSON config env vars.
+// If .env also sets it, dotenv wins and ALL clients get the same base → collision.
+// Detect this at startup and warn loudly.
+try {
+  const envPath = new URL("../.env", import.meta.url);
+  if (existsSync(envPath)) {
+    const envContent = readFileSync(envPath, "utf-8");
+    if (/^IBKR_CLIENT_ID\s*=/m.test(envContent)) {
+      console.error(
+        "[CONFIG] ⚠️  WARNING: .env sets IBKR_CLIENT_ID — this overrides per-client " +
+        "config and causes clientId collisions. Remove it from .env! " +
+        "See MEMORY.md 'IBKR ClientId Map' for correct setup.",
+      );
+    }
+  }
+} catch { /* non-fatal — don't crash over a guard check */ }
 
 // IBKR config is optional — only needed when TWS/Gateway is running for account data.
 // Market data comes from Yahoo Finance and works without IBKR.
