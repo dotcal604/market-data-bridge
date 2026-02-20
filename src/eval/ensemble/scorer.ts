@@ -68,12 +68,16 @@ function scoreEnsemble(
 }
 
 /**
- * Compute ensemble score from compliant model evaluations.
- * Uses live weights from disk/memory. If regime is provided,
- * uses regime-specific weights if available.
- * @param evaluations - Model evaluations to ensemble
- * @param regime - Optional volatility regime for regime-conditioned weights
- * @returns Ensemble score and consensus metrics
+ * Compute ensemble score from compliant model evaluations using live weights.
+ *
+ * Uses weights from disk/memory. If a volatility regime is provided, it attempts
+ * to use regime-specific weights. If the weight source is non-default and has
+ * fewer than 30 samples, a confidence gate is applied to shrink the trade score
+ * to prevent overfitting to small sample sizes.
+ *
+ * @param {ModelEvaluation[]} evaluations - Array of model evaluations to be scored.
+ * @param {string} [regime] - Optional volatility regime string (e.g., "high", "low") to fetch regime-specific weights.
+ * @returns {EnsembleScore} The calculated ensemble score, including consensus metrics and any applied confidence gating.
  */
 const MIN_CALIBRATION_SAMPLES = 30;
 
@@ -94,11 +98,15 @@ export function computeEnsemble(evaluations: ModelEvaluation[], regime?: string)
 }
 
 /**
- * Compute ensemble score with explicit custom weights.
- * Used by weight simulation endpoint to re-score historical evals.
- * @param evaluations Model evaluations
- * @param weights Explicit weights to use
- * @returns Ensemble score
+ * Compute ensemble score using explicitly provided weights.
+ *
+ * This function is primarily used for simulation and "what-if" analysis to
+ * re-score historical evaluations with different weight configurations.
+ * It bypasses the live weight loading and confidence gating logic.
+ *
+ * @param {ModelEvaluation[]} evaluations - Array of model evaluations to be scored.
+ * @param {{ claude: number; gpt4o: number; gemini: number; k: number }} weights - The explicit weights to apply (Claude, GPT-4o, Gemini, and penalty factor k).
+ * @returns {EnsembleScore} The calculated ensemble score based on the provided weights.
  */
 export function computeEnsembleWithWeights(
   evaluations: ModelEvaluation[],
