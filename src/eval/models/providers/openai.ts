@@ -14,6 +14,12 @@ function getClient(): OpenAI {
   return client;
 }
 
+/**
+ * Evaluate a trade with GPT-4o (OpenAI).
+ * @param userPrompt The user prompt string
+ * @param promptHash Hash of the prompt for drift detection
+ * @returns Promise resolving to a ModelEvaluation object
+ */
 export async function evaluateWithGPT(
   userPrompt: string,
   promptHash: string,
