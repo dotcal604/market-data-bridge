@@ -1,0 +1,65 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "venus",
+  "name": "EvalEngine",
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg"
+  },
+  "favicon": "/favicon.svg",
+  "colors": {
+    "primary": "#10b981",
+    "light": "#34d399",
+    "dark": "#059669"
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Guide",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": ["introduction", "architecture", "setup"]
+          },
+          {
+            "group": "Trading Workflows",
+            "pages": ["workflows/daily-routine", "workflows/holly-pipeline", "workflows/order-execution", "workflows/exit-plans"]
+          }
+        ]
+      },
+      {
+        "tab": "Frontend",
+        "groups": [
+          {
+            "group": "Dashboard Pages",
+            "pages": ["frontend/overview", "frontend/analytics", "frontend/evaluations", "frontend/holly", "frontend/edge"]
+          },
+          {
+            "group": "Account & Orders",
+            "pages": ["frontend/account", "frontend/orders", "frontend/executions", "frontend/session"]
+          },
+          {
+            "group": "Market & Research",
+            "pages": ["frontend/market", "frontend/screener", "frontend/signals"]
+          },
+          {
+            "group": "Model Management",
+            "pages": ["frontend/model-stats", "frontend/drift", "frontend/weights", "frontend/journal"]
+          }
+        ]
+      },
+      {
+        "tab": "MCP Tools",
+        "groups": [
+          {
+            "group": "Reference",
+            "pages": ["mcp/overview", "mcp/market-data", "mcp/orders", "mcp/account", "mcp/evaluations", "mcp/holly", "mcp/analytics", "mcp/risk"]
+          }
+        ]
+      }
+    ]
+  },
+  "footerSocials": {
+    "github": "https://github.com/dotcal604/market-data-bridge"
+  }
+}
