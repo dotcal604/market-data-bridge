@@ -17,7 +17,7 @@ This file contains agent cards to copy-paste into each tool's UI. After pasting,
 | 10 | v0 | Paste component spec at v0.dev | ⏳ Pending |
 | 11 | GHAS | Auto (configured in GitHub) | ✅ Verified |
 | 12 | NotebookLM | Upload AGENTS.md as source | ⏳ Pending |
-| 13 | Antigravity | Open project in Antigravity IDE | ⏳ Pending |
+| 13 | Antigravity | Open project in Antigravity IDE | ✅ Verified (created docs-writer.agent.md, analyzed orchestration) |
 | 14 | Amazon Q | Install extension, open project | ⏳ Pending |
 | 15 | Mintlify AI | Connect repo at mintlify.com | ⏳ Pending |
 
@@ -446,7 +446,7 @@ Recommended propagation sequence (parallel where possible):
 **Wave 2 — Repo-aware (just open the project):**
 - [ ] Codex (#6) — assign acceptance test issue
 - [ ] Windsurf (#9) — open project, paste card
-- [ ] Antigravity (#13) — open project, paste card
+- [x] Antigravity (#13) — open project, paste card ✅
 - [ ] Amazon Q (#14) — install extension, paste card
 - [ ] Qodo Gen (#8) — install extension, generate tests
 

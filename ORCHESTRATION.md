@@ -64,7 +64,12 @@ tools: ["read", "edit", "search"]
 
 Invoke via `@copilot/frontend-dev` when assigning issues.
 
-See `.github/agents/` for this repo's custom profiles.
+See `.github/agents/` for this repo's custom profiles:
+- `frontend-dev.agent.md` — Next.js dashboard components
+- `backend-dev.agent.md` — Express/TypeScript backend tasks
+- `test-writer.agent.md` — Vitest unit test generation
+- `ops-engineer.agent.md` — PM2, ecosystem.config, deploy scripts
+- `docs-writer.agent.md` — Mintlify docs + repo documentation
 
 ### Setup
 
@@ -302,5 +307,7 @@ Currently not blocking builds — the `fonts.googleapis.com` warning in PRs #11-
 ### Custom Agent Profiles
 Located in `.github/agents/`. See files for specialized roles:
 - `frontend-dev.agent.md` — Next.js dashboard components
-- `test-writer.agent.md` — Vitest unit test generation
 - `backend-dev.agent.md` — Express/TypeScript backend tasks
+- `test-writer.agent.md` — Vitest unit test generation
+- `ops-engineer.agent.md` — PM2, ecosystem.config, deploy scripts
+- `docs-writer.agent.md` — Mintlify docs + repo documentation
