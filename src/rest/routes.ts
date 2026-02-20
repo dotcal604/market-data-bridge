@@ -171,6 +171,13 @@ router.get("/status", (_req, res) => {
 // GET /api/quote/:symbol — Smart quote: IBKR real-time first, Yahoo fallback
 router.get("/quote/:symbol", async (req, res) => {
   try {
+    res.set({
+      "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+      Pragma: "no-cache",
+      Expires: "0",
+      "Surrogate-Control": "no-store",
+    });
+
     const symbol = req.params.symbol;
     const symErr = validateSymbol(symbol);
     if (symErr) { res.status(400).json({ error: symErr }); return; }

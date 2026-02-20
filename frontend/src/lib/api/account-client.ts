@@ -2,8 +2,8 @@ import type { AccountSummaryResponse, PositionsResponse, FlattenConfig, FlattenR
 
 const API_BASE = "/api";
 
-async function fetchJSON<T>(url: string): Promise<T> {
-  const res = await fetch(url);
+async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(url, init);
   if (!res.ok) {
     throw new Error(`HTTP ${res.status}: ${res.statusText}`);
   }
@@ -53,7 +53,7 @@ export const accountClient = {
   },
 
   async getQuote(symbol: string): Promise<Quote> {
-    return fetchJSON<Quote>(`${API_BASE}/quote/${symbol}`);
+    return fetchJSON<Quote>(`${API_BASE}/quote/${symbol}`, { cache: "no-store" });
   },
 
   async getFlattenConfig(): Promise<FlattenConfig> {
