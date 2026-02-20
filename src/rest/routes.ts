@@ -181,6 +181,8 @@ router.get("/quote/:symbol", async (req, res) => {
     const symbol = req.params.symbol;
     const symErr = validateSymbol(symbol);
     if (symErr) { res.status(400).json({ error: symErr }); return; }
+    // Prevent stale cached responses — always fetch fresh
+    res.setHeader("Cache-Control", "no-store");
     // Try IBKR first if connected (real-time data)
     if (isConnected()) {
       try {
@@ -194,7 +196,7 @@ router.get("/quote/:symbol", async (req, res) => {
         // IBKR failed — fall through to Yahoo
       }
     }
-    // Fallback to Yahoo
+    // Fallback to Yahoo — data is 15-20 min delayed
     const quote = await getQuote(symbol);
     res.json({ ...quote, source: "yahoo" });
   } catch (e: any) {

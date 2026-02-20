@@ -77,6 +77,12 @@ export interface QuoteData {
   changePercent: number | null;
   marketCap: number | null;
   timestamp: string;
+  /** When Yahoo last received this price from the exchange (ISO string). */
+  marketTime: string | null;
+  /** True if the data is delayed (Yahoo data is typically 15–20 min delayed). */
+  delayed: boolean;
+  /** Human-readable staleness context, e.g. "Yahoo Finance (15-20 min delayed)". */
+  staleness_warning: string | null;
 }
 
 export interface BarData {
@@ -227,6 +233,9 @@ export interface ScreenerResultWithQuote extends ScreenerResult {
 
 export async function getQuote(symbol: string): Promise<QuoteData> {
   const q = await yahooCall(symbol, () => yf.quote(symbol));
+  const marketTime = q.regularMarketTime
+    ? new Date(q.regularMarketTime instanceof Date ? q.regularMarketTime : (q.regularMarketTime as number) * 1000).toISOString()
+    : null;
   return {
     symbol: q.symbol,
     bid: q.bid ?? null,
@@ -241,6 +250,9 @@ export async function getQuote(symbol: string): Promise<QuoteData> {
     changePercent: q.regularMarketChangePercent ?? null,
     marketCap: q.marketCap ?? null,
     timestamp: new Date().toISOString(),
+    marketTime,
+    delayed: true,
+    staleness_warning: "Yahoo Finance data is typically 15-20 min delayed. Connect IBKR TWS for real-time quotes.",
   };
 }
 
@@ -380,6 +392,9 @@ export async function getOptionQuote(
     changePercent: null,
     marketCap: null,
     timestamp: new Date().toISOString(),
+    marketTime: null,
+    delayed: true,
+    staleness_warning: "Yahoo Finance option data is typically 15-20 min delayed.",
   };
 }
 

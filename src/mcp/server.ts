@@ -178,7 +178,7 @@ export function createMcpServer(): McpServer {
   // --- Tool: get_quote --- Smart: IBKR real-time first, Yahoo fallback
   server.tool(
     "get_quote",
-    "Get a quote for a stock, ETF, or index. Uses IBKR real-time data when TWS is connected, falls back to Yahoo Finance.",
+    "Get a quote for a stock, ETF, or index. Uses IBKR real-time data when TWS is connected, falls back to Yahoo Finance. Response includes `source` (ibkr|yahoo), `delayed` flag, and `staleness_warning` when data is not real-time.",
     {
       symbol: z.string().describe("Ticker symbol, e.g. AAPL, MSFT, SPY"),
     },
