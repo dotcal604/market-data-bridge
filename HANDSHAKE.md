@@ -16,7 +16,7 @@ This file contains agent cards to copy-paste into each tool's UI. After pasting,
 | 9 | Windsurf | Open project in Windsurf IDE | ⏳ Pending |
 | 10 | v0 | Paste component spec at v0.dev | ⏳ Pending |
 | 11 | GHAS | Auto (configured in GitHub) | ✅ Verified |
-| 12 | NotebookLM | Upload AGENTS.md as source | ⏳ Pending |
+| 12 | NotebookLM | Upload AGENTS.md as source | ✅ Verified |
 | 13 | Antigravity | Open project in Antigravity IDE | ✅ Verified (created docs-writer.agent.md, analyzed orchestration) |
 | 14 | Mintlify AI | Connect repo at mintlify.com | ⏳ Pending |
 
@@ -407,7 +407,7 @@ Recommended propagation sequence (parallel where possible):
 - [ ] v0 (#10) — paste spec at v0.dev
 
 **Wave 4 — Upload/Connect:**
-- [ ] NotebookLM (#12) — upload AGENTS.md + CLAUDE.md
+- [x] NotebookLM (#12) — upload AGENTS.md + CLAUDE.md ✅
 - [ ] Mintlify (#14) — connect repo at mintlify.com/start
 
 **Once >80% handshakes pass (11/14), coordination is proven viable.**

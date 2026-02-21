@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Agent Roster & Conventions
+    url: https://github.com/dotcal604/market-data-bridge/blob/main/AGENTS.md
+    about: Read before creating agent tasks
+  - name: Orchestration Guide
+    url: https://github.com/dotcal604/market-data-bridge/blob/main/ORCHESTRATION.md
+    about: Issue templates, routing, review workflow

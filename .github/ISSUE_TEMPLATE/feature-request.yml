@@ -1,0 +1,61 @@
+name: "Feature Request"
+description: "Propose a new feature or enhancement"
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / Motivation
+      description: "What problem does this solve? Why is it needed?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: "How should this work? Include file paths if known."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: "Other approaches you thought about"
+    validations:
+      required: false
+
+  - type: dropdown
+    id: subsystem
+    attributes:
+      label: Subsystem
+      options:
+        - IBKR / Orders
+        - Eval Engine
+        - Dashboard (Frontend)
+        - REST API
+        - MCP Tools
+        - Risk Management
+        - Holly AI
+        - Cloud Layer
+        - Operations
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: suggested-agent
+    attributes:
+      label: Suggested Agent
+      description: "Which agent should handle this? (Human decides final assignment)"
+      options:
+        - "Not sure — let Human decide"
+        - "Claude Code — complex, multi-system"
+        - "Copilot — pattern-following feature"
+        - "Codex — isolated, clear spec"
+        - "Antigravity — multi-file feature"
+        - "Windsurf — module-level refactor"
+    validations:
+      required: false

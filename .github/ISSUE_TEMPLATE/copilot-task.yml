@@ -1,0 +1,109 @@
+name: "Copilot Agent Task"
+description: "Structured spec for GitHub Copilot agent assignment"
+title: "[Copilot] "
+labels: ["agent-task", "copilot"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Copilot Agent Task
+        Fill in the structured spec below. Copilot produces the best results with **exact file paths, props interfaces, and acceptance criteria**.
+        See [ORCHESTRATION.md](../ORCHESTRATION.md) for the full template guide.
+
+  - type: input
+    id: component-path
+    attributes:
+      label: Component / File Path
+      description: "Exact path of the file to create or modify"
+      placeholder: "frontend/src/components/analytics/score-scatter.tsx"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: "One-sentence description of what this component or module does"
+      placeholder: "A scatter chart that plots eval scores from all 3 models..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: props-interface
+    attributes:
+      label: Props / Interface
+      description: "Exact TypeScript interface — Copilot will implement this verbatim"
+      render: tsx
+      placeholder: |
+        interface ScoreScatterProps {
+          evaluations: Array<{
+            id: string;
+            symbol: string;
+            scores: { claude: number; gpt: number; gemini: number };
+          }>;
+        }
+    validations:
+      required: false
+
+  - type: textarea
+    id: api-endpoints
+    attributes:
+      label: API Endpoints Used
+      description: "Which REST endpoints this component consumes"
+      placeholder: |
+        - `GET /api/eval/history?limit=100` — returns recent evaluations
+        - `POST /api/eval/weights/simulate` — re-scores with custom weights
+    validations:
+      required: false
+
+  - type: textarea
+    id: requirements
+    attributes:
+      label: Requirements
+      description: "UI library, behavior, styling, specific conventions"
+      placeholder: |
+        - Use Recharts ScatterChart
+        - Dark theme: transparent bg, text-muted-foreground for axis labels
+        - "use client" directive, named export
+        - Wrap in Card from @/components/ui/card
+    validations:
+      required: true
+
+  - type: textarea
+    id: files
+    attributes:
+      label: Files to Create / Modify
+      description: "List all files this task touches"
+      placeholder: |
+        - **Create**: frontend/src/components/analytics/score-scatter.tsx
+        - **Modify**: frontend/src/app/evals/page.tsx — mount the component
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance Criteria
+      description: "Checklist of testable outcomes"
+      placeholder: |
+        - [ ] Component renders with sample data
+        - [ ] Dark theme compatible (no white backgrounds)
+        - [ ] TypeScript compiles: `cd frontend && npx tsc --noEmit`
+        - [ ] No console.log in committed code
+    validations:
+      required: true
+
+  - type: dropdown
+    id: agent-profile
+    attributes:
+      label: Copilot Agent Profile
+      description: "Which custom agent profile to use"
+      options:
+        - "@copilot (default)"
+        - "@copilot/frontend-dev"
+        - "@copilot/backend-dev"
+        - "@copilot/test-writer"
+        - "@copilot/ops-engineer"
+        - "@copilot/docs-writer"
+    validations:
+      required: false

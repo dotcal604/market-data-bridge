@@ -1,0 +1,74 @@
+name: "Codex Agent Task"
+description: "Task spec for OpenAI Codex async execution"
+title: "[Codex] "
+labels: ["agent-task", "codex"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Codex Agent Task
+        Codex runs in cloud sandboxes at chatgpt.com/codex. It reads AGENTS.md automatically.
+        Best for: long-running tasks, single-file changes, schemas, docs, JSDoc.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Task Description
+      description: "What needs to be built or changed"
+    validations:
+      required: true
+
+  - type: textarea
+    id: files
+    attributes:
+      label: Files Involved
+      description: "List files to create or modify with what to change in each"
+      placeholder: |
+        - `src/eval/features/new-feature.ts` — create new feature module
+        - `src/eval/features/compute.ts` — wire new feature into pipeline
+    validations:
+      required: true
+
+  - type: textarea
+    id: requirements
+    attributes:
+      label: Requirements
+      description: "Specific behavior, edge cases, error handling, conventions"
+      placeholder: |
+        - Named export, Zod schema for inputs
+        - Handle division by zero gracefully
+        - Read AGENTS.md for project conventions
+        - Two package.json files: root (backend) + frontend/
+    validations:
+      required: true
+
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification Commands
+      description: "How to verify the work is correct"
+      value: |
+        ```bash
+        # Backend
+        npx tsc --noEmit
+
+        # Frontend (if applicable)
+        cd frontend && npx tsc --noEmit
+
+        # Tests
+        npm test
+        ```
+    validations:
+      required: false
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance Criteria
+      description: "Checklist of testable outcomes"
+      placeholder: |
+        - [ ] TypeScript compiles clean
+        - [ ] No console.log — use Pino logger for backend
+        - [ ] Tests pass
+    validations:
+      required: true
