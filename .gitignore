@@ -20,7 +20,8 @@ coverage/
 .vitest/
 
 # IDE/Editor/Agent configs
-.claude/
+.claude/*
+!.claude/memory/
 .grok/
 .mcp.json
 

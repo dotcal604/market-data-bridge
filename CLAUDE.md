@@ -128,6 +128,25 @@ Focus: earnings movers, post-market gap %, after-hours volume vs average, confer
 4. **Liquidity & Risk Warnings** — Flag: spread >0.5%, relative volume <1.0, illiquid small caps, elevated volatility
 5. **Trade Setup Analysis (Only If Requested)** — Entry trigger, invalidation level, targets, risk-to-reward, liquidity considerations. State: "Setups are for informational purposes only."
 
+## CROSS-SESSION MEMORY (MANDATORY)
+
+Shared memory files live in `.claude/memory/` (git-tracked, syncs across machines):
+- `MEMORY.md` — Project overview, architecture decisions, current state
+- `patterns.md` — Code conventions, calculation definitions, testing patterns
+- `session-log.md` — Append-only log of what happened each session
+
+**On session start:** Read `.claude/memory/` to pick up context from previous sessions (any machine).
+**On session end (when user says goodbye, or major milestone):** Append a summary to `session-log.md` with format:
+```
+## YYYY-MM-DD HH:MM — [machine if known] — one-line summary
+
+- Bullet points of what was done
+- Key decisions made
+- Anything the next session should know
+```
+
+Update `MEMORY.md` if project state changed (build status, test count, new subsystems, architecture decisions).
+
 ## DEFAULT BEHAVIOR
 
 Always use session-appropriate logic unless user overrides.
