@@ -6,7 +6,7 @@
 |---|------|-------|-----------|---------|-------|
 | 1 | **Engineering Manager** | Human (dotcal604) | — | — | All — priorities, approvals, risk decisions |
 | 2 | **Staff Engineer / Tech Lead** | Claude Code | Expensive (Max 20x) | Terminal CLI | Execution-critical code, integration, planning, MCP tools |
-| 3 | **Senior Dev (pair programming)** | Claude Desktop | Included in Max | Chat UI / Cowork | Reviews, trade-off discussions, brainstorming |
+| 3 | **Senior Dev (pair programming)** | Claude Code (Pair) | Included in Max | Cloud session | Reviews, trade-off discussions, brainstorming |
 | 4 | **Senior Consultant / Architect** | ChatGPT | Included in Pro $200 | Chat UI | Architecture, strategy, eval engine design |
 | 5 | **Mid-Level Dev** | GitHub Copilot | Flat $39/mo | IDE Extension / GitHub issue assign | Ops, tests, features following existing patterns |
 | 6 | **Junior Dev (spec executor)** | OpenAI Codex | Included in Pro $200 | Codex UI / `@codex` | Single-file changes, schemas, docs, JSDoc |
@@ -85,7 +85,7 @@ Each agent — and the human — should develop deep expertise:
 |-------|---------------|-----------------|
 | **Human (dotcal604)** | **Practitioner / orchestrator** | **Agent delegation, prompt engineering, issue writing, PR review, MCP tool vocabulary, reading agent output critically, knowing when to override** |
 | Claude Code | Full-stack + MCP + IBKR | All 150+ MCP tools, TWS API, pino, better-sqlite3 |
-| Claude Desktop | Pair review + strategy | Architecture trade-offs, code review, brainstorming |
+| Claude Code (Pair) | Pair review + strategy | Architecture trade-offs, code review, codebase exploration |
 | Antigravity | Multi-file TS features | Recharts, TanStack, Zustand, Next.js App Router |
 | ChatGPT | Architecture + eval engine | Ensemble scorer, feature engine, model providers |
 | Copilot | Patterns + ops | ecosystem.config, pm2, Express middleware, test utils |
@@ -132,7 +132,7 @@ Tier 2 — Delegated (Claude Code reviews PR before human merge)
 
 Tier 3 — Collaborative (human actively involved)
 ├── Claude Code: complex multi-system work, architecture
-├── Claude Desktop: pair programming, strategy sessions
+├── Claude Code (Pair): pair programming, strategy sessions
 ├── Antigravity: multi-file features, deep context work
 └── ChatGPT: architecture review, second opinions
 
@@ -230,7 +230,7 @@ For each agent, a structured "job description" card. The agent's response (or it
 | Agent | How to propagate JD | How to get handshake |
 |-------|--------------------|-----------------------|
 | Claude Code | Already reads AGENTS.md — self-aware | ✅ Already verified |
-| Claude Desktop | Paste agent card in Cowork session | Ask it to summarize its role + constraints |
+| Claude Code (Pair) | Start cloud session, paste agent card | Ask it to summarize its role + constraints |
 | ChatGPT | Paste in chat or custom GPT instructions | Ask it to critique its own card |
 | Copilot | `.github/agents/copilot.md` (already exists) | Assign test issue, verify PR quality |
 | Codex | AGENTS.md (reads at chatgpt.com/codex) | Assign test task, verify output |

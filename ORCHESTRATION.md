@@ -18,7 +18,7 @@
 
 | Agent | Role | Interface | Instructions File |
 |-------|------|-----------|-------------------|
-| **Claude Desktop** | Senior Dev (pair programming) | Chat UI / Cowork | `HANDSHAKE.md` card |
+| **Claude Code (Pair)** | Senior Dev (pair programming) | Cloud session | `HANDSHAKE.md` card |
 | **ChatGPT** | Senior Consultant / Architect | Chat UI | `HANDSHAKE.md` card |
 | **Google Jules** | Junior Dev (probationary) | jules.google | `HANDSHAKE.md` card |
 | **Qodo Gen** | QA Automation Engineer | IDE Extension | Reads codebase |
@@ -54,7 +54,7 @@ AGENTS.md          ← Always-on (multi-agent, read by all AI tools)
 CLAUDE.md          ← Always-on (Claude compatibility)
 GEMINI.md          ← Antigravity + NotebookLM
 WINDSURF.md        ← Windsurf IDE / Cascade
-HANDSHAKE.md       ← Agent cards for manual paste (Claude Desktop, ChatGPT, Jules, etc.)
+HANDSHAKE.md       ← Agent cards for manual paste (Claude Code Pair, ChatGPT, Jules, etc.)
 ```
 
 ## Decision Tree
