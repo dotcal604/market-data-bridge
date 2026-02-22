@@ -7,3 +7,4 @@ scipy>=1.12,<2
 matplotlib>=3.8,<4
 seaborn>=0.13,<1
 scikit-learn>=1.4,<2
+TA-Lib>=0.4.32

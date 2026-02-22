@@ -1,5 +1,6 @@
 import { EventName, ErrorCode, Contract, isNonFatalError } from "@stoqey/ib";
 import { getIB, getNextReqId, isConnected, onReconnect } from "./connection.js";
+import { feedBar as feedIndicatorBar } from "../indicators/engine.js";
 import { logger } from "../logging.js";
 import { randomUUID } from "node:crypto";
 
@@ -160,6 +161,8 @@ export function subscribeRealTimeBars(params: {
     if (state.bars.length > BAR_BUFFER_SIZE) {
       state.bars.splice(0, state.bars.length - BAR_BUFFER_SIZE);
     }
+    // Feed into streaming indicator engine
+    feedIndicatorBar(state.symbol, bar);
   };
 
   const onError = (err: Error, code: ErrorCode, rId: number) => {
@@ -498,6 +501,8 @@ export function resubscribeAll(): void {
       if (state.bars.length > BAR_BUFFER_SIZE) {
         state.bars.splice(0, state.bars.length - BAR_BUFFER_SIZE);
       }
+      // Feed into streaming indicator engine (continues after reconnect)
+      feedIndicatorBar(state.symbol, bar);
     };
     const onError = (err: Error, code: ErrorCode, rId: number) => {
       if (rId !== newReqId) return;

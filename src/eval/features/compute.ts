@@ -75,7 +75,7 @@ export async function computeFeatures(
 
   const volatility_regime = classifyVolatilityRegime(atr_pct);
   const liquidity_bucket = classifyLiquidity(dailyBars, last);
-
+  
   const tickData = computeTickVelocity();
   const tick_velocity = tickData?.velocity ?? null;
   const tick_acceleration = tickData?.acceleration ?? null;
