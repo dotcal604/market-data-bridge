@@ -1,0 +1,37 @@
+name: CI — Build Verification
+
+on:
+  pull_request:
+    branches: [main]
+
+# Complements ci.yml (type-check + tests) by verifying actual build artifacts.
+# ci.yml: tsc --noEmit + vitest (fast correctness gate)
+# ci-build.yml: npm run build + next build + vitest (confirms the build + tests pass together)
+
+jobs:
+  build:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: npm
+
+      - name: Install backend dependencies
+        run: npm install
+
+      - name: Install frontend dependencies
+        run: cd frontend && npm install
+
+      - name: Backend build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+      - name: Frontend build
+        run: cd frontend && npm run build
