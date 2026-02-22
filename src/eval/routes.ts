@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { z } from "zod";
 import { randomUUID } from "crypto";
 import { computeFeatures } from "./features/compute.js";
 import { stripMetadata } from "./features/types.js";
@@ -37,8 +38,15 @@ import { importTraderSyncCSV } from "../tradersync/importer.js";
 import { computeDriftReport } from "./drift.js";
 import { extractStructuredReasoning } from "./reasoning/extractor.js";
 import { logger } from "../logging.js";
+import { computeEdgeMetrics } from "./features/edge-metrics.js";
 
 export const evalRouter = Router();
+
+
+const EdgeMetricsRequestSchema = z.object({
+  outcomes: z.array(z.number().finite()),
+  alpha: z.number().gt(0).lt(1).optional(),
+});
 
 
 function buildReasoningResponse(evalId: string): { evaluation_id: string; models: Record<string, unknown> } {
@@ -641,6 +649,33 @@ evalRouter.get("/outcomes", (req, res) => {
     logger.error({ err: e }, "[Eval] outcomes failed");
     res.status(500).json({ error: e.message });
   }
+});
+
+// POST /edge-metrics — compute edge metrics from R-multiple outcomes
+evalRouter.post("/edge-metrics", (req, res) => {
+  const parsed = EdgeMetricsRequestSchema.safeParse(req.body);
+
+  if (!parsed.success) {
+    res.status(400).json({
+      error: "Invalid edge metrics request",
+      details: parsed.error.issues,
+    });
+    return;
+  }
+
+  const { outcomes, alpha } = parsed.data;
+  const metrics = computeEdgeMetrics(outcomes, alpha);
+
+  res.json({
+    outcomes_count: outcomes.length,
+    alpha: alpha ?? 0.05,
+    metrics: {
+      recovery_factor: metrics.recoveryFactor,
+      cvar: metrics.cvar,
+      skewness: metrics.skewness,
+      ulcer_index: metrics.ulcerIndex,
+    },
+  });
 });
 
 // ── Drift Detection ──────────────────────────────────────────────────────
