@@ -32,6 +32,11 @@ import {
   getScannerParameters, listSubscriptions,
 } from "../ibkr/subscriptions.js";
 import {
+  getSnapshot as getIndicatorSnapshot,
+  getAllSnapshots as getAllIndicatorSnapshots,
+  getTrackedSymbols as getIndicatorTrackedSymbols,
+} from "../indicators/engine.js";
+import {
   calculateImpliedVolatility,
   calculateOptionPrice,
   reqAutoOpenOrders,
@@ -663,6 +668,41 @@ export function createMcpServer(): McpServer {
     async () => {
       const subs = listSubscriptions();
       return { content: [{ type: "text", text: JSON.stringify({ count: subs.length, subscriptions: subs }, null, 2) }] };
+    }
+  );
+
+  // =====================================================================
+  // INDICATOR SNAPSHOTS (streaming feature snapshots from indicator engine)
+  // =====================================================================
+
+  server.tool(
+    "get_indicators",
+    "Get the streaming indicator snapshot for a symbol (EMA, RSI, MACD, BB, ATR, VWAP, volume, flags). Requires an active real-time bar subscription for the symbol.",
+    { symbol: z.string().describe("Ticker symbol") },
+    async ({ symbol }) => {
+      const snap = getIndicatorSnapshot(symbol);
+      if (!snap) return { content: [{ type: "text", text: JSON.stringify({ error: `No indicator data for ${symbol.toUpperCase()}. Subscribe to real-time bars first.` }) }] };
+      return { content: [{ type: "text", text: JSON.stringify(snap, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    "get_all_indicators",
+    "Get indicator snapshots for all symbols with active real-time bar subscriptions.",
+    {},
+    async () => {
+      const snapshots = getAllIndicatorSnapshots();
+      return { content: [{ type: "text", text: JSON.stringify({ count: snapshots.length, snapshots }, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    "get_tracked_symbols",
+    "List symbols currently being tracked by the streaming indicator engine.",
+    {},
+    async () => {
+      const symbols = getIndicatorTrackedSymbols();
+      return { content: [{ type: "text", text: JSON.stringify({ count: symbols.length, symbols }) }] };
     }
   );
 

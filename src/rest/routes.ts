@@ -31,6 +31,10 @@ import {
   getScannerParameters, listSubscriptions,
 } from "../ibkr/subscriptions.js";
 import {
+  getSnapshot as getIndicatorSnapshot,
+  getAllSnapshots as getAllIndicatorSnapshots,
+} from "../indicators/engine.js";
+import {
   calculateImpliedVolatility,
   calculateOptionPrice,
   reqAutoOpenOrders,
@@ -184,7 +188,9 @@ router.get("/quote/:symbol", async (req, res) => {
     // Prevent stale cached responses — always fetch fresh
     res.setHeader("Cache-Control", "no-store");
     // Try IBKR first if connected (real-time data)
+    let ibkrAttempted = false;
     if (isConnected()) {
+      ibkrAttempted = true;
       try {
         const ibkrQuote = await getIBKRQuote({ symbol });
         // If we got meaningful data (at least a last/bid/ask), return it
@@ -198,7 +204,11 @@ router.get("/quote/:symbol", async (req, res) => {
     }
     // Fallback to Yahoo — data is 15-20 min delayed
     const quote = await getQuote(symbol);
-    res.json({ ...quote, source: "yahoo" });
+    const fallbackResponse: Record<string, unknown> = { ...quote, source: "yahoo" };
+    if (ibkrAttempted) {
+      fallbackResponse.warning = "IBKR connected but unavailable; using Yahoo Finance (delayed data)";
+    }
+    res.json(fallbackResponse);
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }
@@ -1571,4 +1581,19 @@ router.get("/subscriptions/scanner-parameters", async (_req, res) => {
 router.get("/subscriptions", (_req, res) => {
   const subs = listSubscriptions();
   res.json({ count: subs.length, subscriptions: subs });
+});
+
+// ── Indicator Snapshots ──────────────────────────────────────────────────────
+
+// GET /api/indicators/:symbol — Get feature snapshot for a symbol
+router.get("/indicators/:symbol", (req, res) => {
+  const snap = getIndicatorSnapshot(req.params.symbol);
+  if (!snap) { res.status(404).json({ error: `No indicator data for ${req.params.symbol.toUpperCase()}` }); return; }
+  res.json(snap);
+});
+
+// GET /api/indicators — Get all indicator snapshots
+router.get("/indicators", (_req, res) => {
+  const snapshots = getAllIndicatorSnapshots();
+  res.json({ count: snapshots.length, snapshots });
 });

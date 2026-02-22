@@ -21,6 +21,10 @@ const logWs = logger.child({ subsystem: "ws" });
 // Module-level broadcast reference (set by initWebSocket, callable externally)
 let _broadcast: ((channel: string, data: unknown) => void) | null = null;
 
+// Message sequence counter for ordering guarantee
+let messageSequence = 0;
+const getSequenceId = (): number => ++messageSequence;
+
 /**
  * Broadcast data to all authenticated WebSocket clients subscribed to a channel.
  * No-op if WebSocket server not initialized yet.
@@ -28,10 +32,30 @@ let _broadcast: ((channel: string, data: unknown) => void) | null = null;
 export function wsBroadcast(channel: string, data: unknown): void {
   if (_broadcast) _broadcast(channel, data);
 }
-const HEARTBEAT_INTERVAL_MS = 30_000;
-const VALID_CHANNELS = new Set(["positions", "orders", "account", "executions", "signals", "status", "inbox", "incidents", "eval", "holly"]);
 
-type ChannelName = "positions" | "orders" | "account" | "executions" | "signals" | "status" | "inbox" | "incidents" | "eval" | "holly";
+/**
+ * Broadcast with explicit sequence ID (used internally for ordered messages).
+ */
+export function wsBroadcastWithSequence(channel: string, data: unknown, sequenceId: number): void {
+  if (!_broadcast) return;
+  const dataWithSeq = typeof data === "object" && data !== null
+    ? { ...(data as Record<string, unknown>), sequence_id: sequenceId }
+    : { data, sequence_id: sequenceId };
+  _broadcast(channel, dataWithSeq);
+}
+
+/**
+ * Get next sequence ID for guaranteed message ordering.
+ * Used by eval, journal, and order emitters.
+ */
+export function getNextSequenceId(): number {
+  return getSequenceId();
+}
+
+const HEARTBEAT_INTERVAL_MS = 30_000;
+const VALID_CHANNELS = new Set(["positions", "orders", "account", "executions", "signals", "status", "inbox", "incidents", "eval", "holly", "eval_created", "journal_posted", "order_filled"]);
+
+type ChannelName = "positions" | "orders" | "account" | "executions" | "signals" | "status" | "inbox" | "incidents" | "eval" | "holly" | "eval_created" | "journal_posted" | "order_filled";
 
 interface AuthMessage { type: "auth"; apiKey: string }
 interface SubscribeMessage { type: "subscribe"; channel: string }

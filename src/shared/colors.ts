@@ -1,59 +1,68 @@
 /**
- * Shared color utilities for frontend and CLI tools.
- * Returns semantic color names that can be mapped to Tailwind classes (frontend) or ANSI codes (CLI).
+ * Shared color utilities for trade scores and metrics
+ * Used by both frontend and CLI tools
  */
 
-export type ColorName = 'emerald' | 'green' | 'yellow' | 'orange' | 'red' | 'neutral' | 'muted';
-
-/** Map a 0-10 trade score to a semantic color */
-export function getScoreColorName(score: number): ColorName {
-  if (score >= 8) return 'emerald';
-  if (score >= 6) return 'green';
-  if (score >= 4) return 'yellow';
-  if (score >= 2) return 'orange';
-  return 'red';
+/** Map a 0-10 trade score to a CSS class for badges/text */
+export function scoreColor(score: number): string {
+  if (score >= 8) return "text-emerald-400";
+  if (score >= 6) return "text-green-400";
+  if (score >= 4) return "text-yellow-400";
+  if (score >= 2) return "text-orange-400";
+  return "text-red-400";
 }
 
-/** Map confidence (0-1) to a semantic color */
-export function getConfidenceColorName(confidence: number): ColorName {
-  if (confidence >= 0.8) return 'emerald';
-  if (confidence >= 0.6) return 'green';
-  if (confidence >= 0.4) return 'yellow';
-  return 'red';
+export function scoreBg(score: number): string {
+  if (score >= 8) return "bg-emerald-400/15 text-emerald-400 border-emerald-400/30";
+  if (score >= 6) return "bg-green-400/15 text-green-400 border-green-400/30";
+  if (score >= 4) return "bg-yellow-400/15 text-yellow-400 border-yellow-400/30";
+  if (score >= 2) return "bg-orange-400/15 text-orange-400 border-orange-400/30";
+  return "bg-red-400/15 text-red-400 border-red-400/30";
 }
 
-/** Map R-multiple to a semantic color */
-export function getRMultipleColorName(r: number | null): ColorName {
-  if (r == null) return 'muted';
-  if (r >= 2) return 'emerald';
-  if (r >= 1) return 'green';
-  if (r >= 0) return 'yellow';
-  if (r >= -1) return 'orange';
-  return 'red';
+export function confidenceColor(confidence: number): string {
+  if (confidence >= 0.8) return "text-emerald-400";
+  if (confidence >= 0.6) return "text-green-400";
+  if (confidence >= 0.4) return "text-yellow-400";
+  return "text-red-400";
 }
 
-/** Map direction to a semantic color */
-export function getDirectionColorName(direction: string): ColorName {
-  return direction === 'long' ? 'emerald' : 'red';
+export function rMultipleColor(r: number | null): string {
+  if (r == null) return "text-muted-foreground";
+  if (r >= 2) return "text-emerald-400";
+  if (r >= 1) return "text-green-400";
+  if (r >= 0) return "text-yellow-400";
+  if (r >= -1) return "text-orange-400";
+  return "text-red-400";
 }
 
-/** Map P&L value to a semantic color */
-export function getPnlColorName(value: number | null): ColorName {
-  if (value == null) return 'muted';
-  if (value > 0) return 'emerald';
-  if (value < 0) return 'red';
-  return 'muted';
+export function directionColor(direction: string): string {
+  return direction === "long" ? "text-emerald-400" : "text-red-400";
 }
 
-/** Model ID to hex color */
-export const MODEL_COLORS: Record<string, string> = {
+export function directionBg(direction: string): string {
+  return direction === "long"
+    ? "bg-emerald-400/15 text-emerald-400 border-emerald-400/30"
+    : "bg-red-400/15 text-red-400 border-red-400/30";
+}
+
+/** Model ID to display color */
+const MODEL_COLORS: Record<string, string> = {
   "gpt-4o": "#10b981",
   "claude-sonnet": "#8b5cf6",
   "gemini-flash": "#f59e0b",
 };
 
-export function getModelColorHex(modelId: string): string {
+export function modelColor(modelId: string): string {
   return MODEL_COLORS[modelId] ?? "#6b7280";
+}
+
+/** P&L value color — positive = emerald, negative = red */
+export function pnlColor(value: number | null): string {
+  if (value == null) return "text-muted-foreground";
+  if (value > 0) return "text-emerald-400";
+  if (value < 0) return "text-red-400";
+  return "text-muted-foreground";
 }
 
 /** Recharts-friendly model colors */
