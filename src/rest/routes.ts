@@ -184,7 +184,9 @@ router.get("/quote/:symbol", async (req, res) => {
     // Prevent stale cached responses — always fetch fresh
     res.setHeader("Cache-Control", "no-store");
     // Try IBKR first if connected (real-time data)
+    let ibkrAttempted = false;
     if (isConnected()) {
+      ibkrAttempted = true;
       try {
         const ibkrQuote = await getIBKRQuote({ symbol });
         // If we got meaningful data (at least a last/bid/ask), return it
@@ -198,7 +200,11 @@ router.get("/quote/:symbol", async (req, res) => {
     }
     // Fallback to Yahoo — data is 15-20 min delayed
     const quote = await getQuote(symbol);
-    res.json({ ...quote, source: "yahoo" });
+    const fallbackResponse: Record<string, unknown> = { ...quote, source: "yahoo" };
+    if (ibkrAttempted) {
+      fallbackResponse.warning = "IBKR connected but unavailable; using Yahoo Finance (delayed data)";
+    }
+    res.json(fallbackResponse);
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }
