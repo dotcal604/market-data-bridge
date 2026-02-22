@@ -3,10 +3,14 @@ import type { EnsembleScore, EnsembleWeights } from "./types.js";
 import { getWeights } from "./weights.js";
 
 /**
- * Core ensemble scoring logic. Calculates weighted scores, confidence, and disagreement penalty.
+ * Core ensemble scoring logic.
+ *
+ * This internal function calculates the weighted score, confidence, and disagreement penalty
+ * given a specific set of weights. It is used by both `computeEnsemble` (which loads live weights)
+ * and `computeEnsembleWithWeights` (which accepts simulation weights).
  *
  * @param {ModelEvaluation[]} evaluations - Array of compliant model evaluations.
- * @param {{ claude: number; gpt4o: number; gemini: number; k: number }} weights - The weights to apply.
+ * @param {{ claude: number; gpt4o: number; gemini: number; k: number }} weights - The weights to apply (Claude, GPT-4o, Gemini, and penalty factor k).
  * @returns {EnsembleScore} Computed ensemble score metrics.
  */
 function scoreEnsemble(
