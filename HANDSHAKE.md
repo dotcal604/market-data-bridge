@@ -10,7 +10,7 @@ This file contains agent cards to copy-paste into each tool's UI. After pasting,
 | 3 | Claude Code (Pair) | Cloud session with prompt below | ⏳ Pending |
 | 4 | ChatGPT | Paste below in chat | ⏳ Pending |
 | 5 | Copilot | `.github/agents/*.agent.md` (updated) | ✅ Verified (created copilot-instructions.md, 4 instruction files, updated ORCHESTRATION.md) |
-| 6 | Codex | Auto (reads AGENTS.md from repo) | ⏳ Pending |
+| 6 | Codex | Native: assign @codex on issue | ⏳ Pending |
 | 7 | Jules | Paste below at jules.google | ⏳ Pending |
 | 8 | Qodo Gen | IDE extension (reads codebase) | ⏳ Pending |
 | 9 | Windsurf | Open project in Windsurf IDE | ⏳ Pending |

@@ -330,17 +330,51 @@ Tracking issue for all {Phase Name} work.
 
 ## Labels
 
+**Agent routing** (who works on it):
 | Label | Purpose |
 |-------|---------|
+| `agent:claude` | Assigned to Claude Code (#2) |
+| `agent:claude-pair` | Review by Claude Code Pair (#3) |
+| `agent:copilot` | Assigned to GitHub Copilot (#5) |
+| `agent:codex` | Assigned to OpenAI Codex (#6) |
+| `agent:jules` | Assigned to Google Jules (#7) |
+| `agent:windsurf` | Assigned to Windsurf (#9) |
+| `agent:v0` | Assigned to v0 (#10) |
+| `agent:antigravity` | Assigned to Google Antigravity (#13) |
+
+**Scope** (what part of the system):
+| Label | Purpose |
+|-------|---------|
+| `scope:frontend` | Next.js dashboard |
+| `scope:backend` | Express/MCP server |
+| `scope:eval` | Eval engine (ensemble, features) |
+| `scope:ibkr` | IBKR integration (orders, connection) |
+| `scope:docs` | Documentation |
+| `scope:ops` | Operations, deployment, CI |
+
+**Priority & workflow**:
+| Label | Purpose |
+|-------|---------|
+| `priority:high` / `priority:medium` / `priority:low` | Task priority |
 | `agent-task` | Any agent-delegated work |
+| `acceptance-test` | Agent handshake verification |
 | `phase-0` through `phase-8` | Roadmap phase tracking |
-| `copilot` | Assigned to GitHub Copilot |
-| `codex` | Assigned to OpenAI Codex |
-| `claude-code` | Done by Claude Code directly |
-| `api-migration` | API dependency migration tasks |
 | `api-audit` | Automated API audit findings |
 | `blocked` | Waiting on dependency |
 | `needs-review` | PR ready for review |
+
+### Native Agent Assignment (Agent HQ)
+
+For agents with GitHub integration, use the **Assignees dropdown** on issues:
+
+1. **Create issue** using a template (Copilot Task, Codex Task, Bug Report, Feature Request)
+2. **Add labels**: `agent:{name}` + `scope:{area}` + `priority:{level}`
+3. **Assign agent** via Assignees: `@copilot`, `@codex`, or `@claude`
+4. Agent auto-starts, works in a branch, opens a draft PR
+5. **Review** via PR comments: `@copilot`, `@codex`, or `@claude` respond to feedback
+6. **Human merges** after approval
+
+For non-GitHub agents (Jules, Windsurf, v0, NotebookLM, ChatGPT), use labels for tracking but assign work through their native interfaces. See `HANDSHAKE.md` for per-agent instructions.
 
 ## Backend Additions (Claude Code)
 
