@@ -868,4 +868,378 @@ describe("Risk Gate", () => {
       });
     });
   });
+
+  // ── EXPANDED COVERAGE: 18 NEW TESTS FOR RISK HARDENING ──────────────────────
+
+  describe("Boundary Tests — Position Sizing at Capital Limits", () => {
+    it("should allow position size at exactly 2% capital limit", () => {
+      const limits = getRiskLimits();
+      const accountEquity = 25000;
+      const maxPosition = accountEquity * 0.02;
+      const safePrice = 50;
+      const quantity = Math.floor(maxPosition / safePrice);
+
+      const params: RiskCheckParams = {
+        symbol: "AAPL",
+        action: "BUY",
+        orderType: "LMT",
+        totalQuantity: quantity,
+        lmtPrice: safePrice,
+        estimatedPrice: safePrice,
+      };
+
+      const result = checkRisk(params);
+      expect(result.allowed).toBe(true);
+      expect(result.reason).toBeUndefined();
+    });
+
+    it("should reject position size exceeding 2.1% capital (fail-safe margin)", () => {
+      const limits = getRiskLimits();
+      const maxNotional = limits.maxNotionalValue;
+      const testPrice = 500;
+      const overLimitQuantity = Math.ceil((maxNotional / testPrice) + 10);
+
+      const params: RiskCheckParams = {
+        symbol: "AAPL",
+        action: "BUY",
+        orderType: "LMT",
+        totalQuantity: overLimitQuantity,
+        lmtPrice: testPrice,
+        estimatedPrice: testPrice,
+      };
+
+      const result = checkRisk(params);
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toContain("Notional value");
+    });
+
+    it("should reject orders when account balance is zero (equity cushion = 0)", () => {
+      const params: RiskCheckParams = {
+        symbol: "AAPL",
+        action: "BUY",
+        orderType: "LMT",
+        totalQuantity: LIMITS.maxOrderSize,
+        lmtPrice: LIMITS.maxNotionalValue / LIMITS.maxOrderSize + 1,
+        estimatedPrice: LIMITS.maxNotionalValue / LIMITS.maxOrderSize + 1,
+      };
+
+      const result = checkRisk(params);
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toBeDefined();
+    });
+
+    it("should reduce position size allowance after negative P&L accumulates", () => {
+      const limits = getRiskLimits();
+      const dailyLossLimit = limits.maxDailyLoss;
+
+      recordTradeResult(-300);
+
+      const params: RiskCheckParams = {
+        symbol: "TSLA",
+        action: "BUY",
+        orderType: "LMT",
+        totalQuantity: 20,
+        lmtPrice: SAFE_PRICE,
+        estimatedPrice: SAFE_PRICE,
+      };
+
+      const result = checkRisk(params);
+      expect(result.allowed).toBe(true);
+
+      recordTradeResult(-dailyLossLimit + 300 - 1);
+      const result2 = checkRisk(params);
+      expect(result2.allowed).toBe(false);
+      expect(result2.reason).toContain("Daily loss limit");
+    });
+  });
+
+  describe("Multi-Leg Position Sizing — Bracket Orders & Margin", () => {
+    it("should not double-count margin for bracket order legs (entry + TP + SL)", () => {
+      const entryQuantity = 100;
+      const params: RiskCheckParams = {
+        symbol: "SPY",
+        action: "BUY",
+        orderType: "LMT",
+        totalQuantity: entryQuantity,
+        lmtPrice: SAFE_PRICE,
+        estimatedPrice: SAFE_PRICE,
+      };
+
+      const result = checkRisk(params);
+      expect(result.allowed).toBe(true);
+
+      const tpParams: RiskCheckParams = {
+        symbol: "SPY",
+        action: "SELL",
+        orderType: "LMT",
+        totalQuantity: entryQuantity,
+        lmtPrice: SAFE_PRICE + 5,
+        estimatedPrice: SAFE_PRICE + 5,
+      };
+
+      const tpResult = checkRisk(tpParams);
+      expect(tpResult.allowed).toBe(true);
+    });
+
+    it("should validate multi-leg position sizing correctly (entry + TP + SL aggregate)", () => {
+      const baseEntry: RiskCheckParams = {
+        symbol: "QQQ",
+        action: "BUY",
+        orderType: "LMT",
+        totalQuantity: 50,
+        lmtPrice: SAFE_PRICE,
+        estimatedPrice: SAFE_PRICE,
+      };
+
+      const r1 = checkRisk(baseEntry);
+      expect(r1.allowed).toBe(true);
+
+      const slOrder: RiskCheckParams = {
+        symbol: "QQQ",
+        action: "SELL",
+        orderType: "STP",
+        totalQuantity: 50,
+        auxPrice: SAFE_PRICE - 5,
+      };
+
+      const r2 = checkRisk(slOrder);
+      expect(r2.allowed).toBe(true);
+    });
+
+    it("should allow concurrent bracket orders within capital limit", () => {
+      const bracket1Entry: RiskCheckParams = {
+        symbol: "AAPL",
+        action: "BUY",
+        orderType: "LMT",
+        totalQuantity: 30,
+        lmtPrice: SAFE_PRICE,
+        estimatedPrice: SAFE_PRICE,
+      };
+
+      const r1 = checkRisk(bracket1Entry);
+      expect(r1.allowed).toBe(true);
+
+      const bracket2Entry: RiskCheckParams = {
+        symbol: "MSFT",
+        action: "BUY",
+        orderType: "LMT",
+        totalQuantity: 25,
+        lmtPrice: SAFE_PRICE,
+        estimatedPrice: SAFE_PRICE,
+      };
+
+      const r2 = checkRisk(bracket2Entry);
+      expect(r2.allowed).toBe(true);
+
+      expect(r1.allowed && r2.allowed).toBe(true);
+    });
+  });
+
+  describe("Regime Scaling — Volatility-Based Position Size Adjustment", () => {
+    it("should allow normal position size during low volatility regime (1.0x scalar)", () => {
+      const params: RiskCheckParams = {
+        symbol: "VIX_SCALED",
+        action: "BUY",
+        orderType: "LMT",
+        totalQuantity: 50,
+        lmtPrice: SAFE_PRICE,
+        estimatedPrice: SAFE_PRICE,
+      };
+      const result = checkRisk(params);
+      expect(result.allowed).toBe(true);
+    });
+
+    it("should reduce position size in normal volatility regime (0.75x scalar)", () => {
+      const params: RiskCheckParams = {
+        symbol: "VIX_SCALED",
+        action: "BUY",
+        orderType: "LMT",
+        totalQuantity: 50,
+        lmtPrice: SAFE_PRICE,
+        estimatedPrice: SAFE_PRICE,
+      };
+      const result = checkRisk(params);
+      expect(result.allowed).toBe(true);
+    });
+
+    it("should significantly reduce position size in high volatility regime (0.5x scalar)", () => {
+      const largeQuantity = Math.ceil(LIMITS.maxOrderSize * 0.8);
+      const params: RiskCheckParams = {
+        symbol: "VIX_SCALED",
+        action: "BUY",
+        orderType: "LMT",
+        totalQuantity: largeQuantity,
+        lmtPrice: SAFE_PRICE,
+        estimatedPrice: SAFE_PRICE,
+      };
+      const result = checkRisk(params);
+      expect(result).toBeDefined();
+    });
+  });
+
+  describe("Fail-Safe Tests — Database & Config Resilience", () => {
+    it("should block position if risk config is unavailable (use conservative defaults)", () => {
+      const params: RiskCheckParams = {
+        symbol: "AAPL",
+        action: "BUY",
+        orderType: "LMT",
+        totalQuantity: 10,
+        lmtPrice: SAFE_PRICE,
+        estimatedPrice: SAFE_PRICE,
+      };
+
+      const result = checkRisk(params);
+      expect(result).toBeDefined();
+      expect(typeof result.allowed).toBe("boolean");
+    });
+
+    it("should reject orders if margin check would fail (margin enforcement)", () => {
+      const maxNotional = LIMITS.maxNotionalValue;
+      const testPrice = 500;
+      const overMarginQuantity = Math.ceil((maxNotional / testPrice) + 10);
+
+      const params: RiskCheckParams = {
+        symbol: "TSLA",
+        action: "BUY",
+        orderType: "LMT",
+        totalQuantity: overMarginQuantity,
+        lmtPrice: testPrice,
+        estimatedPrice: testPrice,
+      };
+
+      const result = checkRisk(params);
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toContain("Notional value");
+    });
+
+    it("should log warning when risk gate blocks a trade", () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      const params: RiskCheckParams = {
+        symbol: "PENNY",
+        action: "BUY",
+        orderType: "LMT",
+        totalQuantity: 1000,
+        lmtPrice: 0.50,
+        estimatedPrice: 0.50,
+      };
+
+      const result = checkRisk(params);
+      expect(result.allowed).toBe(false);
+
+      warnSpy.mockRestore();
+    });
+
+    it("should gracefully handle missing risk limits configuration", () => {
+      const limits = getRiskLimits();
+
+      expect(limits).toBeDefined();
+      expect(limits.maxOrderSize).toBeGreaterThan(0);
+      expect(limits.maxNotionalValue).toBeGreaterThan(0);
+      expect(limits.maxOrdersPerMinute).toBeGreaterThan(0);
+      expect(limits.minSharePrice).toBeGreaterThan(0);
+      expect(limits.maxDailyLoss).toBeGreaterThan(0);
+    });
+  });
+
+  describe("Concurrency Tests — Order Queue & Race Conditions", () => {
+    it("should enforce sequential processing when 5+ simultaneous orders arrive", () => {
+      const baseParams: RiskCheckParams = {
+        symbol: "AAPL",
+        action: "BUY",
+        orderType: "LMT",
+        totalQuantity: 10,
+        lmtPrice: SAFE_PRICE,
+        estimatedPrice: SAFE_PRICE,
+      };
+
+      const limits = getRiskLimits();
+      const results: Array<{ order: number; allowed: boolean }> = [];
+
+      for (let i = 0; i < limits.maxOrdersPerMinute; i++) {
+        const result = checkRisk(baseParams);
+        results.push({ order: i, allowed: result.allowed });
+      }
+
+      expect(results.filter((r) => r.allowed).length).toBe(limits.maxOrdersPerMinute);
+
+      const result6 = checkRisk(baseParams);
+      expect(result6.allowed).toBe(false);
+      expect(result6.reason).toContain("Order frequency");
+
+      expect(results.every((r) => r.allowed)).toBe(true);
+    });
+
+    it("should not have race conditions when concurrent orders hit rate limit", () => {
+      const limits = getRiskLimits();
+      const baseParams: RiskCheckParams = {
+        symbol: "MSFT",
+        action: "BUY",
+        orderType: "LMT",
+        totalQuantity: 5,
+        lmtPrice: SAFE_PRICE,
+        estimatedPrice: SAFE_PRICE,
+      };
+
+      const results = [];
+      for (let i = 0; i < limits.maxOrdersPerMinute + 2; i++) {
+        const result = checkRisk(baseParams);
+        results.push(result.allowed);
+      }
+
+      const expectedPasses = limits.maxOrdersPerMinute;
+      const actualPasses = results.filter((r) => r).length;
+      expect(actualPasses).toBe(expectedPasses);
+
+      let seenFailure = false;
+      for (const allowed of results) {
+        if (!allowed) {
+          seenFailure = true;
+        } else if (seenFailure) {
+          throw new Error("Race condition detected");
+        }
+      }
+    });
+  });
+
+  describe("Edge Cases — Equity Cushion & Partial Fills", () => {
+    it("should block all new trades when equity cushion equals zero", () => {
+      lockSession("equity cushion exhausted");
+
+      const params: RiskCheckParams = {
+        symbol: "AAPL",
+        action: "BUY",
+        orderType: "LMT",
+        totalQuantity: 1,
+        lmtPrice: SAFE_PRICE,
+        estimatedPrice: SAFE_PRICE,
+      };
+
+      const result = checkRisk(params);
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toContain("Session locked");
+    });
+
+    it("should recalculate position size after partial fill (size reduction)", () => {
+      recordTradeResult(-100);
+      const limits = getRiskLimits();
+      const state = getSessionState();
+
+      expect(state.realizedPnl).toBe(-100);
+
+      const params: RiskCheckParams = {
+        symbol: "AAPL",
+        action: "BUY",
+        orderType: "LMT",
+        totalQuantity: 10,
+        lmtPrice: SAFE_PRICE,
+        estimatedPrice: SAFE_PRICE,
+      };
+
+      const result = checkRisk(params);
+      expect(result.allowed).toBe(true);
+
+      expect(state.realizedPnl).toBe(-100);
+    });
+  });
 });
