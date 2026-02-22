@@ -7,7 +7,7 @@ This file contains agent cards to copy-paste into each tool's UI. After pasting,
 | # | Agent | Propagation Method | Handshake Status |
 |---|-------|--------------------|------------------|
 | 2 | Claude Code | Auto (reads AGENTS.md) | ✅ Verified |
-| 3 | Claude Code (Pair) | Cloud session with prompt below | ⏳ Pending |
+| 3 | Claude Code (Pair) | Cloud session with prompt below | ✅ Verified (IBKR library research, stayed in role) |
 | 4 | ChatGPT | Paste below in chat | ⏳ Pending |
 | 5 | Copilot | `.github/agents/*.agent.md` (updated) | ✅ Verified (created copilot-instructions.md, 4 instruction files, updated ORCHESTRATION.md) |
 | 6 | Codex | Native: assign @codex on issue | ⏳ Pending |
@@ -404,7 +404,7 @@ Recommended propagation sequence (parallel where possible):
 - [ ] Qodo Gen (#8) — install extension, generate tests
 
 **Wave 3 — Manual paste:**
-- [ ] Claude Code Pair (#3) — cloud session with prompt
+- [x] Claude Code Pair (#3) — cloud session with prompt ✅
 - [ ] ChatGPT (#4) — paste in chat
 - [ ] Jules (#7) — paste at jules.google
 - [ ] v0 (#10) — paste spec at v0.dev
