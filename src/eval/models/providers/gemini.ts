@@ -72,6 +72,12 @@ function extractTokenCount(response: unknown): number {
   return promptTokens + outputTokens;
 }
 
+/**
+ * Evaluate a trade with Gemini (Google GenAI).
+ * @param userPrompt The user prompt string
+ * @param promptHash Hash of the prompt for drift detection
+ * @returns Promise resolving to a ModelEvaluation object
+ */
 export async function evaluateWithGemini(
   userPrompt: string,
   promptHash: string,

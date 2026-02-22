@@ -14,6 +14,12 @@ function getClient(): Anthropic {
   return client;
 }
 
+/**
+ * Evaluate a trade with Claude (Anthropic).
+ * @param userPrompt The user prompt string
+ * @param promptHash Hash of the prompt for drift detection
+ * @returns Promise resolving to a ModelEvaluation object
+ */
 export async function evaluateWithClaude(
   userPrompt: string,
   promptHash: string,
