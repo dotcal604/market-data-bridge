@@ -45,7 +45,9 @@ Single-process Node.js 22+ TypeScript trading platform: IBKR + Yahoo Finance + 3
 NEVER set IBKR_CLIENT_ID in .env — causes collision for all MCP clients.
 
 ## Current State (Feb 2026)
-- Build: clean, tests: all passing (1,459 tests, 86 files)
-- Branch: claude/nervous-carson (worktree)
+- Build: clean, tests: all passing (1,541 tests, 89 files)
+- Branch: claude/trading-cloud-architecture-fYwbQ (integration)
 - Main branch: main
 - Cloud module: WIP (code complete, not deployed)
+- Indicator engine: shipped (streaming EMA/RSI/MACD/BB/ATR/VWAP, 3 MCP tools, 2 REST routes, 38 tests)
+- Analytics roadmap: docs/ANALYTICS-ROADMAP.md (Tier 1 done, Tier 2-4 planned)

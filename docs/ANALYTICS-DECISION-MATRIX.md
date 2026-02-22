@@ -61,6 +61,20 @@ The connection is not an `@stoqey/ib` problem — it's TWS + architectural bugs:
 4. **Fragile callback ordering** — Three subsystems register `onReconnectCallbacks` with no ordering guarantee. Fix: define explicit phases.
 5. **ClientId exhaustion** — Stuck forever after 5 retries. Fix: reset and start over.
 
+## Exposure
+
+### MCP Tools
+- `get_indicators` — snapshot for one symbol (EMA, RSI, MACD, BB, ATR, VWAP, flags)
+- `get_all_indicators` — snapshots for all tracked symbols
+- `get_tracked_symbols` — list symbols with active indicator engines
+
+### REST Endpoints
+- `GET /api/indicators/:symbol` — feature snapshot for a symbol
+- `GET /api/indicators` — all snapshots
+
+### Tests
+- 38 unit tests in `src/indicators/__tests__/engine.test.ts`
+
 ## Installed Libraries
 
 ### Backend (`package.json`)
@@ -73,7 +87,8 @@ The connection is not an `@stoqey/ib` problem — it's TWS + architectural bugs:
 - `TA-Lib` — batch indicator computation + pattern recognition (offline research)
 
 ### Deferred (install when needed)
-- `xgboost`, `lightgbm`, `optuna`, `shap` — ML signal layer (Tier 2)
-- `vectorbt` — fast backtesting (Tier 3)
+- `backtrader`, `optuna`, `quantstats` — backtesting + optimization (Tier 2)
+- `hmmlearn`, `xgboost`, `lightgbm`, `shap` — ML signal layer (Tier 3)
+- `riskfolio-lib` or `skfolio` — portfolio optimization (Tier 3)
 - `rxjs` — stream composition (evaluate if current event patterns become unwieldy)
 - `nodejs-order-book` — L2 book (Tier 3, requires defined use case)

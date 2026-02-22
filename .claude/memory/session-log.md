@@ -61,3 +61,15 @@
 - Researched GitHub Agent HQ (launched Feb 4, 2026): multi-agent platform with @copilot, @claude, @codex mentions on PRs for re-engagement
 - Key finding: stalled PRs with review feedback can be re-engaged by @mentioning agents in PR comments
 - Next session: re-engage agents on PRs #374, #373, #379 via Agent HQ @mentions; consider docs/add-jsdoc-backend cherry-pick (JSDoc only, skip code deletions)
+
+## 2026-02-22 11:00 — cloud — Analytics Tier 1 completion + roadmap
+
+- Completed comprehensive research on backtesting, quant, and analytics frameworks (JS/TS + Python)
+- Wrote 38 unit tests for streaming indicator engine (`src/indicators/__tests__/engine.test.ts`)
+- Added 3 MCP tools: `get_indicators`, `get_all_indicators`, `get_tracked_symbols`
+- Added 2 REST routes: `GET /api/indicators/:symbol`, `GET /api/indicators`
+- Created `docs/ANALYTICS-ROADMAP.md` — tiered implementation plan (Tier 1 done, Tier 2-4 planned)
+- Updated `docs/ANALYTICS-DECISION-MATRIX.md` with exposure section + deferred library updates
+- Test count: 89 files, 1,541 tests passing (TSC clean)
+- Key decisions: Backtrader (Python, native IBKR) for Tier 2 backtesting, Optuna for parameter optimization, QuantStats for reporting
+- Next: cross-validate trading-signals vs TA-Lib, WebSocket indicator streaming, integrate flags into scan outputs
