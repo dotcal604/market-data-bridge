@@ -134,3 +134,4 @@ class WeightHistory(BaseModel):
     reason: Optional[str]
     created_at: str
 
+
