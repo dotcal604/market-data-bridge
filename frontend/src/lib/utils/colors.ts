@@ -1,3 +1,5 @@
+import { COLORS } from "@shared/colors";
+
 /** Map a 0-10 trade score to a CSS class for badges/text */
 export function scoreColor(score: number): string {
   if (score >= 8) return "text-emerald-400";
