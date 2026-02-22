@@ -38,6 +38,8 @@ interface DatabaseModule {
     realized_pnl?: number;
   }) => void;
   queryAccountSnapshots: (limit?: number) => Array<Record<string, unknown>>;
+  getLatestNetLiquidation: () => number | null;
+  getDb: () => { prepare: (sql: string) => { run: (...args: readonly unknown[]) => unknown } };
   isDbWritable: () => boolean;
   closeDb: () => void;
 }
@@ -265,5 +267,65 @@ describe("db/database", () => {
 
     db.closeDb();
     expect(db.isDbWritable()).toBe(false);
+  });
+
+  describe("getLatestNetLiquidation", () => {
+    it("returns null when account_snapshots is empty", async () => {
+      const db = await loadDatabaseModule();
+
+      expect(db.getLatestNetLiquidation()).toBeNull();
+
+      db.closeDb();
+    });
+
+    it("returns the value from a single row", async () => {
+      const db = await loadDatabaseModule();
+
+      db.insertAccountSnapshot({ net_liquidation: 125_000 });
+      expect(db.getLatestNetLiquidation()).toBe(125_000);
+
+      db.closeDb();
+    });
+
+    it("returns the most recently inserted value when multiple rows exist", async () => {
+      const db = await loadDatabaseModule();
+      const raw = db.getDb();
+
+      raw.prepare(
+        `INSERT INTO account_snapshots (net_liquidation, created_at) VALUES (?, ?)`
+      ).run(100_000, "2025-01-01T10:00:00Z");
+      raw.prepare(
+        `INSERT INTO account_snapshots (net_liquidation, created_at) VALUES (?, ?)`
+      ).run(200_000, "2025-01-01T11:00:00Z");
+
+      expect(db.getLatestNetLiquidation()).toBe(200_000);
+
+      db.closeDb();
+    });
+
+    it("skips null net_liquidation rows and returns the latest non-null value", async () => {
+      const db = await loadDatabaseModule();
+      const raw = db.getDb();
+
+      raw.prepare(
+        `INSERT INTO account_snapshots (net_liquidation, created_at) VALUES (?, ?)`
+      ).run(50_000, "2025-01-01T09:00:00Z");
+      raw.prepare(
+        `INSERT INTO account_snapshots (net_liquidation, created_at) VALUES (?, ?)`
+      ).run(null, "2025-01-01T10:00:00Z");
+
+      expect(db.getLatestNetLiquidation()).toBe(50_000);
+
+      db.closeDb();
+    });
+
+    it("returns 0 when the latest net_liquidation is zero", async () => {
+      const db = await loadDatabaseModule();
+
+      db.insertAccountSnapshot({ net_liquidation: 0 });
+      expect(db.getLatestNetLiquidation()).toBe(0);
+
+      db.closeDb();
+    });
   });
 });
