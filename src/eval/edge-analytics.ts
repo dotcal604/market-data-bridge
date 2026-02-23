@@ -6,6 +6,7 @@
  */
 import { getDb } from "../db/database.js";
 import { computeEnsembleWithWeights } from "./ensemble/scorer.js";
+import { computeCVaR, computeRecoveryFactor, computeSkewness, computeUlcerIndex } from "./features/edge-metrics.js";
 import type { ModelEvaluation } from "./models/types.js";
 
 // ── Types ────────────────────────────────────────────────────────────────
@@ -301,33 +302,21 @@ function computeCurrentStats(rows: OutcomeRow[]) {
 
   // Max drawdown
   let peak = 0, equity = 0, maxDd = 0;
-  const drawdowns: number[] = [];
   for (const r of rows) {
     equity += r.r_multiple;
     if (equity > peak) peak = equity;
     const dd = peak > 0 ? (peak - equity) / peak : 0;
-    drawdowns.push(dd);
     if (dd > maxDd) maxDd = dd;
   }
 
-  // Recovery Factor = net profit / |max drawdown|
-  const netProfit = rows.reduce((s, r) => s + r.r_multiple, 0);
-  const recoveryFactor = maxDd > 0 ? netProfit / Math.abs(maxDd) : netProfit > 0 ? Infinity : 0;
-
-  // CVaR (5%) = mean of bottom 5% returns
-  const sortedReturns = [...returns].sort((a, b) => a - b);
-  const tailCount = Math.max(1, Math.ceil(sortedReturns.length * 0.05));
-  const tailReturns = sortedReturns.slice(0, tailCount);
-  const cvar5 = tailReturns.reduce((s, r) => s + r, 0) / tailReturns.length;
+  const recoveryFactor = computeRecoveryFactor(returns);
+  const cvar5 = computeCVaR(returns, 0.05);
+  const skewness = computeSkewness(returns);
+  const ulcerIndex = computeUlcerIndex(returns);
 
   // Skewness = E[(x-μ)^3] / σ^3 ; Kurtosis(excess) = E[(x-μ)^4] / σ^4 - 3
-  const thirdMoment = returns.reduce((s, r) => s + (r - mean) ** 3, 0) / returns.length;
   const fourthMoment = returns.reduce((s, r) => s + (r - mean) ** 4, 0) / returns.length;
-  const skewness = stdDev > 0 ? thirdMoment / (stdDev ** 3) : 0;
   const kurtosis = stdDev > 0 ? (fourthMoment / (stdDev ** 4)) - 3 : 0;
-
-  // Ulcer Index = sqrt(mean(drawdown^2))
-  const ulcerIndex = Math.sqrt(drawdowns.reduce((s, dd) => s + (dd ** 2), 0) / drawdowns.length);
 
   // Edge Score (composite 0-100)
   // Components: win_rate (30%), profit_factor (25%), sharpe (25%), sample_size (20%)

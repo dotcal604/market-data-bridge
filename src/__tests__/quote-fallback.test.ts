@@ -3,6 +3,11 @@ import express from "express";
 import request from "supertest";
 
 // ─── Module Mocks (must be before any import that uses them) ─────────────────
+//
+// NOTE: These mocks mirror every top-level import in src/rest/routes.ts so the
+// router can be loaded without real TWS / Yahoo / DB connections. If you add a
+// new import to routes.ts you MUST add a corresponding vi.mock() entry here,
+// otherwise vitest will attempt to load the real module and the test will fail.
 
 vi.mock("../ibkr/connection.js", () => ({
   isConnected: vi.fn(() => false),
@@ -84,6 +89,15 @@ vi.mock("../ibkr/subscriptions.js", () => ({
   getAccountSnapshot: vi.fn(),
   getScannerParameters: vi.fn(),
   listSubscriptions: vi.fn(),
+}));
+
+vi.mock("../indicators/engine.js", () => ({
+  getSnapshot: vi.fn(() => null),
+  getAllSnapshots: vi.fn(() => []),
+  getTrackedSymbols: vi.fn(() => []),
+  feedBar: vi.fn(),
+  removeEngine: vi.fn(),
+  _resetForTesting: vi.fn(),
 }));
 
 vi.mock("../ibkr/data.js", () => ({

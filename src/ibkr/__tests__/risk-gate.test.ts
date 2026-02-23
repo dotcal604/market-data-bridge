@@ -1030,8 +1030,6 @@ describe("Risk Gate", () => {
 
       const r2 = checkRisk(bracket2Entry);
       expect(r2.allowed).toBe(true);
-
-      expect(r1.allowed && r2.allowed).toBe(true);
     });
   });
 

@@ -4,9 +4,13 @@ on:
   pull_request:
     branches: [main]
 
+# Complements ci.yml (type-check + tests) by verifying actual build artifacts.
+# ci.yml: tsc --noEmit + vitest (fast correctness gate)
+# ci-build.yml: npm run build + next build + vitest (confirms the build + tests pass together)
+
 jobs:
   build:
-    name: Build & Type Check
+    name: Build & Test
     runs-on: ubuntu-latest
 
     steps:
@@ -28,6 +32,9 @@ jobs:
 
       - name: Backend build
         run: npm run build
+
+      - name: Test
+        run: npm test
 
       - name: Frontend type check
         run: cd frontend && npx tsc --noEmit

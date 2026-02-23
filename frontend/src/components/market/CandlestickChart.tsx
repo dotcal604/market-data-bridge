@@ -170,8 +170,8 @@ export function CandlestickChart({ symbol }: CandlestickChartProps) {
   }
 
   // Calculate header stats from data
-  const lastBar = data?.bars[data.bars.length - 1];
-  const firstBar = data?.bars[0];
+  const lastBar = data?.bars?.[data.bars.length - 1];
+  const firstBar = data?.bars?.[0];
   const totalChange = lastBar && firstBar
     ? ((lastBar.close - firstBar.close) / firstBar.close) * 100
     : 0;
