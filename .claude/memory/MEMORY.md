@@ -51,6 +51,7 @@ NEVER set IBKR_CLIENT_ID in .env — causes collision for all MCP clients.
 - Indicator engine: shipped (streaming EMA/RSI/MACD/BB/ATR/VWAP, 3 MCP tools, 2 REST routes, 38 tests)
 - Analytics roadmap: docs/ANALYTICS-ROADMAP.md (Tier 1 done, Tier 2-4 planned)
 - .claude/launch.json: created (api:3000, frontend:3001, dev-paper:3000)
-- Agent handshakes: 7/14 verified — ChatGPT(4), Jules(7), Qodo Gen(8), Windsurf(9), v0(10), Mintlify(14) pending
+- Agent handshakes: 8/14 verified — v0(10) verified (cloned repo, found existing component); ChatGPT(4), Jules(7), Qodo Gen(8), Windsurf(9), Mintlify(14) pending
+- v0 note: clones repo directly from GitHub (not paste-only) — has "Open PR" button, full codebase context
 - pnpm-lock.yaml: removed (was causing Next.js Turbopack workspace root confusion)
 - frontend/src/lib/utils/colors.ts: import path fixed (was one level short + .js extension)

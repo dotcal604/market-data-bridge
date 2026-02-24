@@ -14,7 +14,7 @@ This file contains agent cards to copy-paste into each tool's UI. After pasting,
 | 7 | Jules | Paste below at jules.google | ⏳ Pending |
 | 8 | Qodo Gen | IDE extension (reads codebase) | ⏳ Pending |
 | 9 | Windsurf | Open project in Windsurf IDE | ⏳ Pending |
-| 10 | v0 | Paste component spec at v0.dev | ⏳ Pending |
+| 10 | v0 | Paste component spec at v0.dev | ✅ Verified (cloned main branch, explored codebase, found existing TradeJournalCard — correct codebase-aware response, no duplicate code) |
 | 11 | GHAS | Auto (configured in GitHub) | ✅ Verified |
 | 12 | NotebookLM | Upload AGENTS.md as source | ✅ Verified |
 | 13 | Antigravity | Open project in Antigravity IDE | ✅ Verified (created docs-writer.agent.md, analyzed orchestration) |
