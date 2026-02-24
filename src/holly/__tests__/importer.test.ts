@@ -281,7 +281,7 @@ describe("Holly Alert CSV Importer", () => {
     it("handles commas in numbers", () => {
       const csv = makeCSV(
         "Time,Symbol,Entry Price",
-        ["2024-03-15 09:45:00,AAPL,1,170.50"]
+        ['2024-03-15 09:45:00,AAPL,"1,170.50"']
       );
       importHollyAlerts(csv);
 

@@ -56,10 +56,11 @@ describe("prefilter guardrails", () => {
       const result = runPrefilters(features);
 
       expect(result.passed).toBe(false);
-      expect(result.flags).toHaveLength(1);
-      expect(result.flags[0]).toContain("extremely wide");
-      expect(result.flags[0]).toContain("2.50");
-      expect(result.flags[0]).toContain("illiquid");
+      expect(result.flags).toHaveLength(2);
+      expect(result.flags.some((f) => f.includes("too wide for large cap"))).toBe(true);
+      expect(result.flags.some((f) => f.includes("extremely wide"))).toBe(true);
+      expect(result.flags.some((f) => f.includes("2.50"))).toBe(true);
+      expect(result.flags.some((f) => f.includes("illiquid"))).toBe(true);
     });
 
     it("should hard fail at exact 2.0% spread threshold", () => {
@@ -68,9 +69,11 @@ describe("prefilter guardrails", () => {
       });
       const result = runPrefilters(features);
 
-      // Should NOT fail at exactly 2.0 (> 2.0 required)
+      // Should NOT hard fail at exactly 2.0 (> 2.0 required)
+      // But large cap spread > 0.8% soft warning still fires
       expect(result.passed).toBe(true);
-      expect(result.flags).toHaveLength(0);
+      expect(result.flags).toHaveLength(1);
+      expect(result.flags[0]).toContain("too wide for large cap");
     });
 
     it("should hard fail at 2.01% spread (just over threshold)", () => {
@@ -80,7 +83,9 @@ describe("prefilter guardrails", () => {
       const result = runPrefilters(features);
 
       expect(result.passed).toBe(false);
-      expect(result.flags).toContain(expect.stringContaining("extremely wide"));
+      expect(result.flags).toHaveLength(2);
+      expect(result.flags.some((f) => f.includes("too wide for large cap"))).toBe(true);
+      expect(result.flags.some((f) => f.includes("extremely wide"))).toBe(true);
     });
 
     // Hard failure tests - premarket negligible volume
@@ -271,7 +276,8 @@ describe("prefilter guardrails", () => {
       const result = runPrefilters(features);
 
       expect(result.passed).toBe(false); // Hard fail overrides soft warnings
-      expect(result.flags).toHaveLength(2);
+      expect(result.flags).toHaveLength(3);
+      expect(result.flags.some((f) => f.includes("too wide for large cap"))).toBe(true);
       expect(result.flags.some((f) => f.includes("extremely wide"))).toBe(true);
       expect(result.flags.some((f) => f.includes("Midday"))).toBe(true);
     });
@@ -300,7 +306,8 @@ describe("prefilter guardrails", () => {
       const result = runPrefilters(features);
 
       expect(result.passed).toBe(false);
-      expect(result.flags).toHaveLength(2);
+      expect(result.flags).toHaveLength(3);
+      expect(result.flags.some((f) => f.includes("too wide for large cap"))).toBe(true);
       expect(result.flags.some((f) => f.includes("extremely wide"))).toBe(true);
       expect(result.flags.some((f) => f.includes("negligible volume"))).toBe(true);
     });

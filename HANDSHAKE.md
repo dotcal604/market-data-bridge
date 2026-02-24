@@ -11,7 +11,7 @@ This file contains agent cards to copy-paste into each tool's UI. After pasting,
 | 4 | ChatGPT | Paste below in chat | ✅ Verified (correct role/constraints, acceptance test: nailed quadratic penalty rationale + "average hides the fight" failure mode) |
 | 5 | Copilot | `.github/agents/*.agent.md` (updated) | ✅ Verified (created copilot-instructions.md, 4 instruction files, updated ORCHESTRATION.md) |
 | 6 | Codex | Native: assign @codex on issue | ✅ Verified (3 PRs: edge metrics #385, Holly CSV #384, acceptance test passed) |
-| 7 | Jules | Paste below at jules.google | ⏳ Pending |
+| 7 | Jules | Paste below at jules.google | ✅ Verified (branch: jules-shared-colors — extracted shared color logic, merged to main via cherry-pick pipeline) |
 | 8 | Qodo Gen | IDE extension (reads codebase) | ⏳ Pending |
 | 9 | Windsurf | Open project in Windsurf IDE | ⏳ Pending |
 | 10 | v0 | Paste component spec at v0.dev | ✅ Verified (cloned main branch, explored codebase, found existing TradeJournalCard — correct codebase-aware response, no duplicate code) |
@@ -398,16 +398,16 @@ Recommended propagation sequence (parallel where possible):
 - [x] Copilot (#5) — `.github/agents/` updated ✅
 
 **Wave 2 — Repo-aware (just open the project):**
-- [ ] Codex (#6) — assign acceptance test issue
+- [x] Codex (#6) — 3 PRs merged, acceptance test passed ✅
 - [ ] Windsurf (#9) — open project, paste card
 - [x] Antigravity (#13) — open project, paste card ✅
 - [ ] Qodo Gen (#8) — install extension, generate tests
 
 **Wave 3 — Manual paste:**
 - [x] Claude Code Pair (#3) — cloud session with prompt ✅
-- [ ] ChatGPT (#4) — paste in chat
-- [ ] Jules (#7) — paste at jules.google
-- [ ] v0 (#10) — paste spec at v0.dev
+- [x] ChatGPT (#4) — acceptance test passed (quadratic penalty rationale) ✅
+- [x] Jules (#7) — branch: jules-shared-colors ✅
+- [x] v0 (#10) — cloned repo, found existing component ✅
 
 **Wave 4 — Upload/Connect:**
 - [x] NotebookLM (#12) — upload AGENTS.md + CLAUDE.md ✅
