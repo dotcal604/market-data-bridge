@@ -18,7 +18,7 @@ This file contains agent cards to copy-paste into each tool's UI. After pasting,
 | 11 | GHAS | Auto (configured in GitHub) | ✅ Verified |
 | 12 | NotebookLM | Upload AGENTS.md as source | ✅ Verified |
 | 13 | Antigravity | Open project in Antigravity IDE | ✅ Verified (created docs-writer.agent.md, analyzed orchestration) |
-| 14 | Mintlify AI | Connect repo at mintlify.com | ⏳ Pending |
+| 14 | Mintlify AI | Connect repo at mintlify.com | ✅ Verified (auto-deployed successfully on PR #394 — docs.json at root, deployment succeeded in 25s) |
 
 ---
 
