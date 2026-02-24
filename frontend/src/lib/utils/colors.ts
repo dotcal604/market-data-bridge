@@ -13,4 +13,4 @@ export {
   modelColor,
   pnlColor,
   CHART_MODEL_COLORS,
-} from "../../../src/shared/colors.js";
+} from "../../../../src/shared/colors";
