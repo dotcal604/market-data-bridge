@@ -1121,7 +1121,6 @@ export function queryAccountSnapshots(limit: number = 100) {
   return stmts.queryAccountSnapshots.all(limit);
 }
 
-<<<<<<< HEAD
 /** Get the most recent net_liquidation from account snapshots (for live equity in risk gate). */
 export function getLatestNetLiquidation(): number | null {
   const row = db.prepare(
@@ -2276,7 +2275,6 @@ export function getMcpSessionStats(): {
   };
 }
 
-<<<<<<< HEAD
 // ── Analytics Jobs ────────────────────────────────────────────────────────
 
 export interface AnalyticsJobRow {
