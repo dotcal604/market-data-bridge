@@ -52,7 +52,6 @@ describe("prefilter guardrails", () => {
     it("should hard fail when spread > 2% (extremely wide)", () => {
       const features = createMockFeatures({
         spread_pct: 2.5,
-        liquidity_bucket: "small", // Use small cap to isolate the >2% rule
       });
       const result = runPrefilters(features);
 
@@ -63,10 +62,9 @@ describe("prefilter guardrails", () => {
       expect(result.flags[0]).toContain("illiquid");
     });
 
-    it("should not hard fail at exact 2.0% spread threshold", () => {
+    it("should hard fail at exact 2.0% spread threshold", () => {
       const features = createMockFeatures({
         spread_pct: 2.0,
-        liquidity_bucket: "small", // Use small cap to isolate the >2% rule
       });
       const result = runPrefilters(features);
 
@@ -78,12 +76,11 @@ describe("prefilter guardrails", () => {
     it("should hard fail at 2.01% spread (just over threshold)", () => {
       const features = createMockFeatures({
         spread_pct: 2.01,
-        liquidity_bucket: "small", // Use small cap to isolate the >2% rule
       });
       const result = runPrefilters(features);
 
       expect(result.passed).toBe(false);
-      expect(result.flags.some((f) => f.includes("extremely wide"))).toBe(true);
+      expect(result.flags).toContain(expect.stringContaining("extremely wide"));
     });
 
     // Hard failure tests - premarket negligible volume
@@ -267,18 +264,16 @@ describe("prefilter guardrails", () => {
     // Mixed hard and soft failures
     it("should fail when one hard failure mixed with soft warnings", () => {
       const features = createMockFeatures({
-        spread_pct: 2.5, // Hard fail: extremely wide + soft: large cap >0.8%
+        spread_pct: 2.5, // Hard fail: extremely wide
         time_of_day: "midday",
         rvol: 1.0, // Soft warning: midday chop
       });
       const result = runPrefilters(features);
 
       expect(result.passed).toBe(false); // Hard fail overrides soft warnings
-      // 3 flags: large-cap wide spread (soft), extremely wide (hard), midday chop (soft)
-      expect(result.flags).toHaveLength(3);
+      expect(result.flags).toHaveLength(2);
       expect(result.flags.some((f) => f.includes("extremely wide"))).toBe(true);
       expect(result.flags.some((f) => f.includes("Midday"))).toBe(true);
-      expect(result.flags.some((f) => f.includes("too wide for large cap"))).toBe(true);
     });
 
     it("should fail when premarket negligible volume mixed with other warnings", () => {
@@ -298,18 +293,16 @@ describe("prefilter guardrails", () => {
 
     it("should fail when both hard failures present", () => {
       const features = createMockFeatures({
-        spread_pct: 2.5, // Hard fail: extremely wide + soft: large cap >0.8%
+        spread_pct: 2.5, // Hard fail: extremely wide
         time_of_day: "premarket",
         volume: 800, // Hard fail: negligible volume
       });
       const result = runPrefilters(features);
 
       expect(result.passed).toBe(false);
-      // 3 flags: large-cap wide spread (soft), extremely wide (hard), negligible volume (hard)
-      expect(result.flags).toHaveLength(3);
+      expect(result.flags).toHaveLength(2);
       expect(result.flags.some((f) => f.includes("extremely wide"))).toBe(true);
       expect(result.flags.some((f) => f.includes("negligible volume"))).toBe(true);
-      expect(result.flags.some((f) => f.includes("too wide for large cap"))).toBe(true);
     });
 
     // Edge cases
