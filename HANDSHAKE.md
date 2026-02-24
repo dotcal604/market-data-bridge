@@ -8,7 +8,7 @@ This file contains agent cards to copy-paste into each tool's UI. After pasting,
 |---|-------|--------------------|------------------|
 | 2 | Claude Code | Auto (reads AGENTS.md) | ✅ Verified |
 | 3 | Claude Code (Pair) | Cloud session with prompt below | ✅ Verified (IBKR library research, stayed in role) |
-| 4 | ChatGPT | Paste below in chat | ⏳ Pending |
+| 4 | ChatGPT | Paste below in chat | ✅ Verified (correct role/constraints, acceptance test: nailed quadratic penalty rationale + "average hides the fight" failure mode) |
 | 5 | Copilot | `.github/agents/*.agent.md` (updated) | ✅ Verified (created copilot-instructions.md, 4 instruction files, updated ORCHESTRATION.md) |
 | 6 | Codex | Native: assign @codex on issue | ✅ Verified (3 PRs: edge metrics #385, Holly CSV #384, acceptance test passed) |
 | 7 | Jules | Paste below at jules.google | ⏳ Pending |
