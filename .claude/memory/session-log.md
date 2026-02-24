@@ -73,3 +73,16 @@
 - Test count: 89 files, 1,541 tests passing (TSC clean)
 - Key decisions: Backtrader (Python, native IBKR) for Tier 2 backtesting, Optuna for parameter optimization, QuantStats for reporting
 - Next: cross-validate trading-signals vs TA-Lib, WebSocket indicator streaming, integrate flags into scan outputs
+
+## 2026-02-23 16:30 — worktree (unruffled-mclean) — repo sync + dev server setup + agent handshake prep
+
+- Created `.claude/launch.json` with 3 server configs (api:3000, frontend:3001, dev-paper:3000) — Windows required `node` not `npm.cmd`
+- Started API and frontend dev servers via preview_start — both verified running
+- Fixed pre-existing bug in `frontend/src/lib/utils/colors.ts` — import path was one level short (`../../../` → `../../../../`) and used `.js` extension Turbopack can't resolve. Bug from PR #381.
+- Investigated 3 deleted files in main repo (CLAUDE.md, CONTRIBUTING.md, architecture-diagram.html) — physically deleted from disk but tracked in git tree; restored with `git restore`
+- Merged `claude/trading-cloud-architecture-fYwbQ` → `main` (fast-forward, no conflicts, 51 commits, 24 files)
+- Build + tests post-merge: clean, 1,555 tests passing, 92 files
+- Cherry-picked colors fix to main (0d95cad)
+- Removed spurious `pnpm-lock.yaml` from main — was causing Next.js Turbopack workspace root mis-detection
+- Pushed main: 8074e85 — repo now fully synced, single canonical branch
+- Agent handshakes: still 7/14, next session should tackle ChatGPT(4), v0(10), Jules(7), Mintlify(14) — needs Fang to paste/connect

@@ -11,7 +11,7 @@ Single-process Node.js 22+ TypeScript trading platform: IBKR + Yahoo Finance + 3
 - `start.bat` — double-click launcher (paper trading, port 7497)
 - `start-live.bat` — live trading launcher (port 7496, requires YES confirmation)
 - `npm run build` (tsc) → `build/` directory. Must build before running.
-- `npm test` → Vitest, 86 test files, 1,459 tests, ~10s runtime
+- `npm test` → Vitest, 92 test files, 1,555 tests, ~11s runtime
 - `npm run dev` → API (port 3000) + frontend (port 3001) concurrently
 - Frontend is separate: `cd frontend && npm install` required
 
@@ -45,9 +45,13 @@ Single-process Node.js 22+ TypeScript trading platform: IBKR + Yahoo Finance + 3
 NEVER set IBKR_CLIENT_ID in .env — causes collision for all MCP clients.
 
 ## Current State (Feb 2026)
-- Build: clean, tests: all passing (1,541 tests, 89 files)
-- Branch: claude/trading-cloud-architecture-fYwbQ (integration)
-- Main branch: main
+- Build: clean, tests: all passing (1,555 tests, 92 files)
+- Branch: main (integration branch merged and retired — 8074e85)
 - Cloud module: WIP (code complete, not deployed)
 - Indicator engine: shipped (streaming EMA/RSI/MACD/BB/ATR/VWAP, 3 MCP tools, 2 REST routes, 38 tests)
 - Analytics roadmap: docs/ANALYTICS-ROADMAP.md (Tier 1 done, Tier 2-4 planned)
+- .claude/launch.json: created (api:3000, frontend:3001, dev-paper:3000)
+- Agent handshakes: 9/14 verified — ChatGPT(4) ✅, v0(10) ✅; Jules(7), Qodo Gen(8), Windsurf(9), Mintlify(14) pending
+- v0 note: clones repo directly from GitHub (not paste-only) — has "Open PR" button, full codebase context
+- pnpm-lock.yaml: removed (was causing Next.js Turbopack workspace root confusion)
+- frontend/src/lib/utils/colors.ts: import path fixed (was one level short + .js extension)
