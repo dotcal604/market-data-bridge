@@ -75,6 +75,7 @@ function scoreEnsemble(
 }
 
 /**
+<<<<<<< HEAD
  * Compute ensemble score from compliant model evaluations using live weights.
  *
  * Uses weights from disk/memory. If a volatility regime is provided, it attempts
