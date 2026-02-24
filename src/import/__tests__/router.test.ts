@@ -36,6 +36,17 @@ vi.mock("../history.js", () => ({
   updateImportRecord: vi.fn(),
 }));
 
+vi.mock("../importers.js", () => ({
+  importWatchlist: vi.fn().mockReturnValue({ inserted: 3, skipped: 0, errors: [] }),
+  importSymbolList: vi.fn().mockReturnValue({ inserted: 5, skipped: 0, errors: [] }),
+  importJournalEntries: vi.fn().mockReturnValue({ inserted: 2, skipped: 0, errors: [] }),
+  importEvalOutcomes: vi.fn().mockReturnValue({ inserted: 1, skipped: 0, errors: [] }),
+  importScreenerSnapshots: vi.fn().mockReturnValue({ inserted: 4, skipped: 0, errors: [] }),
+  importGenericData: vi.fn().mockReturnValue({ inserted: 3, skipped: 0, errors: [] }),
+}));
+
+vi.mock("../tables.js", () => ({}));
+
 vi.mock("../../logging.js", () => ({
   logger: {
     child: () => ({
@@ -46,9 +57,10 @@ vi.mock("../../logging.js", () => ({
   },
 }));
 
-import { importFile } from "../router.js";
+import { importFile, importRows } from "../router.js";
 import { importTraderSyncCSV } from "../../tradersync/importer.js";
 import { importHollyAlerts } from "../../holly/importer.js";
+import { importJournalEntries } from "../importers.js";
 
 describe("importFile", () => {
   beforeEach(() => {
@@ -81,6 +93,25 @@ describe("importFile", () => {
     expect(importHollyAlerts).toHaveBeenCalledWith(csv);
   });
 
+  it("routes JSON journal entries", () => {
+    const json = JSON.stringify([
+      { symbol: "AAPL", reasoning: "Breakout above resistance", setup_type: "breakout" },
+      { symbol: "MSFT", reasoning: "Gap and go pattern", tags: ["momentum"] },
+    ]);
+
+    const result = importFile(json, "journal.json");
+
+    expect(result.format).toBe("journal");
+    expect(result.inserted).toBe(2);
+    expect(importJournalEntries).toHaveBeenCalled();
+  });
+
+  it("routes JSON watchlist (array of strings)", () => {
+    const json = JSON.stringify(["AAPL", "MSFT", "TSLA", "NVDA"]);
+    const result = importFile(json, "watchlist.json");
+    expect(result.format).toBe("watchlist");
+  });
+
   it("returns error for unknown format", () => {
     const csv = "Name,Age\nAlice,30\n";
     const result = importFile(csv, "random.csv");
@@ -90,7 +121,7 @@ describe("importFile", () => {
     expect(result.errors.length).toBeGreaterThan(0);
   });
 
-  it("includes import_id and duration_ms", () => {
+  it("includes import_id, duration_ms, and source_format", () => {
     const csv = [
       "Status,Symbol,Size,Open Date,Close Date,Open Time,Close Time,Entry Price,Exit Price,Return $,Return %,R-Multiple",
       "WIN,AAPL,100,Feb 12 2026,Feb 12 2026,09:35:00,10:15:00,185.50,187.20,170.00,0.92,1.5",
@@ -101,5 +132,29 @@ describe("importFile", () => {
     expect(result.import_id).toBeTruthy();
     expect(result.import_id.length).toBe(12);
     expect(result.duration_ms).toBeGreaterThanOrEqual(0);
+    expect(result.source_format).toBeTruthy();
+  });
+});
+
+describe("importRows", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("imports pre-parsed rows with auto-detection", () => {
+    const rows = [
+      { symbol: "AAPL", reasoning: "Test entry", setup_type: "breakout" },
+    ];
+    const result = importRows(rows);
+    expect(result.format).toBe("journal");
+  });
+
+  it("imports with explicit data_type override", () => {
+    const rows = [
+      { symbol: "AAPL", price: 150, custom_field: "test" },
+    ];
+    const result = importRows(rows, { dataType: "generic", source: "mcp" });
+    expect(result.format).toBe("generic");
+    expect(result.source_format).toBe("mcp");
   });
 });

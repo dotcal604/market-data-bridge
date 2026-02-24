@@ -87,7 +87,7 @@ import { getRecentDriftAlerts } from "../eval/drift-alerts.js";
 import { computeEdgeReport, runWalkForward } from "../eval/edge-analytics.js";
 import { importTraderSyncCSV } from "../tradersync/importer.js";
 import { importHollyAlerts } from "../holly/importer.js";
-import { importFile } from "../import/router.js";
+import { importFile, importRows } from "../import/router.js";
 import { getImportHistory, getImportById, getImportStats } from "../import/history.js";
 import { isAutoEvalEnabled, setAutoEvalEnabled, getAutoEvalStatus } from "../holly/auto-eval.js";
 import { buildProfiles, scanSymbols, getPreAlertCandidates } from "../holly/predictor.js";
@@ -1848,14 +1848,36 @@ export function createMcpServer(): McpServer {
   // --- Tool: import_file ---
   server.tool(
     "import_file",
-    "Auto-detect and import a CSV file. Supports TraderSync, Holly alerts, and Holly trades. Pass the full file content as a string. The format is auto-detected from column headers. Returns import ID, detected format, inserted count, and any errors.",
+    "Auto-detect and import file content (CSV, TSV, JSON, JSONL). Supports TraderSync trades, Holly alerts/trades, journal entries, watchlists, eval outcomes, screener snapshots, and generic structured data. Format and data type are auto-detected. Returns import ID, detected format, inserted count, and any errors.",
     {
-      csv: z.string().describe("Full CSV file content to import"),
-      file_name: z.string().optional().default("upload.csv").describe("Original file name (for audit trail)"),
+      content: z.string().describe("Full file content to import (CSV, TSV, JSON, or JSONL)"),
+      file_name: z.string().optional().default("upload.csv").describe("Original file name with extension (helps format detection)"),
     },
     async (params) => {
       try {
-        const result = importFile(params.csv, params.file_name);
+        const result = importFile(params.content, params.file_name);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: import_rows ---
+  server.tool(
+    "import_rows",
+    "Import pre-structured data rows directly — the universal import path for MCP tools, API responses, and other structured sources. Pass an array of JSON objects. Data type is auto-detected from keys, or use data_type to override. Supports: tradersync, holly_alerts, journal, watchlist, eval_outcomes, screener_snapshot, generic.",
+    {
+      rows: z.array(z.record(z.unknown())).describe("Array of data objects to import"),
+      data_type: z.string().optional().describe("Force a specific data type instead of auto-detecting (e.g. 'watchlist', 'journal', 'screener_snapshot', 'generic')"),
+      source: z.string().optional().describe("Source label for audit trail (e.g. 'ibkr', 'yahoo', 'tradingview', 'mcp')"),
+    },
+    async (params) => {
+      try {
+        const result = importRows(params.rows, {
+          dataType: params.data_type,
+          source: params.source,
+        });
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       } catch (e: any) {
         return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };

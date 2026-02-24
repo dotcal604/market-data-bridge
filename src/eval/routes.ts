@@ -846,20 +846,39 @@ evalRouter.get("/tradersync/trades", (req, res) => {
 
 // ── File Import Pipeline ─────────────────────────────────────────────────
 
-import { importFile } from "../import/router.js";
+import { importFile, importRows } from "../import/router.js";
 import { getImportHistory, getImportById, getImportStats } from "../import/history.js";
 
-// POST /import — auto-detect format and import CSV content
+// POST /import — auto-detect format and import file content (CSV, TSV, JSON, JSONL)
 evalRouter.post("/import", (req, res) => {
   try {
-    const csv = req.body?.csv;
+    const content = req.body?.content ?? req.body?.csv;
     const fileName = req.body?.file_name ?? "upload.csv";
-    if (!csv || typeof csv !== "string") {
-      res.status(400).json({ error: "Request body must include 'csv' string field with file content" });
+    if (!content || typeof content !== "string") {
+      res.status(400).json({ error: "Request body must include 'content' (or 'csv') string field" });
       return;
     }
-    const result = importFile(csv, fileName);
+    const result = importFile(content, fileName);
     logger.info({ importId: result.import_id, format: result.format, inserted: result.inserted }, "[Import] Complete");
+    res.json(result);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /import/rows — import pre-structured data (from API/MCP sources)
+evalRouter.post("/import/rows", (req, res) => {
+  try {
+    const rows = req.body?.rows;
+    if (!Array.isArray(rows) || rows.length === 0) {
+      res.status(400).json({ error: "Request body must include 'rows' array of objects" });
+      return;
+    }
+    const result = importRows(rows, {
+      dataType: typeof req.body.data_type === "string" ? req.body.data_type : undefined,
+      source: typeof req.body.source === "string" ? req.body.source : undefined,
+      fileName: typeof req.body.file_name === "string" ? req.body.file_name : undefined,
+    });
     res.json(result);
   } catch (e: any) {
     res.status(500).json({ error: e.message });

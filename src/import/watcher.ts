@@ -11,7 +11,7 @@
 
 import { statSync, readdirSync, readFileSync, renameSync, mkdirSync, existsSync } from "node:fs";
 import path from "node:path";
-import { importFile } from "./router.js";
+import { importFile, importFromPath } from "./router.js";
 import { logger } from "../logging.js";
 
 const log = logger.child({ module: "inbox-watcher" });
@@ -21,7 +21,9 @@ let timer: ReturnType<typeof setInterval> | null = null;
 // Track files we've already processed (path → true) to avoid reprocessing
 const processed = new Set<string>();
 
-const SUPPORTED_EXTENSIONS = new Set([".csv", ".CSV"]);
+const TEXT_EXTENSIONS = new Set([".csv", ".tsv", ".tab", ".json", ".jsonl", ".ndjson"]);
+const BINARY_EXTENSIONS = new Set([".xlsx", ".xls", ".xlsm", ".ods", ".zip"]);
+const ALL_EXTENSIONS = new Set([...TEXT_EXTENSIONS, ...BINARY_EXTENSIONS]);
 
 interface InboxConfig {
   inboxPath: string;
@@ -52,15 +54,15 @@ function moveFile(filePath: string, destDir: string): void {
 /**
  * Poll the inbox directory for new files and process them.
  */
-function poll(config: InboxConfig): void {
+async function poll(config: InboxConfig): Promise<void> {
   const { inboxPath } = config;
 
   try {
     if (!existsSync(inboxPath)) return;
 
     const files = readdirSync(inboxPath).filter((f) => {
-      const ext = path.extname(f);
-      return SUPPORTED_EXTENSIONS.has(ext);
+      const ext = path.extname(f).toLowerCase();
+      return ALL_EXTENSIONS.has(ext);
     });
 
     for (const file of files) {
@@ -70,12 +72,11 @@ function poll(config: InboxConfig): void {
       if (processed.has(filePath)) continue;
 
       // Check that the file is stable (not still being written)
-      // Wait for file size to be stable across 2 polls
       try {
         const stat = statSync(filePath);
-        if (stat.size === 0) continue; // Empty file, skip
+        if (stat.size === 0) continue;
       } catch {
-        continue; // File may have been moved by another process
+        continue;
       }
 
       // Mark as processed immediately to prevent double-processing
@@ -84,20 +85,15 @@ function poll(config: InboxConfig): void {
       log.info({ file }, "Inbox: new file detected");
 
       try {
-        const content = readFileSync(filePath, "utf-8");
-        // Strip BOM if present
-        const clean = content.charCodeAt(0) === 0xFEFF ? content.slice(1) : content;
-
-        const result = importFile(clean, file);
+        // Use importFromPath which handles both text and binary formats
+        const result = await importFromPath(filePath);
 
         if (result.errors.length > 0 && result.inserted === 0) {
-          // Failed — move to failed/
           moveFile(filePath, path.join(inboxPath, "failed"));
           log.warn({ file, errors: result.errors }, "Inbox: import failed, moved to failed/");
         } else {
-          // Success — move to processed/
           moveFile(filePath, path.join(inboxPath, "processed"));
-          log.info({ file, inserted: result.inserted, skipped: result.skipped, format: result.format }, "Inbox: import succeeded, moved to processed/");
+          log.info({ file, inserted: result.inserted, skipped: result.skipped, format: result.format, sourceFormat: result.source_format }, "Inbox: import succeeded, moved to processed/");
         }
       } catch (err: any) {
         log.error({ file, err: err.message }, "Inbox: error processing file");

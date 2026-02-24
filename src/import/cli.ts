@@ -6,30 +6,46 @@
  *   npx tsx src/import/cli.ts <path-to-file>          Import a single file
  *   npx tsx src/import/cli.ts --watch [inbox-path]     Watch folder for new files
  *
- * Supports: TraderSync CSV, Holly alert CSV, Holly trade CSV.
- * Format is auto-detected from file content.
+ * Supports: CSV, TSV, JSON, JSONL, XLSX, ZIP (auto-detected).
+ * Data types: TraderSync, Holly alerts/trades, journal entries, watchlists,
+ *             eval outcomes, screener snapshots, generic structured data.
  */
 
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { importFile } from "./router.js";
+import { importFile, importFromPath } from "./router.js";
 import { startInboxWatcher, stopInboxWatcher } from "./watcher.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_INBOX = path.join(__dirname, "../../data/inbox");
 
+const SUPPORTED_EXTENSIONS = new Set([
+  ".csv", ".tsv", ".tab",
+  ".json", ".jsonl", ".ndjson",
+  ".xlsx", ".xls", ".xlsm", ".ods",
+  ".zip",
+]);
+
 function printUsage(): void {
   console.log(`
 Usage:
-  npx tsx src/import/cli.ts <file.csv>             Import a single file
-  npx tsx src/import/cli.ts --watch [inbox-path]   Watch folder mode (default: data/inbox/)
-  npx tsx src/import/cli.ts --help                 Show this help
+  npx tsx src/import/cli.ts <file>                Import a single file
+  npx tsx src/import/cli.ts --watch [inbox-path]  Watch folder mode (default: data/inbox/)
+  npx tsx src/import/cli.ts --help                Show this help
 
-Supported formats (auto-detected):
-  - TraderSync trade_data.csv exports
-  - Trade Ideas Holly alert CSVs
-  - Trade Ideas Holly trade export CSVs
+Supported file formats:
+  Text:    .csv, .tsv, .json, .jsonl/.ndjson
+  Binary:  .xlsx/.xls/.xlsm/.ods, .zip (extracts contents)
+
+Supported data types (auto-detected):
+  - TraderSync trade exports
+  - Trade Ideas Holly alerts & trades
+  - Trade journal entries
+  - Symbol watchlists
+  - Eval outcomes
+  - Screener snapshots
+  - Generic structured data (MCP/API responses)
 `);
 }
 
@@ -42,15 +58,14 @@ if (args.length === 0 || args.includes("--help") || args.includes("-h")) {
 }
 
 if (args[0] === "--watch") {
-  // Watch mode
   const inboxPath = args[1] ? path.resolve(args[1]) : DEFAULT_INBOX;
 
   console.log(`Watching for files in: ${inboxPath}`);
+  console.log(`Supported: ${[...SUPPORTED_EXTENSIONS].join(", ")}`);
   console.log("Press Ctrl+C to stop.\n");
 
   startInboxWatcher({ inboxPath, pollIntervalMs: 3000 });
 
-  // Graceful shutdown
   const shutdown = () => {
     console.log("\nStopping watcher...");
     stopInboxWatcher();
@@ -67,35 +82,37 @@ if (args[0] === "--watch") {
   }
 
   const ext = path.extname(filePath).toLowerCase();
-  if (ext !== ".csv") {
-    console.error(`Unsupported file type: ${ext} (only .csv supported)`);
+  if (!SUPPORTED_EXTENSIONS.has(ext)) {
+    console.error(`Unsupported file type: ${ext}`);
+    console.error(`Supported: ${[...SUPPORTED_EXTENSIONS].join(", ")}`);
     process.exit(1);
   }
 
   console.log(`Importing: ${filePath}`);
 
-  let content = fs.readFileSync(filePath, "utf-8");
-  // Strip BOM
-  if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1);
+  // Use importFromPath which handles both text and binary
+  importFromPath(filePath).then((result) => {
+    console.log(`\nImport complete (ID: ${result.import_id})`);
+    console.log(`  Format:      ${result.format} (confidence: ${(result.confidence * 100).toFixed(0)}%)`);
+    console.log(`  Source:      ${result.source_format}`);
+    console.log(`  Detection:   ${result.detection_reason}`);
+    console.log(`  Inserted:    ${result.inserted}`);
+    console.log(`  Skipped:     ${result.skipped} (duplicates)`);
+    console.log(`  Duration:    ${result.duration_ms}ms`);
 
-  const result = importFile(content, path.basename(filePath));
-
-  console.log(`\nImport complete (ID: ${result.import_id})`);
-  console.log(`  Format:     ${result.format} (confidence: ${(result.confidence * 100).toFixed(0)}%)`);
-  console.log(`  Detection:  ${result.detection_reason}`);
-  console.log(`  Inserted:   ${result.inserted}`);
-  console.log(`  Skipped:    ${result.skipped} (duplicates)`);
-  console.log(`  Duration:   ${result.duration_ms}ms`);
-
-  if (result.errors.length > 0) {
-    console.log(`  Errors:     ${result.errors.length}`);
-    for (const err of result.errors.slice(0, 10)) {
-      console.log(`    - ${err}`);
+    if (result.errors.length > 0) {
+      console.log(`  Errors:      ${result.errors.length}`);
+      for (const err of result.errors.slice(0, 10)) {
+        console.log(`    - ${err}`);
+      }
+      if (result.errors.length > 10) {
+        console.log(`    ... and ${result.errors.length - 10} more`);
+      }
     }
-    if (result.errors.length > 10) {
-      console.log(`    ... and ${result.errors.length - 10} more`);
-    }
-  }
 
-  process.exit(result.errors.length > 0 && result.inserted === 0 ? 1 : 0);
+    process.exit(result.errors.length > 0 && result.inserted === 0 ? 1 : 0);
+  }).catch((err) => {
+    console.error(`Import failed: ${err.message}`);
+    process.exit(1);
+  });
 }
