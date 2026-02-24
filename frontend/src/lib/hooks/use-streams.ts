@@ -72,7 +72,7 @@ function useWebSocketStream(
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectCountRef = useRef(0);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
   const messageQueueRef = useRef<Map<number, StreamMessage>>(new Map());
   const lastProcessedSeqRef = useRef(-1);
   const [isConnected, setIsConnected] = useState(false);
@@ -213,7 +213,7 @@ function useWebSocketStream(
  * Automatically handles WebSocket connection, authentication, and reconnect.
  */
 export function useEvalStream(
-  onEvalCreated?: (eval: EvalCreatedMessage) => void,
+  onEvalCreated?: (evalMsg: EvalCreatedMessage) => void,
   options: UseStreamOptions = {},
   config: WebSocketConfig = {}
 ) {
