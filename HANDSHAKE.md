@@ -11,7 +11,7 @@ This file contains agent cards to copy-paste into each tool's UI. After pasting,
 | 4 | ChatGPT | Paste below in chat | ✅ Verified (correct role/constraints, acceptance test: nailed quadratic penalty rationale + "average hides the fight" failure mode) |
 | 5 | Copilot | `.github/agents/*.agent.md` (updated) | ✅ Verified (created copilot-instructions.md, 4 instruction files, updated ORCHESTRATION.md) |
 | 6 | Codex | Native: assign @codex on issue | ✅ Verified (3 PRs: edge metrics #385, Holly CSV #384, acceptance test passed) |
-| 7 | Jules | Paste below at jules.google | ⏳ Pending |
+| 7 | Jules | Paste below at jules.google | ✅ Verified (role acknowledged, JSDoc acceptance test passed on scorer.ts; CI failure was Mintlify docs.json env issue — not role violation) |
 | 8 | Qodo Gen | IDE extension (reads codebase) | ⏳ Pending |
 | 9 | Windsurf | Open project in Windsurf IDE | ⏳ Pending |
 | 10 | v0 | Paste component spec at v0.dev | ✅ Verified (cloned main branch, explored codebase, found existing TradeJournalCard — correct codebase-aware response, no duplicate code) |
