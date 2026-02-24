@@ -86,4 +86,8 @@ export const config = {
   inbox: {
     ttlDays: parseInt(process.env.INBOX_TTL_DAYS ?? "7", 10),
   },
+  importInbox: {
+    path: process.env.IMPORT_INBOX_PATH ?? "",
+    pollIntervalMs: parseInt(process.env.IMPORT_INBOX_POLL_MS ?? "5000", 10),
+  },
 };

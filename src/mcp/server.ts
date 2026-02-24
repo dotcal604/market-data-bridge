@@ -87,6 +87,8 @@ import { getRecentDriftAlerts } from "../eval/drift-alerts.js";
 import { computeEdgeReport, runWalkForward } from "../eval/edge-analytics.js";
 import { importTraderSyncCSV } from "../tradersync/importer.js";
 import { importHollyAlerts } from "../holly/importer.js";
+import { importFile } from "../import/router.js";
+import { getImportHistory, getImportById, getImportStats } from "../import/history.js";
 import { isAutoEvalEnabled, setAutoEvalEnabled, getAutoEvalStatus } from "../holly/auto-eval.js";
 import { buildProfiles, scanSymbols, getPreAlertCandidates } from "../holly/predictor.js";
 import { extractRules, runBacktest, getStrategyBreakdown } from "../holly/backtester.js";
@@ -1837,6 +1839,69 @@ export function createMcpServer(): McpServer {
       try {
         const result = importHollyAlerts(params.csv);
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: import_file ---
+  server.tool(
+    "import_file",
+    "Auto-detect and import a CSV file. Supports TraderSync, Holly alerts, and Holly trades. Pass the full file content as a string. The format is auto-detected from column headers. Returns import ID, detected format, inserted count, and any errors.",
+    {
+      csv: z.string().describe("Full CSV file content to import"),
+      file_name: z.string().optional().default("upload.csv").describe("Original file name (for audit trail)"),
+    },
+    async (params) => {
+      try {
+        const result = importFile(params.csv, params.file_name);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: import_history ---
+  server.tool(
+    "import_history",
+    "View recent file import history — shows all imports with status, format, row counts, and timing.",
+    {
+      limit: z.number().optional().default(20).describe("Max results (default: 20)"),
+      status: z.enum(["completed", "failed", "processing"]).optional().describe("Filter by status"),
+      format: z.enum(["tradersync", "holly_alerts", "holly_trades", "unknown"]).optional().describe("Filter by detected format"),
+    },
+    async (params) => {
+      try {
+        const history = getImportHistory({
+          limit: params.limit,
+          status: params.status,
+          format: params.format,
+        });
+        return { content: [{ type: "text", text: JSON.stringify({ count: history.length, imports: history }, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: import_status ---
+  server.tool(
+    "import_status",
+    "Get details for a specific import by ID, or aggregate import statistics if no ID provided.",
+    {
+      import_id: z.string().optional().describe("Specific import ID to look up. If omitted, returns aggregate stats."),
+    },
+    async (params) => {
+      try {
+        if (params.import_id) {
+          const record = getImportById(params.import_id);
+          if (!record) return { content: [{ type: "text", text: "Import not found" }], isError: true };
+          return { content: [{ type: "text", text: JSON.stringify(record, null, 2) }] };
+        }
+        const stats = getImportStats();
+        return { content: [{ type: "text", text: JSON.stringify(stats, null, 2) }] };
       } catch (e: any) {
         return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
       }

@@ -17,6 +17,7 @@ import { initWeights } from "./eval/ensemble/weights.js";
 import { initRecalibration } from "./eval/ensemble/recalibration-hook.js";
 import { unsubscribeAll } from "./ibkr/subscriptions.js";
 import { startHollyWatcher, stopHollyWatcher } from "./holly/watcher.js";
+import { startInboxWatcher, stopInboxWatcher } from "./import/watcher.js";
 import { startDivoomUpdater, stopDivoomUpdater } from "./divoom/updater.js";
 import { config } from "./config.js";
 import { validateConfig } from "./config-validator.js";
@@ -139,6 +140,10 @@ async function main() {
   // MCP clients are lean — no file watchers or display drivers.
   if (mode !== "mcp") {
     startHollyWatcher();
+    startInboxWatcher({
+      inboxPath: config.importInbox.path,
+      pollIntervalMs: config.importInbox.pollIntervalMs,
+    });
     await startDivoomUpdater();
   }
 
@@ -182,6 +187,7 @@ async function main() {
     logger.info("Shutting down...");
     setReady(false);
     stopHollyWatcher();
+    stopInboxWatcher();
     await stopDivoomUpdater();
     stopScheduler();
     stopMetrics();

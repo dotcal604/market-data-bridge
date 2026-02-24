@@ -844,6 +844,65 @@ evalRouter.get("/tradersync/trades", (req, res) => {
   }
 });
 
+// ── File Import Pipeline ─────────────────────────────────────────────────
+
+import { importFile } from "../import/router.js";
+import { getImportHistory, getImportById, getImportStats } from "../import/history.js";
+
+// POST /import — auto-detect format and import CSV content
+evalRouter.post("/import", (req, res) => {
+  try {
+    const csv = req.body?.csv;
+    const fileName = req.body?.file_name ?? "upload.csv";
+    if (!csv || typeof csv !== "string") {
+      res.status(400).json({ error: "Request body must include 'csv' string field with file content" });
+      return;
+    }
+    const result = importFile(csv, fileName);
+    logger.info({ importId: result.import_id, format: result.format, inserted: result.inserted }, "[Import] Complete");
+    res.json(result);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /import/history — list recent imports
+evalRouter.get("/import/history", (req, res) => {
+  try {
+    const history = getImportHistory({
+      limit: req.query.limit ? Number(req.query.limit) : undefined,
+      status: typeof req.query.status === "string" ? req.query.status : undefined,
+      format: typeof req.query.format === "string" ? req.query.format : undefined,
+    });
+    res.json({ count: history.length, imports: history });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /import/stats — aggregate import statistics
+evalRouter.get("/import/stats", (_req, res) => {
+  try {
+    res.json(getImportStats());
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /import/:id — single import details
+evalRouter.get("/import/:id", (req, res) => {
+  try {
+    const record = getImportById(req.params.id);
+    if (!record) {
+      res.status(404).json({ error: "Import not found" });
+      return;
+    }
+    res.json(record);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // GET /reasoning/:evalId — structured reasoning for an evaluation
 evalRouter.get("/reasoning/:evalId", (req, res) => {
   try {
