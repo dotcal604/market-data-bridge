@@ -1,19 +1,35 @@
 /**
- * Widget: Indices — Major index quotes + VIX
+ * Widget: Indices — Major index quotes + VIX + SPY sparkline
  *
- * Shows SPY, QQQ, DIA, IWM with price and change %, plus VIX
- * with fear-level coloring. Fetches all quotes in parallel.
+ * Renders as ONE multi-line Text element (panel-style):
  *
- * Uses 5 Text slots (4 indices + 1 VIX) for real-time feel.
+ *   "████ SPY ▲+1.24%   QQQ ▲+1.73%"
+ *   "     DIA ▲+0.57%   IWM ▲+0.45%"
+ *   "     VIX 18.4⚡  ⡀⡄⡀⣄⡄⡀⣤⣴⣤⣠"
+ *
+ * Uses \n to separate rows within a single Text element.
+ * Height = PANEL_INDICES_H (280px) to accommodate 3 lines at large font.
+ *
+ * Budget: 1 Text slot (was 2 — freeing a slot for footer widget).
  */
 
 import type { Widget, WidgetContext, WidgetOutput, SlotCost } from "./types.js";
-import { textEl, DATA_SIZE, DATA_H, SECTION_GAP } from "./helpers.js";
-import { C, changeColor, fmtPrice, fmtPct, smartQuote } from "../screens.js";
+import { textEl, brailleSparkline, PANEL_INDICES_H } from "./helpers.js";
+import { C, changeColor, fmtPct, smartQuote } from "../screens.js";
+import { getHistoricalBars } from "../../providers/yahoo.js";
 import { registerWidget } from "./registry.js";
 
 const INDEX_SYMBOLS = ["SPY", "QQQ", "DIA", "IWM"] as const;
 const VIX_SYMBOL = "^VIX";
+
+const FONT_SIZE = 52;
+const SPARKLINE_WIDTH = 12; // braille chars after VIX label
+
+function vixLabel(level: number): string {
+  if (level > 25) return `VIX ${Math.round(level)}⚡⚡`;
+  if (level > 20) return `VIX ${Math.round(level)}⚡`;
+  return `VIX ${Math.round(level)}`;
+}
 
 function vixColor(level: number): string {
   if (level > 25) return C.red;
@@ -22,65 +38,74 @@ function vixColor(level: number): string {
   return C.green;
 }
 
+function arrow(pct: number | null): string {
+  if (pct === null) return "·";
+  return pct >= 0 ? "▲" : "▼";
+}
+
 export const indicesWidget: Widget = {
   id: "indices",
   name: "Major Indices",
   renderMode: "text",
 
   slotCost(_ctx: WidgetContext): SlotCost {
-    return { text: 5, image: 0, netdata: 0 };
+    // Now 1 Text slot (was 2) — collapsed into a multi-line panel
+    return { text: 1, image: 0, netdata: 0 };
   },
 
   getHeight(_ctx: WidgetContext): number {
-    return 5 * DATA_H + SECTION_GAP;
+    return PANEL_INDICES_H;
   },
 
   async render(
     ctx: WidgetContext,
-    origin: { y: number; firstId: number },
+    origin: { y: number; firstId: number; height: number },
   ): Promise<WidgetOutput> {
-    // Fetch all 5 quotes in parallel
-    const [spyQ, qqqQ, diaQ, iwmQ, vixQ] = await Promise.all([
+    const [spyQ, qqqQ, diaQ, iwmQ, vixQ, spyBars] = await Promise.all([
       smartQuote(INDEX_SYMBOLS[0]).catch(() => null),
       smartQuote(INDEX_SYMBOLS[1]).catch(() => null),
       smartQuote(INDEX_SYMBOLS[2]).catch(() => null),
       smartQuote(INDEX_SYMBOLS[3]).catch(() => null),
       smartQuote(VIX_SYMBOL).catch(() => null),
+      getHistoricalBars("SPY", "1mo", "1d").catch(() => []),
     ]);
 
-    const quotes = [
-      { symbol: "SPY", q: spyQ },
-      { symbol: "QQQ", q: qqqQ },
-      { symbol: "DIA", q: diaQ },
-      { symbol: "IWM", q: iwmQ },
-    ];
+    // ── Line 1: SPY + QQQ ─────────────────────────────────────────────
+    const spyArrow = arrow(spyQ?.changePercent ?? null);
+    const qqqArrow = arrow(qqqQ?.changePercent ?? null);
+    const line1 = spyQ && qqqQ
+      ? `████ SPY ${spyArrow}${fmtPct(spyQ.changePercent)}  QQQ ${qqqArrow}${fmtPct(qqqQ.changePercent)}`
+      : `████ SPY --  QQQ --`;
 
-    const elements = [];
-    let id = origin.firstId;
-    let y = origin.y;
+    // ── Line 2: DIA + IWM ─────────────────────────────────────────────
+    const diaArrow = arrow(diaQ?.changePercent ?? null);
+    const iwmArrow = arrow(iwmQ?.changePercent ?? null);
+    const line2 = diaQ && iwmQ
+      ? `     DIA ${diaArrow}${fmtPct(diaQ.changePercent)}  IWM ${iwmArrow}${fmtPct(iwmQ.changePercent)}`
+      : `     DIA --  IWM --`;
 
-    // Index rows
-    for (const { symbol, q } of quotes) {
-      if (q) {
-        const text = `${symbol.padEnd(5)} $${fmtPrice(q.last)}  ${fmtPct(q.changePercent)}`;
-        const color = changeColor(q.changePercent);
-        elements.push(textEl(id, y, text, color, { fontSize: DATA_SIZE }));
-      } else {
-        elements.push(textEl(id, y, `${symbol.padEnd(5)} --  --`, C.gray, { fontSize: DATA_SIZE }));
-      }
-      id++;
-      y += DATA_H;
-    }
+    // ── Line 3: VIX + braille sparkline ───────────────────────────────
+    const vixPart = vixQ ? vixLabel(vixQ.last) : "VIX --";
+    const sparkline = spyBars.length > 2
+      ? "  " + brailleSparkline(spyBars.map((b) => b.close), SPARKLINE_WIDTH)
+      : "";
+    const line3 = `     ${vixPart}${sparkline}`;
 
-    // VIX row
-    if (vixQ) {
-      const text = `VIX   $${fmtPrice(vixQ.last)}  ${fmtPct(vixQ.changePercent)}`;
-      elements.push(textEl(id, y, text, vixColor(vixQ.last), { fontSize: DATA_SIZE }));
-    } else {
-      elements.push(textEl(id, y, "VIX   --  --", C.gray, { fontSize: DATA_SIZE }));
-    }
+    // Color driven by SPY direction; VIX level overrides for danger
+    const mainColor = vixQ && vixQ.last > 25
+      ? vixColor(vixQ.last)
+      : spyQ ? changeColor(spyQ.changePercent) : C.gray;
 
-    return { elements };
+    const text = `${line1}\n${line2}\n${line3}`;
+
+    return {
+      elements: [
+        textEl(origin.firstId, origin.y, text, mainColor, {
+          height: origin.height,
+          fontSize: FONT_SIZE,
+        }),
+      ],
+    };
   },
 };
 

@@ -41,7 +41,7 @@ export const sectorsWidget: Widget = {
 
   async render(
     ctx: WidgetContext,
-    origin: { y: number; firstId: number },
+    origin: { y: number; firstId: number; height: number },
   ): Promise<WidgetOutput> {
     if (ctx.chartBaseUrl) {
       // Single image element — the heatmap chart has its own title

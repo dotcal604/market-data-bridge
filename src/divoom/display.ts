@@ -96,12 +96,28 @@ export class TimesFrameDisplay {
    * All elements (Text, Image, Time, etc.) are positioned on the 800x1280 canvas.
    */
   async enterCustomMode(elements: DisplayElement[], backgroundUrl = ""): Promise<void> {
-    await this.sendCommand("Device/EnterCustomControlMode", {
+    // Log element summary for diagnostics
+    const summary = elements.map((e) => ({
+      id: e.ID,
+      type: e.Type,
+      y: e.StartY,
+      h: e.Height,
+      ...(e.Type === "Image" ? { url: e.Url?.split("/").pop() } : {}),
+      ...(e.Type === "Text" ? { text: e.TextMessage?.slice(0, 30) } : {}),
+    }));
+    log.info({ elementCount: elements.length, elements: summary }, "Sending DispList to device");
+
+    const response = await this.sendCommand("Device/EnterCustomControlMode", {
       BackgroudImageAddr: backgroundUrl,
       DispList: elements,
     });
+
+    // Log device response (may contain error_code)
+    if (response) {
+      log.info({ response }, "Device response to EnterCustomControlMode");
+    }
+
     this.customMode = true;
-    log.debug({ elementCount: elements.length }, "Entered custom control mode");
   }
 
   /**

@@ -515,7 +515,9 @@ export interface DivoomStatusData {
   chartBaseUrl: string;
 }
 
-export interface DivoomPreviewData {
+/** Legacy section-based preview (from monolithic layout engine) */
+export interface DivoomPreviewSections {
+  type: "sections";
   header: DivoomTextRow;
   indices: DivoomTextRow[];
   vix: DivoomTextRow | null;
@@ -525,3 +527,24 @@ export interface DivoomPreviewData {
   news: DivoomSection;
   indicators: DivoomSection;
 }
+
+/** Element-based preview (from widget engine) */
+export interface DivoomPreviewElement {
+  id: number;
+  y: number;
+  height: number;
+  text: string;
+  color: string;
+  /** Source widget ID (e.g. "header", "indices", "portfolio") for semiotic styling.
+   *  Optional — inferred from `rendered[]` order when backend hasn't deployed engine changes. */
+  widget?: string;
+}
+
+export interface DivoomPreviewElements {
+  type: "elements";
+  elements: DivoomPreviewElement[];
+  rendered: string[];
+  canvasHeight: number;
+}
+
+export type DivoomPreviewData = DivoomPreviewSections | DivoomPreviewElements;

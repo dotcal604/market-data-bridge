@@ -25,7 +25,7 @@ import { logger } from "../logging.js";
 
 // Widget engine (feature-flagged via DIVOOM_USE_WIDGET_ENGINE)
 import { renderLayout, CANVAS_W, PAD_X, CONTENT_W } from "./widgets/index.js";
-import type { WidgetContext } from "./widgets/index.js";
+import type { WidgetContext, EngineResult } from "./widgets/index.js";
 import { getLayoutForSession } from "./widgets/layouts.js";
 // Side-effect import: registers all widgets in the registry
 import "./widgets/header.js";
@@ -35,6 +35,7 @@ import "./widgets/sectors.js";
 import "./widgets/movers.js";
 import "./widgets/portfolio.js";
 import "./widgets/news.js";
+import "./widgets/footer.js";
 import "./widgets/indicators.js";
 import "./widgets/volume-bars.js";
 
@@ -45,6 +46,7 @@ let display: TimesFrameDisplay | null = null;
 let lastSession = "";
 let lastIbkrConnected = false;
 let lastDashboardData: DashboardData | null = null;
+let lastEngineResult: EngineResult | null = null;
 let lastRefreshAt: string | null = null;
 
 /**
@@ -125,6 +127,8 @@ async function refreshWidgetEngine(): Promise<void> {
   };
 
   const result = await renderLayout(layout, ctx);
+  lastEngineResult = result;
+  lastRefreshAt = new Date().toISOString();
 
   if (result.elements.length === 0) {
     log.warn({ layout: layout.name, skipped: result.skipped }, "Widget engine produced no elements");
@@ -239,6 +243,7 @@ export interface DivoomState {
   lastRefreshAt: string | null;
   chartBaseUrl: string;
   preview: DashboardData | null;
+  enginePreview: EngineResult | null;
 }
 
 export function getDivoomState(): DivoomState {
@@ -255,6 +260,7 @@ export function getDivoomState(): DivoomState {
     lastRefreshAt,
     chartBaseUrl: config.divoom.chartBaseUrl,
     preview: lastDashboardData,
+    enginePreview: lastEngineResult,
   };
 }
 

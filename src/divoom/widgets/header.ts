@@ -8,7 +8,7 @@
  */
 
 import type { Widget, WidgetContext, WidgetOutput, SlotCost } from "./types.js";
-import { textEl, HEADER_SIZE, HEADER_H, SECTION_GAP } from "./helpers.js";
+import { textEl, HEADER_SIZE, PANEL_HEADER_H } from "./helpers.js";
 import { C, sessionLabel } from "../screens.js";
 import { registerWidget } from "./registry.js";
 
@@ -32,12 +32,12 @@ export const headerWidget: Widget = {
   },
 
   getHeight(_ctx: WidgetContext): number {
-    return HEADER_H + SECTION_GAP;
+    return PANEL_HEADER_H;
   },
 
   async render(
     ctx: WidgetContext,
-    origin: { y: number; firstId: number },
+    origin: { y: number; firstId: number; height: number },
   ): Promise<WidgetOutput> {
     const label = sessionLabel(ctx.session);
     const mode = ctx.ibkrConnected ? "LIVE" : "DEMO";
@@ -57,7 +57,7 @@ export const headerWidget: Widget = {
         textEl(origin.firstId, origin.y, text, color, {
           align: 1,
           fontSize: HEADER_SIZE,
-          height: HEADER_H,
+          height: origin.height,
         }),
       ],
     };

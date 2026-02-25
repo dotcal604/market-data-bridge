@@ -17,8 +17,12 @@ import { createMcpServer } from "../mcp/server.js";
 import { initWebSocket } from "../ws/server.js";
 import { getMetrics, getRecentIncidents } from "../ops/metrics.js";
 import { isReady } from "../ops/readiness.js";
-import { getCachedChart } from "../divoom/charts.js";
+import { getCachedChart, getPlaceholderPng } from "../divoom/charts.js";
 import { getDivoomState, getDivoomDisplay, forceRefresh } from "../divoom/updater.js";
+import { renderLayout, CANVAS_W, PAD_X, CONTENT_W } from "../divoom/widgets/index.js";
+import type { WidgetContext } from "../divoom/widgets/index.js";
+import { getLayoutForSession } from "../divoom/widgets/layouts.js";
+import { currentSession } from "../divoom/screens.js";
 
 function apiKeyAuth(req: Request, res: Response, next: NextFunction): void {
   const key = config.rest.apiKey;
@@ -276,6 +280,7 @@ export function createApp(): express.Express {
       "spy-sparkline", "spy-candles", "sector-heatmap",
       "pnl-curve", "rsi-gauge", "vix-gauge",
       "volume-bars", "allocation",
+      "indices-table", "movers-table", "news-panel", "portfolio-summary",
     ];
     if (!validTypes.includes(chartType)) {
       res.status(404).json({ error: `Unknown chart type: ${chartType}` });
@@ -284,14 +289,10 @@ export function createApp(): express.Express {
 
     const buffer = getCachedChart(chartType);
     if (!buffer) {
-      // Return a transparent 1x1 PNG if no chart cached yet
-      const emptyPng = Buffer.from(
-        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQIHWNgAAIABAABAAH/VNwAAAAASUVORK5CYII=",
-        "base64",
-      );
+      // Return an opaque dark 1x1 PNG — device does NOT composite alpha
       res.set("Content-Type", "image/png");
       res.set("Cache-Control", "no-cache");
-      res.send(emptyPng);
+      res.send(getPlaceholderPng());
       return;
     }
 
@@ -311,11 +312,30 @@ export function createApp(): express.Express {
 
   app.get("/api/divoom/preview", apiKeyAuth, (_req: Request, res: Response) => {
     const state = getDivoomState();
+    // Widget engine provides element-based preview; legacy provides section-based
+    if (state.enginePreview) {
+      res.json({
+        data: {
+          type: "elements" as const,
+          elements: state.enginePreview.elements.map((el, idx) => ({
+            id: el.ID,
+            y: el.StartY,
+            height: el.Height,
+            text: el.TextMessage ?? "",
+            color: el.FontColor ?? "#FFFFFF",
+            widget: state.enginePreview!.elementWidgets[idx] ?? "unknown",
+          })),
+          rendered: state.enginePreview.rendered,
+          canvasHeight: 1280,
+        },
+      });
+      return;
+    }
     if (!state.preview) {
       res.json({ data: null });
       return;
     }
-    res.json({ data: state.preview });
+    res.json({ data: { type: "sections" as const, ...state.preview } });
   });
 
   app.post("/api/divoom/brightness", apiKeyAuth, async (req: Request, res: Response) => {
@@ -343,6 +363,42 @@ export function createApp(): express.Express {
       res.json({ data: { message: result } });
     } catch (err) {
       res.status(500).json({ error: "Failed to refresh dashboard" });
+    }
+  });
+
+  // Debug: inspect widget engine output without sending to device
+  app.get("/api/divoom/debug/elements", apiKeyAuth, async (_req: Request, res: Response) => {
+    try {
+      const session = currentSession();
+      const layout = getLayoutForSession(session);
+      const ctx: WidgetContext = {
+        session,
+        ibkrConnected: isConnected(),
+        chartBaseUrl: config.divoom.chartBaseUrl || undefined,
+        canvas: { width: CANVAS_W, padX: PAD_X, contentWidth: CONTENT_W },
+      };
+      const result = await renderLayout(layout, ctx);
+      res.json({
+        data: {
+          session,
+          layout: layout.name,
+          counts: result.counts,
+          rendered: result.rendered,
+          skipped: result.skipped,
+          degraded: result.degraded,
+          elementCount: result.elements.length,
+          elements: result.elements.map((e) => ({
+            ID: e.ID,
+            Type: e.Type,
+            StartY: e.StartY,
+            Height: e.Height,
+            ...(e.Type === "Image" ? { Url: e.Url } : {}),
+            ...(e.Type === "Text" ? { TextMessage: e.TextMessage?.slice(0, 60), FontColor: e.FontColor } : {}),
+          })),
+        },
+      });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
     }
   });
 

@@ -19,10 +19,15 @@ export interface SlotCost {
 /**
  * Hard device limits for CustomControlMode.
  * Exceeding these will cause misrendering or silent element drops.
+ *
+ * IMPORTANT: TimesFrame (DeviceType "Frame") silently ignores Image elements —
+ * the device accepts them (ReturnCode: 0) but never fetches the URL or renders
+ * anything. 30+ diagnostic tests confirmed zero HTTP requests for image URLs.
+ * Image budget is set to 0 to force all widgets into text-only mode.
  */
 export const DEVICE_BUDGET: Readonly<SlotCost> = {
   text: 6,
-  image: 10,
+  image: 0, // TimesFrame ignores Image elements entirely — text-only device
   netdata: 6,
 };
 
@@ -72,12 +77,12 @@ export interface Widget {
 
   /**
    * Async — fetch data, produce positioned DisplayElement[].
-   * @param ctx   - shared context (session, ibkr, canvas)
-   * @param origin - { y: starting Y position, firstId: first element ID in this widget's block }
+   * @param ctx    - shared context (session, ibkr, canvas)
+   * @param origin - { y: starting Y, firstId: element ID, height: allocated px (≥ getHeight minimum) }
    */
   render(
     ctx: WidgetContext,
-    origin: { y: number; firstId: number },
+    origin: { y: number; firstId: number; height: number },
   ): Promise<WidgetOutput>;
 
   /**
@@ -87,7 +92,7 @@ export interface Widget {
    */
   renderAsImage?(
     ctx: WidgetContext,
-    origin: { y: number; firstId: number },
+    origin: { y: number; firstId: number; height: number },
   ): Promise<WidgetOutput>;
 }
 

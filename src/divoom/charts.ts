@@ -41,11 +41,18 @@ let chartRenderer: ChartJSNodeCanvas | null = null;
 function getChartRenderer(width: number, height: number): ChartJSNodeCanvas {
   // Create new renderer for requested dimensions
   // ChartJSNodeCanvas caches internally
+  // IMPORTANT: Divoom device does NOT composite alpha — must use opaque background
   return new ChartJSNodeCanvas({
     width,
     height,
-    backgroundColour: "transparent",
+    backgroundColour: COLORS.bg,
   });
+}
+
+/** Fill canvas with opaque dark background — Divoom device ignores alpha channel */
+function fillBackground(ctx: ReturnType<Canvas["getContext"]>, w: number, h: number): void {
+  ctx.fillStyle = COLORS.bg;
+  ctx.fillRect(0, 0, w, h);
 }
 
 // ─── Types ──────────────────────────────────────────────────
@@ -114,6 +121,7 @@ export async function renderSparkline(
 
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext("2d");
+  fillBackground(ctx, width, height);
 
   if (data.length < 2) {
     return canvas.toBuffer("image/png");
@@ -195,6 +203,7 @@ export async function renderGauge(
 
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext("2d");
+  fillBackground(ctx, width, height);
 
   const cx = width / 2;
   const cy = height * 0.85;
@@ -287,6 +296,7 @@ export async function renderCandlestick(
 
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext("2d");
+  fillBackground(ctx, width, height);
 
   if (candles.length === 0) return canvas.toBuffer("image/png");
 
@@ -359,6 +369,7 @@ export async function renderHeatmap(
 
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext("2d");
+  fillBackground(ctx, width, height);
 
   if (cells.length === 0) return canvas.toBuffer("image/png");
 
@@ -415,6 +426,7 @@ export async function renderVolumeBars(
 
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext("2d");
+  fillBackground(ctx, width, height);
 
   if (data.length === 0) return canvas.toBuffer("image/png");
 
@@ -549,6 +561,93 @@ export async function renderAllocation(
   return Buffer.from(buf);
 }
 
+// ─── 8. Data Table Image (@napi-rs/canvas) ──────────────────
+
+export interface DataTableRow {
+  text: string;    // full row string (pre-formatted, e.g. "SPY   $595.23  +1.23%")
+  color: string;   // hex color for this row
+}
+
+/**
+ * Render a compact HUD-style data table as a PNG image.
+ * Used by Image-mode widgets (indices, movers, portfolio) to stay
+ * within the device's 6-Text budget.
+ */
+export async function renderDataTable(
+  title: string | null,
+  rows: DataTableRow[],
+  options: {
+    width?: number;
+    rowHeight?: number;
+    titleHeight?: number;
+  } = {},
+): Promise<Buffer> {
+  const { width = 768, rowHeight = 34, titleHeight = 30 } = options;
+  const height = (title ? titleHeight : 0) + rows.length * rowHeight;
+
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext("2d");
+  fillBackground(ctx, width, height);
+
+  let y = 0;
+
+  if (title) {
+    ctx.font = "bold 20px sans-serif";
+    ctx.fillStyle = COLORS.cyan;
+    ctx.textBaseline = "middle";
+    ctx.fillText(title, 16, titleHeight / 2);
+    y += titleHeight;
+  }
+
+  ctx.font = "20px monospace";
+  ctx.textBaseline = "middle";
+  for (const row of rows) {
+    ctx.fillStyle = row.color;
+    ctx.fillText(row.text, 16, y + rowHeight / 2);
+    y += rowHeight;
+  }
+
+  return canvas.toBuffer("image/png");
+}
+
+// ─── 9. News Panel Image (@napi-rs/canvas) ──────────────────
+
+/**
+ * Render up to 3 news headlines as a PNG image.
+ * Text wraps at width; long headlines are truncated.
+ */
+export async function renderNewsPanel(
+  title: string,
+  headlines: string[],
+  options: {
+    width?: number;
+    rowHeight?: number;
+    titleHeight?: number;
+  } = {},
+): Promise<Buffer> {
+  const { width = 768, rowHeight = 30, titleHeight = 30 } = options;
+  const height = titleHeight + headlines.length * rowHeight;
+
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext("2d");
+  fillBackground(ctx, width, height);
+
+  ctx.font = "bold 20px sans-serif";
+  ctx.fillStyle = COLORS.cyan;
+  ctx.textBaseline = "middle";
+  ctx.fillText(title, 16, titleHeight / 2);
+
+  ctx.font = "16px sans-serif";
+  let y = titleHeight;
+  for (const headline of headlines) {
+    ctx.fillStyle = headline.includes("No news") ? COLORS.gray : COLORS.white;
+    ctx.fillText(headline, 16, y + rowHeight / 2);
+    y += rowHeight;
+  }
+
+  return canvas.toBuffer("image/png");
+}
+
 // ─── Chart Cache ────────────────────────────────────────────
 
 interface CacheEntry {
@@ -575,6 +674,19 @@ export function setCachedChart(key: string, buffer: Buffer): void {
 
 export function clearChartCache(): void {
   chartCache.clear();
+}
+
+/** Opaque dark 1x1 placeholder PNG for cache misses (device ignores alpha) */
+let _placeholderPng: Buffer | null = null;
+export function getPlaceholderPng(): Buffer {
+  if (!_placeholderPng) {
+    const canvas = createCanvas(1, 1);
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = COLORS.bg;
+    ctx.fillRect(0, 0, 1, 1);
+    _placeholderPng = canvas.toBuffer("image/png");
+  }
+  return _placeholderPng;
 }
 
 // ─── Render All Dashboard Charts ────────────────────────────

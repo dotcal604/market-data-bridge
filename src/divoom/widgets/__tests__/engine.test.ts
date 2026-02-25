@@ -64,8 +64,8 @@ function mockWidget(opts: {
   id: string;
   cost: SlotCost;
   height: number;
-  elements: (origin: { y: number; firstId: number }) => DisplayElement[];
-  renderAsImage?: (origin: { y: number; firstId: number }) => DisplayElement[];
+  elements: (origin: { y: number; firstId: number; height: number }) => DisplayElement[];
+  renderAsImage?: (origin: { y: number; firstId: number; height: number }) => DisplayElement[];
   shouldFail?: boolean;
 }): Widget {
   const w: Widget = {
@@ -145,10 +145,12 @@ describe("Widget Engine — renderLayout()", () => {
       CTX,
     );
 
-    // First widget starts at y=20 (top padding)
-    expect(result.elements[0].StartY).toBe(20);
-    // Second widget starts at y=20+60=80
-    expect(result.elements[1].StartY).toBe(80);
+    // First widget starts at y=8 (top padding)
+    expect(result.elements[0].StartY).toBe(8);
+    // Second widget starts at y=8+allocated_height (flex distributes remaining canvas)
+    // Both are flex widgets so they share 1280-8=1272px proportionally
+    // tall gets 60/(60+30) * 1272 = 848, short gets 30/90 * 1272 = 424
+    expect(result.elements[1].StartY).toBe(8 + 848);
   });
 
   it("assigns ID blocks with ID_BLOCK_SIZE spacing", async () => {
@@ -171,9 +173,9 @@ describe("Widget Engine — renderLayout()", () => {
       CTX,
     );
 
-    // Widget 0 gets firstId = (0+1)*20 = 20, Widget 1 gets firstId = (1+1)*20 = 40
-    expect(result.elements[0].ID).toBe(20);
-    expect(result.elements[1].ID).toBe(40);
+    // Engine renumbers elements sequentially in Step 6: IDs become 1, 2, 3, ...
+    expect(result.elements[0].ID).toBe(1);
+    expect(result.elements[1].ID).toBe(2);
   });
 
   // ── Unknown Widget IDs ─────────────────────────────────────

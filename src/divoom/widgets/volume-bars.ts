@@ -27,7 +27,7 @@ export const volumeBarsWidget: Widget = {
 
   async render(
     ctx: WidgetContext,
-    origin: { y: number; firstId: number },
+    origin: { y: number; firstId: number; height: number },
   ): Promise<WidgetOutput> {
     if (ctx.chartBaseUrl === undefined) {
       return { elements: [] };

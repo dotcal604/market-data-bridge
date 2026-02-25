@@ -65,7 +65,7 @@ export const indicatorsWidget: Widget = {
 
   async render(
     ctx: WidgetContext,
-    origin: { y: number; firstId: number },
+    origin: { y: number; firstId: number; height: number },
   ): Promise<WidgetOutput> {
     const elements = [];
     let id = origin.firstId;

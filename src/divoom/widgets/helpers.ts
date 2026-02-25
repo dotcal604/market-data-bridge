@@ -21,11 +21,21 @@ export const HEADER_SIZE = 36;
 export const SECTION_HEADER_SIZE = 24;
 export const DATA_SIZE = 30;
 
-// Row heights
+// Row heights (single-line)
 export const HEADER_H = 44;
 export const SECTION_HEADER_H = 30;
 export const DATA_H = 34;
 export const SECTION_GAP = 12;
+
+// Multi-line panel heights (newline-based sections filling the 1280px canvas)
+// Each widget occupies a tall panel rendered as one Text element with \n separators.
+// Layout math: 8 top-pad + 80 header + 280 indices + 200 portfolio + 280 movers + 280 news + 120 footer = 1248px
+export const PANEL_HEADER_H = 80;    // session badge, 1 line
+export const PANEL_INDICES_H = 280;  // 3 lines: SPY/QQQ, DIA/IWM/VIX, sparkline label
+export const PANEL_PORTFOLIO_H = 200; // 2 lines: P&L, account details
+export const PANEL_MOVERS_H = 280;   // 3 lines: header + 2 movers
+export const PANEL_NEWS_H = 280;     // 3 headlines
+export const PANEL_FOOTER_H = 120;   // 1-2 lines: source/status
 
 // Chart image dimensions
 export const CHART_W = CONTENT_W;
@@ -75,6 +85,58 @@ export function textEl(
     BgColor: BG_TRANSPARENT,
     TextMessage: text,
   };
+}
+
+// ─── Braille Sparkline ──────────────────────────────────────
+
+/**
+ * Render a numeric series as a braille sparkline string.
+ *
+ * Each braille character (U+2800–U+28FF) is a 2×4 dot grid.
+ * We use the left column only (dots 1,2,3,7 = bits 0,1,2,6)
+ * to create a single-column-per-character mini chart.
+ *
+ * @param values  - Array of numbers (e.g. closing prices)
+ * @param width   - Number of braille characters to output (default: 20)
+ * @returns A string of braille characters representing the sparkline
+ *
+ * @example
+ * brailleSparkline([100, 102, 98, 105, 103, 101, 107, 110])
+ * // → "⡀⡄⡀⣄⡄⡀⣤⣴" (visual: price going up overall)
+ */
+export function brailleSparkline(values: number[], width = 20): string {
+  if (values.length === 0) return "";
+
+  // Resample to target width using nearest-neighbor
+  const resampled: number[] = [];
+  for (let i = 0; i < width; i++) {
+    const srcIdx = Math.round((i / (width - 1)) * (values.length - 1));
+    resampled.push(values[Math.min(srcIdx, values.length - 1)]);
+  }
+
+  const min = Math.min(...resampled);
+  const max = Math.max(...resampled);
+  const range = max - min || 1; // avoid division by zero
+
+  // Braille left-column dot positions (bottom to top): dots 7,3,2,1
+  // In the Unicode braille encoding: dot 1=bit0, dot 2=bit1, dot 3=bit2, dot 7=bit6
+  // We fill from bottom: level 0=none, 1=dot7, 2=dot7+3, 3=dot7+3+2, 4=dot7+3+2+1
+  const dotBits = [
+    0,                                  // level 0: empty
+    (1 << 6),                           // level 1: dot 7 only (bottom)
+    (1 << 6) | (1 << 2),               // level 2: dots 7+3
+    (1 << 6) | (1 << 2) | (1 << 1),   // level 3: dots 7+3+2
+    (1 << 6) | (1 << 2) | (1 << 1) | (1 << 0), // level 4: dots 7+3+2+1 (full)
+  ];
+
+  let result = "";
+  for (const val of resampled) {
+    const normalized = (val - min) / range; // 0..1
+    const level = Math.round(normalized * 4); // 0..4
+    result += String.fromCharCode(0x2800 + dotBits[level]);
+  }
+
+  return result;
 }
 
 /**

@@ -1,10 +1,19 @@
 /**
  * Widget System — Per-Session Layout Configs
  *
- * Each market session gets a tuned widget list.
- * Widgets that don't apply (e.g. portfolio when IBKR disconnected)
- * self-opt-out via getHeight() === 0, but session-specific layouts
- * keep things intentional.
+ * TimesFrame (DeviceType "Frame") only renders Text elements — Image elements
+ * are silently ignored. All layouts use only text-capable widgets:
+ *
+ *   header    → 1 Text (session badge)           80px
+ *   indices   → 1 Text (3-line panel)           280px  ← was 2T, now 1T
+ *   movers    → 1 Text (3-line panel)           280px
+ *   portfolio → 1 Text (connected) or 0         200px  ← opts out when disconnected
+ *   news      → 1 Text (3 headlines)            280px
+ *   footer    → 1 Text (source attribution)     120px  ← freed slot from indices 2T→1T
+ *
+ * Canvas math: 8 top-pad + 80 + 280 + 200 + 280 + 280 + 120 = 1248px (97% coverage)
+ *
+ * Budget: 6 Text (connected) · 5 Text (disconnected) · 0 Image · 0 NetData ✓
  */
 
 import type { LayoutConfig } from "./types.js";
@@ -14,13 +23,10 @@ export const REGULAR_LAYOUT: LayoutConfig = {
   widgets: [
     "header",
     "indices",
-    "spy-sparkline",
-    "sectors",
     "movers",
     "portfolio",
     "news",
-    "indicators",
-    "volume-bars",
+    "footer",
   ],
 };
 
@@ -29,11 +35,9 @@ export const PRE_MARKET_LAYOUT: LayoutConfig = {
   widgets: [
     "header",
     "indices",
-    "spy-sparkline",
-    "sectors",
     "portfolio",
     "news",
-    "indicators",
+    "footer",
   ],
 };
 
@@ -42,11 +46,9 @@ export const AFTER_HOURS_LAYOUT: LayoutConfig = {
   widgets: [
     "header",
     "indices",
-    "spy-sparkline",
-    "sectors",
     "portfolio",
     "news",
-    "indicators",
+    "footer",
   ],
 };
 
@@ -55,8 +57,8 @@ export const CLOSED_LAYOUT: LayoutConfig = {
   widgets: [
     "header",
     "indices",
-    "spy-sparkline",
     "news",
+    "footer",
   ],
 };
 

@@ -74,6 +74,8 @@ function countElements(elements: DisplayElement[]): SlotCost {
 
 export interface EngineResult {
   elements: DisplayElement[];
+  /** Parallel array — elementWidgets[i] is the widget ID that produced elements[i] */
+  elementWidgets: string[];
   /** Which widgets rendered successfully */
   rendered: string[];
   /** Which widgets failed or were skipped */
@@ -102,7 +104,7 @@ export async function renderLayout(
 
   if (widgets.length === 0) {
     log.warn({ layout: layout.name }, "No widgets resolved — empty layout");
-    return { elements: [], rendered: [], skipped: [], counts: { text: 0, image: 0, netdata: 0 }, degraded: false };
+    return { elements: [], elementWidgets: [], rendered: [], skipped: [], counts: { text: 0, image: 0, netdata: 0 }, degraded: false };
   }
 
   const missing = layout.widgets.filter((id) => !widgets.find((w) => w.id === id));
@@ -162,33 +164,78 @@ export async function renderLayout(
   }
 
   // Step 3: Sync pass — getHeight() per widget → Y allocation
+  // Two sub-passes:
+  //   a) Collect minimum heights and identify flex (expandable) widgets
+  //   b) Distribute remaining canvas space among flex widgets so they fill 1280px
+  const CANVAS_H = 1280;
+  const TOP_PAD = 8;
   const activeWidgets = widgetCosts;
-  const origins: Array<{ widget: Widget; y: number; firstId: number; useImage: boolean }> = [];
-  let currentY = 20; // top padding
+
+  // Fixed-size widgets that should NOT stretch (chrome, not content)
+  const FIXED_WIDGETS = new Set(["header", "footer"]);
+
+  // Sub-pass (a): collect minimum heights
+  const heightEntries: Array<{
+    widget: Widget;
+    minHeight: number;
+    flex: boolean;
+    useImage: boolean;
+    index: number;
+  }> = [];
 
   for (let i = 0; i < activeWidgets.length; i++) {
     const { widget, useImage } = activeWidgets[i];
-    const height = widget.getHeight(ctx);
+    const minH = widget.getHeight(ctx);
+    if (minH <= 0) continue; // opts out
 
-    if (height <= 0) {
-      // Widget opts out this cycle (e.g. chart without chartBaseUrl)
-      continue;
-    }
-
-    origins.push({
+    heightEntries.push({
       widget,
-      y: currentY,
-      firstId: (i + 1) * ID_BLOCK_SIZE, // IDs: 20, 40, 60, 80, ...
+      minHeight: minH,
+      flex: !FIXED_WIDGETS.has(widget.id),
       useImage,
+      index: i,
     });
+  }
 
+  // Sub-pass (b): distribute remaining space proportionally among flex widgets
+  const totalMin = heightEntries.reduce((s, e) => s + e.minHeight, 0);
+  const slack = Math.max(0, CANVAS_H - TOP_PAD - totalMin);
+  const flexEntries = heightEntries.filter((e) => e.flex);
+  const flexTotal = flexEntries.reduce((s, e) => s + e.minHeight, 0);
+
+  // Each flex widget gets extra px proportional to its share of flex height
+  const allocatedHeights = new Map<Widget, number>();
+  let distributed = 0;
+  for (let i = 0; i < flexEntries.length; i++) {
+    const entry = flexEntries[i];
+    const share = flexTotal > 0 ? entry.minHeight / flexTotal : 1 / flexEntries.length;
+    const extra = i === flexEntries.length - 1
+      ? slack - distributed                     // last flex widget gets remainder (avoid rounding drift)
+      : Math.floor(slack * share);
+    allocatedHeights.set(entry.widget, entry.minHeight + extra);
+    distributed += extra;
+  }
+
+  // Build origins with final heights
+  const origins: Array<{ widget: Widget; y: number; height: number; firstId: number; useImage: boolean }> = [];
+  let currentY = TOP_PAD;
+
+  for (const entry of heightEntries) {
+    const height = allocatedHeights.get(entry.widget) ?? entry.minHeight;
+    origins.push({
+      widget: entry.widget,
+      y: currentY,
+      height,
+      firstId: (entry.index + 1) * ID_BLOCK_SIZE,
+      useImage: entry.useImage,
+    });
     currentY += height;
   }
 
   // Step 4: Async pass — render all widgets in parallel
-  const renderPromises = origins.map(async ({ widget, y, firstId, useImage }) => {
+  const renderPromises = origins.map(async ({ widget, y, height, firstId, useImage }) => {
     try {
-      const origin = { y, firstId };
+      const origin = { y, firstId, height };
       const output = useImage && widget.renderAsImage
         ? await widget.renderAsImage(ctx, origin)
         : await widget.render(ctx, origin);
@@ -201,14 +248,18 @@ export async function renderLayout(
 
   const results = await Promise.allSettled(renderPromises);
 
-  // Step 5: Collect elements
+  // Step 5: Collect elements + track which widget produced each
   const allElements: DisplayElement[] = [];
+  const elementWidgets: string[] = [];
   const rendered: string[] = [];
   const skipped: string[] = [...missing];
 
   for (const result of results) {
     if (result.status === "fulfilled" && result.value.elements) {
-      allElements.push(...result.value.elements);
+      for (const el of result.value.elements) {
+        allElements.push(el);
+        elementWidgets.push(result.value.id);
+      }
       rendered.push(result.value.id);
     } else if (result.status === "fulfilled") {
       skipped.push(result.value.id);
@@ -218,7 +269,14 @@ export async function renderLayout(
     }
   }
 
-  // Step 6: Final assertion — count actual elements
+  // Step 6: Renumber elements sequentially (1, 2, 3, ...)
+  // The device may require sequential IDs — the block-based IDs (20, 40, 60)
+  // are internal to the engine for collision avoidance during parallel render.
+  for (let i = 0; i < allElements.length; i++) {
+    allElements[i].ID = i + 1;
+  }
+
+  // Step 7: Final assertion — count actual elements
   const counts = countElements(allElements);
 
   if (isOverBudget(counts)) {
@@ -228,6 +286,7 @@ export async function renderLayout(
     );
     return {
       elements: [],
+      elementWidgets: [],
       rendered: [],
       skipped: layout.widgets,
       counts,
@@ -235,10 +294,16 @@ export async function renderLayout(
     };
   }
 
-  log.debug(
-    { layout: layout.name, counts: fmtBudget(counts), rendered: rendered.length, skipped: skipped.length },
+  log.info(
+    {
+      layout: layout.name,
+      counts: fmtBudget(counts),
+      totalElements: allElements.length,
+      rendered: rendered.join(","),
+      skipped: skipped.length > 0 ? skipped.join(",") : "none",
+    },
     "Layout rendered",
   );
 
-  return { elements: allElements, rendered, skipped, counts, degraded };
+  return { elements: allElements, elementWidgets, rendered, skipped, counts, degraded };
 }
