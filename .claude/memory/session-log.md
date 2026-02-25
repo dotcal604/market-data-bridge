@@ -112,3 +112,30 @@
   - Remaining: #8 Qodo Gen, #9 Windsurf, #14 Mintlify (all require external tool access)
 - Final state: 92 test files, 1,555 tests passing, TSC clean
 - Next: push integration branch, create PR for main merge, continue handshakes for #8/#9/#14
+
+## 2026-02-24 21:30 — laptop (worktree unruffled-mclean) — Divoom merge + readonly MCP + plugin evals
+
+- Merged Divoom chart branch (claude/trading-cloud-architecture-fYwbQ) to main at 8579cc0
+  - 40 files changed (+6,516/-1,052), 3 memory/handshake conflicts resolved
+  - New deps installed: @napi-rs/canvas, chartjs-node-canvas, xlsx, adm-zip
+  - Post-merge: 98 test files, 1,677 tests passing, TSC clean
+- Implemented read-only MCP mode (Item 2 from Gemini review):
+  - New `--mode mcp-readonly` in index.ts — skips IBKR connect, no background automation
+  - MUTATING_TOOLS set (38 tools) intercepted via server.tool override in readonly mode
+  - 3 new analytics tools: edge_summary (current stats only), exit_recommendation (policy preview), regime_summary (composite: drift + recalibration + volatility)
+  - 16 new tests, all passing (1,693 total)
+  - npm script: start:mcp-readonly
+  - Committed at 64bc742
+- Created launcher scripts (Item 5): mcp-launch.cmd + mcp-launch-readonly.cmd (%~dp0 portable paths)
+- typescript-lsp evaluation (Item 3):
+  - Plugin installed from official marketplace (v1.0.0)
+  - Requires `npm i -g typescript-language-server typescript` (not auto-installed)
+  - Fails with ENOENT if binary missing; installed globally (v5.1.3)
+  - Needs fresh session to test LSP features (hot-reload not supported)
+- superpowers evaluation (Item 4):
+  - Already installed (v4.3.1, 14 skills)
+  - TDD + systematic-debugging: HIGH value for this project
+  - subagent-driven-development: conflicts with AGENTS.md fleet routing
+  - episodic-memory plugin: DO NOT install (conflicts with .claude/memory/)
+  - Recommendation: keep core superpowers, skip episodic-memory + session-driver
+- Next: test typescript-lsp in fresh session; Qodo Gen(8) + Windsurf(9) handshakes still pending
