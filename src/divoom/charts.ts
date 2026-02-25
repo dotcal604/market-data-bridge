@@ -557,7 +557,7 @@ interface CacheEntry {
 }
 
 const chartCache = new Map<string, CacheEntry>();
-const CACHE_TTL_MS = 8000; // slightly less than refresh interval
+const CACHE_TTL_MS = 20_000; // 2× the refresh interval — prevents expiry gap when data fetch is slow
 
 export function getCachedChart(key: string): Buffer | null {
   const entry = chartCache.get(key);

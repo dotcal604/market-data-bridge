@@ -427,7 +427,7 @@ async function fetchIndicators(): Promise<DashboardSection> {
 
 async function fetchSpyChartData(): Promise<{ prices: number[]; candles: OHLC[] }> {
   try {
-    const bars = await getHistoricalBars("SPY", "1d", "1mo");
+    const bars = await getHistoricalBars("SPY", "1mo", "1d");
     const prices = bars.map((b: any) => b.close).filter((v: any): v is number => v != null);
     const candles: OHLC[] = bars
       .filter((b: any) => b.open != null && b.high != null && b.low != null && b.close != null)
