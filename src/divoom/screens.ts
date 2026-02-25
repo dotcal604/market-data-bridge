@@ -1,12 +1,15 @@
 /**
  * Divoom Market Data Screens
  *
- * Rotating screens for the Divoom TimeFrame display.
- * Each screen fetches its own data and returns TextLine[] for rendering.
+ * Session-aware rotating screens for the Divoom TimeFrame display.
+ * Each session (pre-market, regular, after-hours, closed) gets a
+ * tailored screen rotation. Every screen works outside RTH — Yahoo
+ * Finance returns last-available data and screeners return prior
+ * session results when the market is closed.
  */
 
 import type { TextLine } from "./display.js";
-import { getQuote, runScreener, getTrendingSymbols } from "../providers/yahoo.js";
+import { getQuote, getNews, runScreener, getHistoricalBars, getTrendingSymbols } from "../providers/yahoo.js";
 import { getStatus } from "../providers/status.js";
 import { isConnected } from "../ibkr/connection.js";
 import { logger } from "../logging.js";
@@ -56,6 +59,16 @@ function sessionLabel(session: string): string {
   }
 }
 
+/** Trim text to fit within a character budget */
+function trim(text: string, max: number): string {
+  return text.length > max ? text.slice(0, max - 1) + "~" : text;
+}
+
+/** Get current market session from status provider */
+export function currentSession(): string {
+  return getStatus().marketSession;
+}
+
 // ─── Screen Interface ───────────────────────────────────────
 
 export interface Screen {
@@ -64,6 +77,7 @@ export interface Screen {
 }
 
 // ─── Screen: Market Pulse ───────────────────────────────────
+// Works in ALL sessions — Yahoo returns last-known quote data.
 
 async function fetchMarketPulse(): Promise<TextLine[]> {
   const status = getStatus();
@@ -140,12 +154,15 @@ async function fetchMarketPulse(): Promise<TextLine[]> {
 }
 
 // ─── Screen: Top Gainers ────────────────────────────────────
+// Outside RTH the screener returns prior-session data.
 
 async function fetchTopGainers(): Promise<TextLine[]> {
+  const session = currentSession();
   const results = await runScreener("day_gainers", 6).catch(() => []);
 
   const lines: TextLine[] = [];
-  lines.push({ text: "TOP GAINERS", y: 0, color: C.green, id: 0 });
+  const header = session === "regular" ? "TOP GAINERS" : "PRIOR GAINERS";
+  lines.push({ text: header, y: 0, color: C.green, id: 0 });
 
   for (let i = 0; i < Math.min(results.length, 5); i++) {
     const r = results[i];
@@ -165,10 +182,12 @@ async function fetchTopGainers(): Promise<TextLine[]> {
 // ─── Screen: Top Losers ─────────────────────────────────────
 
 async function fetchTopLosers(): Promise<TextLine[]> {
+  const session = currentSession();
   const results = await runScreener("day_losers", 6).catch(() => []);
 
   const lines: TextLine[] = [];
-  lines.push({ text: "TOP LOSERS", y: 0, color: C.red, id: 0 });
+  const header = session === "regular" ? "TOP LOSERS" : "PRIOR LOSERS";
+  lines.push({ text: header, y: 0, color: C.red, id: 0 });
 
   for (let i = 0; i < Math.min(results.length, 5); i++) {
     const r = results[i];
@@ -188,10 +207,12 @@ async function fetchTopLosers(): Promise<TextLine[]> {
 // ─── Screen: Most Active ────────────────────────────────────
 
 async function fetchMostActive(): Promise<TextLine[]> {
+  const session = currentSession();
   const results = await runScreener("most_actives", 6).catch(() => []);
 
   const lines: TextLine[] = [];
-  lines.push({ text: "MOST ACTIVE", y: 0, color: C.yellow, id: 0 });
+  const header = session === "regular" ? "MOST ACTIVE" : "PRIOR ACTIVE";
+  lines.push({ text: header, y: 0, color: C.yellow, id: 0 });
 
   for (let i = 0; i < Math.min(results.length, 5); i++) {
     const r = results[i];
@@ -311,7 +332,7 @@ async function fetchPortfolio(): Promise<TextLine[]> {
   }
 }
 
-// ─── Screen: Trending / Scrolling Ticker ────────────────────
+// ─── Screen: Trending ───────────────────────────────────────
 
 async function fetchTrending(): Promise<TextLine[]> {
   const trending = await getTrendingSymbols().catch(() => []);
@@ -342,18 +363,152 @@ async function fetchTrending(): Promise<TextLine[]> {
   return lines;
 }
 
-// ─── Screen Registry ────────────────────────────────────────
+// ─── Screen: News Headlines ─────────────────────────────────
+// Fetches latest market news. Valuable in every session.
 
-export function getScreens(): Screen[] {
-  return [
+async function fetchNews(): Promise<TextLine[]> {
+  const news = await getNews("stock market").catch(() => []);
+
+  const lines: TextLine[] = [];
+  lines.push({ text: "NEWS", y: 0, color: C.white, id: 0 });
+
+  for (let i = 0; i < Math.min(news.length, 5); i++) {
+    const n = news[i];
+    const headline = trim(n.title, 24);
+    lines.push({
+      text: headline,
+      y: 16 + i * 16,
+      color: C.yellow,
+      id: i + 1,
+      scrollSpeed: 30,
+    });
+  }
+
+  if (news.length === 0) {
+    lines.push({ text: "No headlines", y: 16, color: C.gray, id: 1 });
+  }
+
+  return lines;
+}
+
+// ─── Screen: Futures Proxy (ES, NQ, YM) ─────────────────────
+// Uses ETF quotes as proxy — Yahoo returns extended-hours data
+// that reflects overnight futures moves during pre-market/AH.
+
+async function fetchFutures(): Promise<TextLine[]> {
+  const [es, nq, ym, rty] = await Promise.all([
+    getQuote("ES=F").catch(() => null),
+    getQuote("NQ=F").catch(() => null),
+    getQuote("YM=F").catch(() => null),
+    getQuote("RTY=F").catch(() => null),
+  ]);
+
+  const lines: TextLine[] = [];
+  lines.push({ text: "FUTURES", y: 0, color: C.cyan, id: 0 });
+
+  const items = [
+    { label: "ES   ", quote: es },
+    { label: "NQ   ", quote: nq },
+    { label: "YM   ", quote: ym },
+    { label: "RTY  ", quote: rty },
+  ];
+
+  let row = 0;
+  for (const item of items) {
+    if (item.quote) {
+      const pct = item.quote.changePercent ?? 0;
+      lines.push({
+        text: `${item.label}${fmtPrice(item.quote.last ?? 0)}  ${fmtPct(pct)}`,
+        y: 16 + row * 16,
+        color: changeColor(pct),
+        id: row + 1,
+      });
+      row++;
+    }
+  }
+
+  if (row === 0) {
+    lines.push({ text: "No futures data", y: 16, color: C.gray, id: 1 });
+  }
+
+  return lines;
+}
+
+// ─── Screen: SPY Daily Chart (5-day bars) ────────────────────
+// Shows last 5 daily candles as text — useful during closed sessions
+// to see the recent trend at a glance.
+
+async function fetchDailyChart(): Promise<TextLine[]> {
+  const bars = await getHistoricalBars("SPY", "5d", "1d").catch(() => []);
+
+  const lines: TextLine[] = [];
+  lines.push({ text: "SPY 5-DAY", y: 0, color: C.white, id: 0 });
+
+  const recent = bars.slice(-5);
+  for (let i = 0; i < recent.length; i++) {
+    const bar = recent[i];
+    const dayChange = ((bar.close - bar.open) / bar.open) * 100;
+    const date = new Date(bar.time).toLocaleDateString("en-US", { month: "numeric", day: "numeric" });
+    lines.push({
+      text: `${date}  ${fmtPrice(bar.close)}  ${fmtPct(dayChange)}`,
+      y: 16 + i * 16,
+      color: changeColor(dayChange),
+      id: i + 1,
+    });
+  }
+
+  return lines;
+}
+
+// ─── Session-Aware Screen Registry ──────────────────────────
+
+export function getScreens(session?: string): Screen[] {
+  const s = session ?? currentSession();
+
+  // Screens available in every session
+  const always: Screen[] = [
     { name: "market-pulse", fetch: fetchMarketPulse },
-    { name: "top-gainers", fetch: fetchTopGainers },
-    { name: "top-losers", fetch: fetchTopLosers },
-    { name: "most-active", fetch: fetchMostActive },
     { name: "sectors", fetch: fetchSectors },
     { name: "portfolio", fetch: fetchPortfolio },
     { name: "trending", fetch: fetchTrending },
+    { name: "news", fetch: fetchNews },
   ];
+
+  switch (s) {
+    case "regular":
+      return [
+        ...always,
+        { name: "top-gainers", fetch: fetchTopGainers },
+        { name: "top-losers", fetch: fetchTopLosers },
+        { name: "most-active", fetch: fetchMostActive },
+      ];
+
+    case "pre-market":
+      return [
+        ...always,
+        { name: "futures", fetch: fetchFutures },
+        { name: "prior-gainers", fetch: fetchTopGainers },
+        { name: "prior-losers", fetch: fetchTopLosers },
+      ];
+
+    case "after-hours":
+      return [
+        ...always,
+        { name: "futures", fetch: fetchFutures },
+        { name: "prior-gainers", fetch: fetchTopGainers },
+        { name: "most-active", fetch: fetchMostActive },
+      ];
+
+    case "closed":
+    default:
+      return [
+        ...always,
+        { name: "futures", fetch: fetchFutures },
+        { name: "daily-chart", fetch: fetchDailyChart },
+        { name: "prior-gainers", fetch: fetchTopGainers },
+        { name: "prior-losers", fetch: fetchTopLosers },
+      ];
+  }
 }
 
 // ─── Scrolling Ticker Builder ───────────────────────────────

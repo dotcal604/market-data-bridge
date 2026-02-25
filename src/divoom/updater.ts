@@ -5,11 +5,12 @@
  * Each screen fetches its own data (indices, movers, sectors, portfolio, etc.)
  * and renders color-coded text lines.
  *
- * Follows the same pattern as holly/watcher.ts: config-gated, polling, logger, shutdown.
+ * Session-aware: reloads the screen set when the market session changes
+ * (e.g. pre-market -> regular -> after-hours -> closed).
  */
 
 import { DivoomDisplay } from "./display.js";
-import { getScreens, buildScrollingTicker, type Screen } from "./screens.js";
+import { getScreens, currentSession, buildScrollingTicker, type Screen } from "./screens.js";
 import { config } from "../config.js";
 import { logger } from "../logging.js";
 
@@ -19,12 +20,33 @@ let rotationTimer: ReturnType<typeof setInterval> | null = null;
 let display: DivoomDisplay | null = null;
 let screens: Screen[] = [];
 let currentScreenIndex = 0;
+let lastSession: string = "";
+
+/**
+ * Reload screens if the market session has changed.
+ * Returns true if screens were reloaded.
+ */
+function reloadScreensIfSessionChanged(): boolean {
+  const session = currentSession();
+  if (session === lastSession) return false;
+
+  const prev = lastSession;
+  lastSession = session;
+  screens = getScreens(session);
+  currentScreenIndex = 0;
+
+  log.info({ from: prev || "(init)", to: session, screenCount: screens.length }, "Session changed — screens reloaded");
+  return true;
+}
 
 /**
  * Render the current screen on the display
  */
 async function renderCurrentScreen(): Promise<void> {
   if (!display || screens.length === 0) return;
+
+  // Check for session change before each render
+  reloadScreensIfSessionChanged();
 
   const screen = screens[currentScreenIndex % screens.length];
 
@@ -85,11 +107,16 @@ export async function startDivoomUpdater(): Promise<void> {
     log.warn({ err }, "Failed to set initial brightness");
   }
 
-  // Load screens
-  screens = getScreens();
+  // Load screens for current session
+  lastSession = currentSession();
+  screens = getScreens(lastSession);
   currentScreenIndex = 0;
 
-  log.info({ screenCount: screens.length, screens: screens.map((s) => s.name) }, "Screens loaded");
+  log.info({
+    session: lastSession,
+    screenCount: screens.length,
+    screens: screens.map((s) => s.name),
+  }, "Screens loaded");
 
   // Render first screen immediately
   await renderCurrentScreen();
@@ -119,6 +146,7 @@ export async function stopDivoomUpdater(): Promise<void> {
 
   screens = [];
   currentScreenIndex = 0;
+  lastSession = "";
 }
 
 /**
@@ -131,10 +159,10 @@ export function getDivoomDisplay(): DivoomDisplay | null {
 /**
  * Get current screen info (for diagnostics)
  */
-export function getCurrentScreenInfo(): { name: string; index: number; total: number } | null {
+export function getCurrentScreenInfo(): { name: string; index: number; total: number; session: string } | null {
   if (screens.length === 0) return null;
   const idx = currentScreenIndex % screens.length;
-  return { name: screens[idx].name, index: idx, total: screens.length };
+  return { name: screens[idx].name, index: idx, total: screens.length, session: lastSession };
 }
 
 /**
@@ -144,7 +172,7 @@ export async function nextScreen(): Promise<string> {
   if (!display || screens.length === 0) return "Divoom not active";
   await rotateScreen();
   const info = getCurrentScreenInfo();
-  return info ? `Now showing: ${info.name} (${info.index + 1}/${info.total})` : "No screens";
+  return info ? `Now showing: ${info.name} (${info.index + 1}/${info.total}) [${info.session}]` : "No screens";
 }
 
 /**

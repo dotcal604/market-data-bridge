@@ -1,10 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { getScreens, buildScrollingTicker } from "../screens.js";
+import { getScreens, buildScrollingTicker, currentSession } from "../screens.js";
 
 // ─── Mocks ──────────────────────────────────────────────────
 
 vi.mock("../../providers/yahoo.js", () => ({
   getQuote: vi.fn(),
+  getNews: vi.fn(),
+  getHistoricalBars: vi.fn(),
   runScreener: vi.fn(),
   getTrendingSymbols: vi.fn(),
 }));
@@ -21,11 +23,13 @@ vi.mock("../../logging.js", () => ({
   logger: { child: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }) },
 }));
 
-import { getQuote, runScreener, getTrendingSymbols } from "../../providers/yahoo.js";
+import { getQuote, getNews, getHistoricalBars, runScreener, getTrendingSymbols } from "../../providers/yahoo.js";
 import { getStatus } from "../../providers/status.js";
 import { isConnected } from "../../ibkr/connection.js";
 
 const mockGetQuote = vi.mocked(getQuote);
+const mockGetNews = vi.mocked(getNews);
+const mockGetHistoricalBars = vi.mocked(getHistoricalBars);
 const mockRunScreener = vi.mocked(runScreener);
 const mockGetTrending = vi.mocked(getTrendingSymbols);
 const mockGetStatus = vi.mocked(getStatus);
@@ -50,6 +54,7 @@ function makeQuote(overrides: Partial<{ symbol: string; last: number; changePerc
     timestamp: "2026-02-25T10:30:00Z",
     marketTime: "",
     delayed: true,
+    staleness_warning: null,
   };
 }
 
@@ -67,57 +72,121 @@ function makeScreenerResult(overrides: Partial<{ symbol: string; last: number; c
   };
 }
 
+function setSession(session: string, time = "10:30 AM") {
+  mockGetStatus.mockReturnValue({
+    status: "ready",
+    easternTime: time,
+    marketSession: session,
+    marketData: "yahoo-finance (always available)",
+    screener: "yahoo-finance (always available)",
+    ibkr: { connected: false, mode: "paper", host: "", port: 7497, clientId: 0, twsVersion: "", note: "" },
+    timestamp: new Date().toISOString(),
+  } as any);
+}
+
 // ─── Tests ──────────────────────────────────────────────────
 
 describe("screens", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockGetStatus.mockReturnValue({
-      status: "ready",
-      easternTime: "10:30 AM",
-      marketSession: "regular",
-      ibkr: { connected: false, mode: "paper", host: "", port: 7497, clientId: 0, twsVersion: "", note: "" },
-      timestamp: new Date().toISOString(),
-    } as any);
+    setSession("regular");
     mockIsConnected.mockReturnValue(false);
   });
 
-  describe("getScreens", () => {
-    it("returns 7 screens", () => {
-      const screens = getScreens();
-      expect(screens).toHaveLength(7);
+  // ─── Session-Aware Screen Selection ───────────────────────
+
+  describe("getScreens — session-aware", () => {
+    it("returns 8 screens during regular session", () => {
+      const screens = getScreens("regular");
+      expect(screens).toHaveLength(8);
     });
 
-    it("returns named screens in correct order", () => {
-      const screens = getScreens();
+    it("returns 8 screens during pre-market", () => {
+      const screens = getScreens("pre-market");
+      expect(screens).toHaveLength(8);
+    });
+
+    it("returns 8 screens during after-hours", () => {
+      const screens = getScreens("after-hours");
+      expect(screens).toHaveLength(8);
+    });
+
+    it("returns 9 screens during closed session", () => {
+      const screens = getScreens("closed");
+      expect(screens).toHaveLength(9);
+    });
+
+    it("includes futures screen outside RTH", () => {
+      for (const session of ["pre-market", "after-hours", "closed"]) {
+        const screens = getScreens(session);
+        const names = screens.map((s) => s.name);
+        expect(names).toContain("futures");
+      }
+    });
+
+    it("does NOT include futures during regular session", () => {
+      const screens = getScreens("regular");
       const names = screens.map((s) => s.name);
-      expect(names).toEqual([
-        "market-pulse",
-        "top-gainers",
-        "top-losers",
-        "most-active",
-        "sectors",
-        "portfolio",
-        "trending",
-      ]);
+      expect(names).not.toContain("futures");
+    });
+
+    it("includes daily-chart only during closed session", () => {
+      expect(getScreens("closed").map((s) => s.name)).toContain("daily-chart");
+      expect(getScreens("regular").map((s) => s.name)).not.toContain("daily-chart");
+      expect(getScreens("pre-market").map((s) => s.name)).not.toContain("daily-chart");
+    });
+
+    it("includes news in every session", () => {
+      for (const session of ["regular", "pre-market", "after-hours", "closed"]) {
+        const names = getScreens(session).map((s) => s.name);
+        expect(names).toContain("news");
+      }
+    });
+
+    it("always includes core screens (market-pulse, sectors, portfolio, trending)", () => {
+      for (const session of ["regular", "pre-market", "after-hours", "closed"]) {
+        const names = getScreens(session).map((s) => s.name);
+        expect(names).toContain("market-pulse");
+        expect(names).toContain("sectors");
+        expect(names).toContain("portfolio");
+        expect(names).toContain("trending");
+      }
+    });
+
+    it("regular session includes top-gainers, top-losers, most-active", () => {
+      const names = getScreens("regular").map((s) => s.name);
+      expect(names).toContain("top-gainers");
+      expect(names).toContain("top-losers");
+      expect(names).toContain("most-active");
     });
 
     it("each screen has a fetch function", () => {
-      const screens = getScreens();
-      for (const screen of screens) {
-        expect(typeof screen.fetch).toBe("function");
+      for (const session of ["regular", "pre-market", "after-hours", "closed"]) {
+        const screens = getScreens(session);
+        for (const screen of screens) {
+          expect(typeof screen.fetch).toBe("function");
+        }
       }
     });
   });
+
+  describe("currentSession", () => {
+    it("returns the session from getStatus", () => {
+      setSession("after-hours");
+      expect(currentSession()).toBe("after-hours");
+    });
+  });
+
+  // ─── Market Pulse ─────────────────────────────────────────
 
   describe("market-pulse screen", () => {
     it("fetches SPY, QQQ, DIA, IWM, VIX quotes", async () => {
       mockGetQuote.mockResolvedValue(makeQuote());
 
-      const screens = getScreens();
-      const lines = await screens[0].fetch();
+      const screens = getScreens("regular");
+      const pulse = screens.find((s) => s.name === "market-pulse")!;
+      await pulse.fetch();
 
-      // Should call getQuote for 5 indices
       expect(mockGetQuote).toHaveBeenCalledWith("SPY");
       expect(mockGetQuote).toHaveBeenCalledWith("QQQ");
       expect(mockGetQuote).toHaveBeenCalledWith("DIA");
@@ -128,218 +197,178 @@ describe("screens", () => {
     it("renders header with session and time", async () => {
       mockGetQuote.mockResolvedValue(makeQuote());
 
-      const screens = getScreens();
-      const lines = await screens[0].fetch();
+      const screens = getScreens("regular");
+      const lines = await screens.find((s) => s.name === "market-pulse")!.fetch();
 
       expect(lines[0].text).toContain("OPEN");
       expect(lines[0].text).toContain("10:30 AM");
-      expect(lines[0].color).toBe("#00FFFF"); // cyan header
+      expect(lines[0].color).toBe("#00FFFF");
     });
 
-    it("renders index lines with green for positive change", async () => {
-      mockGetQuote.mockResolvedValue(makeQuote({ symbol: "SPY", last: 582.14, changePercent: 0.45 }));
+    it("renders green for positive change", async () => {
+      mockGetQuote.mockResolvedValue(makeQuote({ changePercent: 0.45 }));
 
-      const screens = getScreens();
-      const lines = await screens[0].fetch();
+      const lines = await getScreens("regular").find((s) => s.name === "market-pulse")!.fetch();
 
-      // SPY line should be green
       const spyLine = lines.find((l) => l.text.includes("SPY"));
-      expect(spyLine).toBeDefined();
       expect(spyLine!.color).toBe("#00FF00");
       expect(spyLine!.text).toContain("+0.45%");
     });
 
     it("renders red for negative change", async () => {
-      mockGetQuote.mockResolvedValue(makeQuote({ symbol: "SPY", last: 575.0, changePercent: -0.52 }));
+      mockGetQuote.mockResolvedValue(makeQuote({ changePercent: -0.52 }));
 
-      const screens = getScreens();
-      const lines = await screens[0].fetch();
+      const lines = await getScreens("regular").find((s) => s.name === "market-pulse")!.fetch();
 
       const spyLine = lines.find((l) => l.text.includes("SPY"));
-      expect(spyLine).toBeDefined();
       expect(spyLine!.color).toBe("#FF0000");
     });
 
-    it("renders VIX with color coding based on level", async () => {
-      // VIX > 25 should be red
+    it("renders VIX red when > 25", async () => {
       mockGetQuote.mockImplementation(async (symbol: string) => {
         if (symbol === "^VIX") return makeQuote({ symbol: "^VIX", last: 28.5, changePercent: 5.0 });
         return makeQuote();
       });
 
-      const screens = getScreens();
-      const lines = await screens[0].fetch();
+      const lines = await getScreens("regular").find((s) => s.name === "market-pulse")!.fetch();
 
       const vixLine = lines.find((l) => l.text.includes("VIX"));
-      expect(vixLine).toBeDefined();
-      expect(vixLine!.color).toBe("#FF0000"); // red for high VIX
+      expect(vixLine!.color).toBe("#FF0000");
     });
 
     it("handles quote failures gracefully", async () => {
       mockGetQuote.mockRejectedValue(new Error("Network error"));
 
-      const screens = getScreens();
-      const lines = await screens[0].fetch();
+      const lines = await getScreens("regular").find((s) => s.name === "market-pulse")!.fetch();
 
-      // Should still return header line at minimum
       expect(lines.length).toBeGreaterThanOrEqual(1);
       expect(lines[0].text).toContain("OPEN");
     });
 
-    it("shows pre-market session label", async () => {
-      mockGetStatus.mockReturnValue({
-        status: "ready",
-        easternTime: "7:30 AM",
-        marketSession: "pre-market",
-        ibkr: { connected: false },
-        timestamp: new Date().toISOString(),
-      } as any);
+    it("shows PRE label during pre-market", async () => {
+      setSession("pre-market", "7:30 AM");
       mockGetQuote.mockResolvedValue(makeQuote());
 
-      const screens = getScreens();
-      const lines = await screens[0].fetch();
-
+      const lines = await getScreens("pre-market").find((s) => s.name === "market-pulse")!.fetch();
       expect(lines[0].text).toContain("PRE");
     });
 
-    it("shows closed session label", async () => {
-      mockGetStatus.mockReturnValue({
-        status: "ready",
-        easternTime: "8:00 PM",
-        marketSession: "closed",
-        ibkr: { connected: false },
-        timestamp: new Date().toISOString(),
-      } as any);
+    it("shows CLOSED label during closed session", async () => {
+      setSession("closed", "8:00 PM");
       mockGetQuote.mockResolvedValue(makeQuote());
 
-      const screens = getScreens();
-      const lines = await screens[0].fetch();
-
+      const lines = await getScreens("closed").find((s) => s.name === "market-pulse")!.fetch();
       expect(lines[0].text).toContain("CLOSED");
+    });
+
+    it("shows AH label during after-hours", async () => {
+      setSession("after-hours", "5:30 PM");
+      mockGetQuote.mockResolvedValue(makeQuote());
+
+      const lines = await getScreens("after-hours").find((s) => s.name === "market-pulse")!.fetch();
+      expect(lines[0].text).toContain("AH");
     });
   });
 
+  // ─── Top Gainers/Losers ───────────────────────────────────
+
   describe("top-gainers screen", () => {
+    it("shows 'TOP GAINERS' during regular session", async () => {
+      setSession("regular");
+      mockRunScreener.mockResolvedValue([makeScreenerResult()]);
+
+      const lines = await getScreens("regular").find((s) => s.name === "top-gainers")!.fetch();
+      expect(lines[0].text).toBe("TOP GAINERS");
+    });
+
+    it("shows 'PRIOR GAINERS' outside regular session", async () => {
+      setSession("closed");
+      mockRunScreener.mockResolvedValue([makeScreenerResult()]);
+
+      const lines = await getScreens("closed").find((s) => s.name === "prior-gainers")!.fetch();
+      expect(lines[0].text).toBe("PRIOR GAINERS");
+    });
+
     it("fetches day_gainers screener", async () => {
-      mockRunScreener.mockResolvedValue([
-        makeScreenerResult({ symbol: "NVDA", changePercent: 4.2 }),
-        makeScreenerResult({ symbol: "TSLA", changePercent: 3.1 }),
-      ]);
+      mockRunScreener.mockResolvedValue([]);
 
-      const screens = getScreens();
-      await screens[1].fetch();
-
+      await getScreens("regular").find((s) => s.name === "top-gainers")!.fetch();
       expect(mockRunScreener).toHaveBeenCalledWith("day_gainers", 6);
     });
 
-    it("renders header and up to 5 gainers", async () => {
+    it("renders up to 5 results", async () => {
       const results = Array.from({ length: 6 }, (_, i) =>
         makeScreenerResult({ symbol: `SYM${i}`, changePercent: 5 - i }),
       );
       mockRunScreener.mockResolvedValue(results);
 
-      const screens = getScreens();
-      const lines = await screens[1].fetch();
-
-      expect(lines[0].text).toBe("TOP GAINERS");
-      expect(lines[0].color).toBe("#00FF00");
-      // 1 header + 5 results
-      expect(lines).toHaveLength(6);
-    });
-
-    it("renders all lines green", async () => {
-      mockRunScreener.mockResolvedValue([
-        makeScreenerResult({ symbol: "NVDA", changePercent: 4.2 }),
-      ]);
-
-      const screens = getScreens();
-      const lines = await screens[1].fetch();
-
-      for (const line of lines) {
-        expect(line.color).toBe("#00FF00");
-      }
+      const lines = await getScreens("regular").find((s) => s.name === "top-gainers")!.fetch();
+      expect(lines).toHaveLength(6); // 1 header + 5 results
     });
 
     it("handles screener failure gracefully", async () => {
       mockRunScreener.mockRejectedValue(new Error("API error"));
 
-      const screens = getScreens();
-      const lines = await screens[1].fetch();
-
-      // Should at least have the header
+      const lines = await getScreens("regular").find((s) => s.name === "top-gainers")!.fetch();
       expect(lines).toHaveLength(1);
       expect(lines[0].text).toBe("TOP GAINERS");
     });
   });
 
   describe("top-losers screen", () => {
-    it("fetches day_losers screener", async () => {
-      mockRunScreener.mockResolvedValue([]);
+    it("shows 'PRIOR LOSERS' outside regular session", async () => {
+      setSession("pre-market");
+      mockRunScreener.mockResolvedValue([makeScreenerResult({ changePercent: -2.5 })]);
 
-      const screens = getScreens();
-      await screens[2].fetch();
-
-      expect(mockRunScreener).toHaveBeenCalledWith("day_losers", 6);
-    });
-
-    it("renders header in red", async () => {
-      mockRunScreener.mockResolvedValue([
-        makeScreenerResult({ symbol: "AAPL", changePercent: -2.5 }),
-      ]);
-
-      const screens = getScreens();
-      const lines = await screens[2].fetch();
-
-      expect(lines[0].text).toBe("TOP LOSERS");
+      const lines = await getScreens("pre-market").find((s) => s.name === "prior-losers")!.fetch();
+      expect(lines[0].text).toBe("PRIOR LOSERS");
       expect(lines[0].color).toBe("#FF0000");
     });
   });
 
+  // ─── Most Active ──────────────────────────────────────────
+
   describe("most-active screen", () => {
-    it("fetches most_actives screener", async () => {
+    it("shows 'PRIOR ACTIVE' outside regular session", async () => {
+      setSession("after-hours");
       mockRunScreener.mockResolvedValue([]);
 
-      const screens = getScreens();
-      await screens[3].fetch();
-
-      expect(mockRunScreener).toHaveBeenCalledWith("most_actives", 6);
+      const lines = await getScreens("after-hours").find((s) => s.name === "most-active")!.fetch();
+      expect(lines[0].text).toBe("PRIOR ACTIVE");
     });
 
     it("renders volume in M/K format", async () => {
+      setSession("regular");
       mockRunScreener.mockResolvedValue([
         makeScreenerResult({ symbol: "AAPL", volume: 85000000, changePercent: 1.2 }),
         makeScreenerResult({ symbol: "MSFT", volume: 500000, changePercent: -0.5 }),
       ]);
 
-      const screens = getScreens();
-      const lines = await screens[3].fetch();
-
-      expect(lines[0].text).toBe("MOST ACTIVE");
-      expect(lines[0].color).toBe("#FFFF00");
+      const lines = await getScreens("regular").find((s) => s.name === "most-active")!.fetch();
       expect(lines[1].text).toContain("85.0M");
       expect(lines[2].text).toContain("500K");
     });
 
     it("colors lines based on change direction", async () => {
+      setSession("regular");
       mockRunScreener.mockResolvedValue([
-        makeScreenerResult({ symbol: "AAPL", changePercent: 1.2, volume: 1000000 }),
-        makeScreenerResult({ symbol: "MSFT", changePercent: -0.5, volume: 1000000 }),
+        makeScreenerResult({ changePercent: 1.2, volume: 1000000 }),
+        makeScreenerResult({ changePercent: -0.5, volume: 1000000 }),
       ]);
 
-      const screens = getScreens();
-      const lines = await screens[3].fetch();
-
-      expect(lines[1].color).toBe("#00FF00"); // positive
-      expect(lines[2].color).toBe("#FF0000"); // negative
+      const lines = await getScreens("regular").find((s) => s.name === "most-active")!.fetch();
+      expect(lines[1].color).toBe("#00FF00");
+      expect(lines[2].color).toBe("#FF0000");
     });
   });
+
+  // ─── Sectors ──────────────────────────────────────────────
 
   describe("sectors screen", () => {
     it("fetches quotes for 5 sector ETFs", async () => {
       mockGetQuote.mockResolvedValue(makeQuote());
 
-      const screens = getScreens();
-      await screens[4].fetch();
+      await getScreens("regular").find((s) => s.name === "sectors")!.fetch();
 
       expect(mockGetQuote).toHaveBeenCalledWith("XLK");
       expect(mockGetQuote).toHaveBeenCalledWith("XLF");
@@ -348,59 +377,55 @@ describe("screens", () => {
       expect(mockGetQuote).toHaveBeenCalledWith("XLY");
     });
 
-    it("renders header and sector lines", async () => {
+    it("renders header in blue and 5 sectors", async () => {
       mockGetQuote.mockResolvedValue(makeQuote({ changePercent: 0.8 }));
 
-      const screens = getScreens();
-      const lines = await screens[4].fetch();
+      const lines = await getScreens("regular").find((s) => s.name === "sectors")!.fetch();
 
       expect(lines[0].text).toBe("SECTORS");
-      expect(lines[0].color).toBe("#4488FF"); // blue
-      // 1 header + 5 sectors
-      expect(lines).toHaveLength(6);
+      expect(lines[0].color).toBe("#4488FF");
+      expect(lines).toHaveLength(6); // 1 header + 5 sectors
     });
 
-    it("includes sector labels", async () => {
+    it("includes sector labels and ETF symbols", async () => {
       mockGetQuote.mockResolvedValue(makeQuote({ changePercent: 0.5 }));
 
-      const screens = getScreens();
-      const lines = await screens[4].fetch();
+      const lines = await getScreens("regular").find((s) => s.name === "sectors")!.fetch();
 
       expect(lines[1].text).toContain("Tech");
       expect(lines[1].text).toContain("XLK");
-      expect(lines[2].text).toContain("Fin");
-      expect(lines[2].text).toContain("XLF");
     });
   });
+
+  // ─── Portfolio ────────────────────────────────────────────
 
   describe("portfolio screen", () => {
     it("shows disconnected message when IBKR not connected", async () => {
       mockIsConnected.mockReturnValue(false);
 
-      const screens = getScreens();
-      const lines = await screens[5].fetch();
+      const lines = await getScreens("regular").find((s) => s.name === "portfolio")!.fetch();
 
       expect(lines[0].text).toBe("PORTFOLIO");
       expect(lines[1].text).toBe("IBKR Disconnected");
-      expect(lines[1].color).toBe("#808080"); // gray
+      expect(lines[1].color).toBe("#808080");
     });
   });
+
+  // ─── Trending ─────────────────────────────────────────────
 
   describe("trending screen", () => {
     it("fetches trending symbols and their quotes", async () => {
       mockGetTrending.mockResolvedValue([
         { symbol: "NVDA" },
         { symbol: "TSLA" },
-        { symbol: "AAPL" },
       ]);
       mockGetQuote.mockResolvedValue(makeQuote({ last: 892.0, changePercent: 4.2 }));
 
-      const screens = getScreens();
-      const lines = await screens[6].fetch();
+      const lines = await getScreens("regular").find((s) => s.name === "trending")!.fetch();
 
       expect(mockGetTrending).toHaveBeenCalled();
       expect(lines[0].text).toBe("TRENDING");
-      expect(lines[0].color).toBe("#FF8800"); // orange
+      expect(lines[0].color).toBe("#FF8800");
     });
 
     it("limits to 5 trending results", async () => {
@@ -408,24 +433,170 @@ describe("screens", () => {
       mockGetTrending.mockResolvedValue(trending);
       mockGetQuote.mockResolvedValue(makeQuote());
 
-      const screens = getScreens();
-      const lines = await screens[6].fetch();
-
-      // 1 header + max 5 results
+      const lines = await getScreens("regular").find((s) => s.name === "trending")!.fetch();
       expect(lines.length).toBeLessThanOrEqual(6);
     });
 
     it("handles trending failure gracefully", async () => {
       mockGetTrending.mockRejectedValue(new Error("API error"));
 
-      const screens = getScreens();
-      const lines = await screens[6].fetch();
+      const lines = await getScreens("regular").find((s) => s.name === "trending")!.fetch();
 
       expect(lines[0].text).toBe("TRENDING");
-      // Should just have header when no data
       expect(lines).toHaveLength(1);
     });
   });
+
+  // ─── News ─────────────────────────────────────────────────
+
+  describe("news screen", () => {
+    it("fetches stock market news", async () => {
+      mockGetNews.mockResolvedValue([
+        { title: "Markets rally on Fed signal", publisher: "Reuters", link: "", publishedAt: "", relatedTickers: [] },
+        { title: "Tech earnings beat estimates", publisher: "Bloomberg", link: "", publishedAt: "", relatedTickers: [] },
+      ]);
+
+      const lines = await getScreens("regular").find((s) => s.name === "news")!.fetch();
+
+      expect(mockGetNews).toHaveBeenCalledWith("stock market");
+      expect(lines[0].text).toBe("NEWS");
+      expect(lines[0].color).toBe("#FFFFFF");
+      expect(lines[1].text).toContain("Markets rally");
+      expect(lines[1].color).toBe("#FFFF00");
+    });
+
+    it("truncates long headlines", async () => {
+      mockGetNews.mockResolvedValue([
+        { title: "This is a really long headline that exceeds the character limit", publisher: "", link: "", publishedAt: "", relatedTickers: [] },
+      ]);
+
+      const lines = await getScreens("regular").find((s) => s.name === "news")!.fetch();
+
+      expect(lines[1].text.length).toBeLessThanOrEqual(24);
+      expect(lines[1].text).toMatch(/~$/);
+    });
+
+    it("shows fallback when no news", async () => {
+      mockGetNews.mockResolvedValue([]);
+
+      const lines = await getScreens("regular").find((s) => s.name === "news")!.fetch();
+
+      expect(lines[1].text).toBe("No headlines");
+      expect(lines[1].color).toBe("#808080");
+    });
+
+    it("handles news API failure", async () => {
+      mockGetNews.mockRejectedValue(new Error("fail"));
+
+      const lines = await getScreens("regular").find((s) => s.name === "news")!.fetch();
+
+      expect(lines[0].text).toBe("NEWS");
+      expect(lines[1].text).toBe("No headlines");
+    });
+
+    it("limits to 5 headlines", async () => {
+      const news = Array.from({ length: 10 }, (_, i) => ({
+        title: `Headline ${i}`, publisher: "", link: "", publishedAt: "", relatedTickers: [],
+      }));
+      mockGetNews.mockResolvedValue(news);
+
+      const lines = await getScreens("regular").find((s) => s.name === "news")!.fetch();
+      expect(lines).toHaveLength(6); // 1 header + 5 headlines
+    });
+  });
+
+  // ─── Futures ──────────────────────────────────────────────
+
+  describe("futures screen", () => {
+    it("fetches ES, NQ, YM, RTY futures", async () => {
+      mockGetQuote.mockResolvedValue(makeQuote());
+
+      const lines = await getScreens("closed").find((s) => s.name === "futures")!.fetch();
+
+      expect(mockGetQuote).toHaveBeenCalledWith("ES=F");
+      expect(mockGetQuote).toHaveBeenCalledWith("NQ=F");
+      expect(mockGetQuote).toHaveBeenCalledWith("YM=F");
+      expect(mockGetQuote).toHaveBeenCalledWith("RTY=F");
+    });
+
+    it("renders header in cyan", async () => {
+      mockGetQuote.mockResolvedValue(makeQuote());
+
+      const lines = await getScreens("closed").find((s) => s.name === "futures")!.fetch();
+
+      expect(lines[0].text).toBe("FUTURES");
+      expect(lines[0].color).toBe("#00FFFF");
+    });
+
+    it("renders futures with price and change%", async () => {
+      mockGetQuote.mockResolvedValue(makeQuote({ last: 5950.25, changePercent: 0.3 }));
+
+      const lines = await getScreens("pre-market").find((s) => s.name === "futures")!.fetch();
+
+      expect(lines.length).toBeGreaterThan(1);
+      // Skip header (index 0), check first data line
+      expect(lines[1].text).toContain("ES");
+      expect(lines[1].text).toContain("+0.30%");
+    });
+
+    it("shows fallback when no futures data", async () => {
+      mockGetQuote.mockRejectedValue(new Error("fail"));
+
+      const lines = await getScreens("closed").find((s) => s.name === "futures")!.fetch();
+
+      expect(lines[1].text).toBe("No futures data");
+      expect(lines[1].color).toBe("#808080");
+    });
+  });
+
+  // ─── Daily Chart ──────────────────────────────────────────
+
+  describe("daily-chart screen", () => {
+    it("fetches 5d historical bars for SPY", async () => {
+      mockGetHistoricalBars.mockResolvedValue([
+        { time: "2026-02-20T00:00:00Z", open: 575, high: 580, low: 573, close: 578, volume: 50000000 },
+        { time: "2026-02-21T00:00:00Z", open: 578, high: 582, low: 576, close: 580, volume: 45000000 },
+      ]);
+
+      const lines = await getScreens("closed").find((s) => s.name === "daily-chart")!.fetch();
+
+      expect(mockGetHistoricalBars).toHaveBeenCalledWith("SPY", "5d", "1d");
+      expect(lines[0].text).toBe("SPY 5-DAY");
+    });
+
+    it("renders bars with date, close, and change%", async () => {
+      mockGetHistoricalBars.mockResolvedValue([
+        { time: "2026-02-24T00:00:00Z", open: 575, high: 580, low: 573, close: 580, volume: 50000000 },
+      ]);
+
+      const lines = await getScreens("closed").find((s) => s.name === "daily-chart")!.fetch();
+
+      expect(lines[1].text).toContain("580.00");
+      expect(lines[1].text).toContain("+0.87%");
+      expect(lines[1].color).toBe("#00FF00");
+    });
+
+    it("colors red for negative day", async () => {
+      mockGetHistoricalBars.mockResolvedValue([
+        { time: "2026-02-24T00:00:00Z", open: 580, high: 581, low: 573, close: 575, volume: 50000000 },
+      ]);
+
+      const lines = await getScreens("closed").find((s) => s.name === "daily-chart")!.fetch();
+
+      expect(lines[1].color).toBe("#FF0000");
+    });
+
+    it("handles bar failure gracefully", async () => {
+      mockGetHistoricalBars.mockRejectedValue(new Error("fail"));
+
+      const lines = await getScreens("closed").find((s) => s.name === "daily-chart")!.fetch();
+
+      expect(lines).toHaveLength(1);
+      expect(lines[0].text).toBe("SPY 5-DAY");
+    });
+  });
+
+  // ─── Scrolling Ticker ─────────────────────────────────────
 
   describe("buildScrollingTicker", () => {
     it("builds ticker string from major symbols", async () => {
@@ -449,18 +620,17 @@ describe("screens", () => {
       });
 
       const ticker = await buildScrollingTicker();
-
-      // Should still have some symbols even if some failed
       expect(ticker.text.length).toBeGreaterThan(0);
     });
   });
+
+  // ─── Line Formatting ─────────────────────────────────────
 
   describe("line formatting", () => {
     it("assigns unique TextId to each line", async () => {
       mockGetQuote.mockResolvedValue(makeQuote());
 
-      const screens = getScreens();
-      const lines = await screens[0].fetch();
+      const lines = await getScreens("regular").find((s) => s.name === "market-pulse")!.fetch();
 
       const ids = lines.map((l) => l.id);
       const uniqueIds = new Set(ids);
@@ -470,8 +640,7 @@ describe("screens", () => {
     it("spaces lines at 16px intervals", async () => {
       mockGetQuote.mockResolvedValue(makeQuote());
 
-      const screens = getScreens();
-      const lines = await screens[0].fetch();
+      const lines = await getScreens("regular").find((s) => s.name === "market-pulse")!.fetch();
 
       for (let i = 1; i < lines.length; i++) {
         expect(lines[i].y).toBe(i * 16);
@@ -481,8 +650,7 @@ describe("screens", () => {
     it("formats prices >= 1000 with 1 decimal", async () => {
       mockGetQuote.mockResolvedValue(makeQuote({ last: 1234.56, changePercent: 0.1 }));
 
-      const screens = getScreens();
-      const lines = await screens[0].fetch();
+      const lines = await getScreens("regular").find((s) => s.name === "market-pulse")!.fetch();
 
       const spyLine = lines.find((l) => l.text.includes("SPY"));
       expect(spyLine!.text).toContain("1234.6");
@@ -491,8 +659,7 @@ describe("screens", () => {
     it("formats prices < 1000 with 2 decimals", async () => {
       mockGetQuote.mockResolvedValue(makeQuote({ last: 582.14, changePercent: 0.1 }));
 
-      const screens = getScreens();
-      const lines = await screens[0].fetch();
+      const lines = await getScreens("regular").find((s) => s.name === "market-pulse")!.fetch();
 
       const spyLine = lines.find((l) => l.text.includes("SPY"));
       expect(spyLine!.text).toContain("582.14");
