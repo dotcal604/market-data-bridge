@@ -137,6 +137,10 @@ vi.mock("../../db/database.js", () => ({
   getEvalsForSimulation: vi.fn(() => []),
   getTraderSyncStats: vi.fn(),
   getTraderSyncTrades: vi.fn(),
+  getDb: vi.fn(() => ({
+    exec: vi.fn(),
+    prepare: vi.fn(() => ({ run: vi.fn(), get: vi.fn(), all: vi.fn(() => []) })),
+  })),
 }));
 
 vi.mock("../../db/schema.js", () => ({

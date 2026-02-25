@@ -17,6 +17,7 @@ import { createMcpServer } from "../mcp/server.js";
 import { initWebSocket } from "../ws/server.js";
 import { getMetrics, getRecentIncidents } from "../ops/metrics.js";
 import { isReady } from "../ops/readiness.js";
+import { getCachedChart } from "../divoom/charts.js";
 
 function apiKeyAuth(req: Request, res: Response, next: NextFunction): void {
   const key = config.rest.apiKey;
@@ -265,6 +266,37 @@ export function createApp(): express.Express {
     } else {
       res.json(status);
     }
+  });
+
+  // ── Divoom chart image endpoint (unauthenticated — device fetches directly) ──
+  app.get("/api/divoom/charts/:type", (req: Request, res: Response) => {
+    const chartType = req.params.type as string;
+    const validTypes = [
+      "spy-sparkline", "spy-candles", "sector-heatmap",
+      "pnl-curve", "rsi-gauge", "vix-gauge",
+      "volume-bars", "allocation",
+    ];
+    if (!validTypes.includes(chartType)) {
+      res.status(404).json({ error: `Unknown chart type: ${chartType}` });
+      return;
+    }
+
+    const buffer = getCachedChart(chartType);
+    if (!buffer) {
+      // Return a transparent 1x1 PNG if no chart cached yet
+      const emptyPng = Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQIHWNgAAIABAABAAH/VNwAAAAASUVORK5CYII=",
+        "base64",
+      );
+      res.set("Content-Type", "image/png");
+      res.set("Cache-Control", "no-cache");
+      res.send(emptyPng);
+      return;
+    }
+
+    res.set("Content-Type", "image/png");
+    res.set("Cache-Control", "no-cache, no-store");
+    res.send(buffer);
   });
 
   // ── MCP Streamable HTTP endpoint (for ChatGPT MCP connector) ──

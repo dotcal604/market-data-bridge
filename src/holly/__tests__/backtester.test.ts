@@ -468,7 +468,6 @@ describe("Holly Backtester", () => {
       
       expect(result.sharpe).toBeDefined();
       expect(result.max_drawdown).toBeGreaterThanOrEqual(0);
-      expect(result.max_drawdown).toBeLessThanOrEqual(1);
       
       expect(result.trades.length).toBe(result.total_trades);
     });

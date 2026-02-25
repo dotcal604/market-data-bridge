@@ -87,6 +87,8 @@ import { getRecentDriftAlerts } from "../eval/drift-alerts.js";
 import { computeEdgeReport, runWalkForward } from "../eval/edge-analytics.js";
 import { importTraderSyncCSV } from "../tradersync/importer.js";
 import { importHollyAlerts } from "../holly/importer.js";
+import { importFile, importRows } from "../import/router.js";
+import { getImportHistory, getImportById, getImportStats } from "../import/history.js";
 import { isAutoEvalEnabled, setAutoEvalEnabled, getAutoEvalStatus } from "../holly/auto-eval.js";
 import { buildProfiles, scanSymbols, getPreAlertCandidates } from "../holly/predictor.js";
 import { extractRules, runBacktest, getStrategyBreakdown } from "../holly/backtester.js";
@@ -1843,6 +1845,91 @@ export function createMcpServer(): McpServer {
     }
   );
 
+  // --- Tool: import_file ---
+  server.tool(
+    "import_file",
+    "Auto-detect and import file content (CSV, TSV, JSON, JSONL). Supports TraderSync trades, Holly alerts/trades, journal entries, watchlists, eval outcomes, screener snapshots, and generic structured data. Format and data type are auto-detected. Returns import ID, detected format, inserted count, and any errors.",
+    {
+      content: z.string().describe("Full file content to import (CSV, TSV, JSON, or JSONL)"),
+      file_name: z.string().optional().default("upload.csv").describe("Original file name with extension (helps format detection)"),
+    },
+    async (params) => {
+      try {
+        const result = importFile(params.content, params.file_name);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: import_rows ---
+  server.tool(
+    "import_rows",
+    "Import pre-structured data rows directly — the universal import path for MCP tools, API responses, and other structured sources. Pass an array of JSON objects. Data type is auto-detected from keys, or use data_type to override. Supports: tradersync, holly_alerts, journal, watchlist, eval_outcomes, screener_snapshot, generic.",
+    {
+      rows: z.array(z.record(z.unknown())).describe("Array of data objects to import"),
+      data_type: z.string().optional().describe("Force a specific data type instead of auto-detecting (e.g. 'watchlist', 'journal', 'screener_snapshot', 'generic')"),
+      source: z.string().optional().describe("Source label for audit trail (e.g. 'ibkr', 'yahoo', 'tradingview', 'mcp')"),
+    },
+    async (params) => {
+      try {
+        const result = importRows(params.rows, {
+          dataType: params.data_type,
+          source: params.source,
+        });
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: import_history ---
+  server.tool(
+    "import_history",
+    "View recent file import history — shows all imports with status, format, row counts, and timing.",
+    {
+      limit: z.number().optional().default(20).describe("Max results (default: 20)"),
+      status: z.enum(["completed", "failed", "processing"]).optional().describe("Filter by status"),
+      format: z.enum(["tradersync", "holly_alerts", "holly_trades", "unknown"]).optional().describe("Filter by detected format"),
+    },
+    async (params) => {
+      try {
+        const history = getImportHistory({
+          limit: params.limit,
+          status: params.status,
+          format: params.format,
+        });
+        return { content: [{ type: "text", text: JSON.stringify({ count: history.length, imports: history }, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: import_status ---
+  server.tool(
+    "import_status",
+    "Get details for a specific import by ID, or aggregate import statistics if no ID provided.",
+    {
+      import_id: z.string().optional().describe("Specific import ID to look up. If omitted, returns aggregate stats."),
+    },
+    async (params) => {
+      try {
+        if (params.import_id) {
+          const record = getImportById(params.import_id);
+          if (!record) return { content: [{ type: "text", text: "Import not found" }], isError: true };
+          return { content: [{ type: "text", text: JSON.stringify(record, null, 2) }] };
+        }
+        const stats = getImportStats();
+        return { content: [{ type: "text", text: JSON.stringify(stats, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
   // --- Tool: holly_alerts ---
   server.tool(
     "holly_alerts",
@@ -2181,24 +2268,24 @@ export function createMcpServer(): McpServer {
   // --- Tool: divoom_status ---
   server.tool(
     "divoom_status",
-    "Check if Divoom Times Gate display is connected and retrieve device information.",
+    "Check if Divoom TimesFrame display is connected and retrieve device information.",
     {},
     async () => {
       const { getDivoomDisplay } = await import("../divoom/updater.js");
       const display = getDivoomDisplay();
-      
+
       if (!display) {
         return {
           content: [{
             type: "text",
-            text: JSON.stringify({ error: "Divoom display not initialized. Check DIVOOM_ENABLED and DIVOOM_DEVICE_IP config." }, null, 2)
+            text: JSON.stringify({ error: "TimesFrame display not initialized. Check DIVOOM_ENABLED and DIVOOM_DEVICE_IP config." }, null, 2)
           }],
         };
       }
 
       try {
         const deviceInfo = await display.getDeviceInfo();
-        return { content: [{ type: "text", text: JSON.stringify(deviceInfo, null, 2) }] };
+        return { content: [{ type: "text", text: JSON.stringify({ ...deviceInfo, inCustomMode: display.isInCustomMode }, null, 2) }] };
       } catch (e: any) {
         return {
           content: [{ type: "text", text: `Error: ${e.message}` }],
@@ -2208,40 +2295,17 @@ export function createMcpServer(): McpServer {
     }
   );
 
-  // --- Tool: divoom_send_text ---
+  // --- Tool: divoom_refresh ---
   server.tool(
-    "divoom_send_text",
-    "Manually send text to the Divoom Times Gate display.",
-    {
-      text: z.string().describe("Text to display"),
-      color: z.string().optional().describe("Hex color, e.g. #FF0000 (default: #FFFFFF)"),
-      x: z.number().optional().describe("X position (default: 0)"),
-      y: z.number().optional().describe("Y position (default: 0)"),
-      font: z.number().optional().describe("Font ID (default: 2)"),
-      scrollSpeed: z.number().optional().describe("Scroll speed 0-100 (default: 50)"),
-    },
-    async (params) => {
-      const { getDivoomDisplay } = await import("../divoom/updater.js");
-      const display = getDivoomDisplay();
-      
-      if (!display) {
-        return {
-          content: [{
-            type: "text",
-            text: JSON.stringify({ error: "Divoom display not initialized. Check DIVOOM_ENABLED and DIVOOM_DEVICE_IP config." }, null, 2)
-          }],
-        };
-      }
+    "divoom_refresh",
+    "Force an immediate refresh of the TimesFrame market data dashboard.",
+    {},
+    async () => {
+      const { forceRefresh } = await import("../divoom/updater.js");
 
       try {
-        await display.sendText(params.text, {
-          color: params.color,
-          x: params.x,
-          y: params.y,
-          font: params.font,
-          scrollSpeed: params.scrollSpeed,
-        });
-        return { content: [{ type: "text", text: JSON.stringify({ success: true, text: params.text }, null, 2) }] };
+        const result = await forceRefresh();
+        return { content: [{ type: "text", text: JSON.stringify({ success: true, result }, null, 2) }] };
       } catch (e: any) {
         return {
           content: [{ type: "text", text: `Error: ${e.message}` }],
@@ -2254,19 +2318,19 @@ export function createMcpServer(): McpServer {
   // --- Tool: divoom_set_brightness ---
   server.tool(
     "divoom_set_brightness",
-    "Adjust Divoom Times Gate display brightness (0-100).",
+    "Adjust Divoom TimesFrame display brightness (0-100).",
     {
       brightness: z.number().min(0).max(100).describe("Brightness level 0-100"),
     },
     async (params) => {
       const { getDivoomDisplay } = await import("../divoom/updater.js");
       const display = getDivoomDisplay();
-      
+
       if (!display) {
         return {
           content: [{
             type: "text",
-            text: JSON.stringify({ error: "Divoom display not initialized. Check DIVOOM_ENABLED and DIVOOM_DEVICE_IP config." }, null, 2)
+            text: JSON.stringify({ error: "TimesFrame display not initialized. Check DIVOOM_ENABLED and DIVOOM_DEVICE_IP config." }, null, 2)
           }],
         };
       }

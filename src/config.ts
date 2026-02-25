@@ -61,8 +61,11 @@ export const config = {
   divoom: {
     enabled: process.env.DIVOOM_ENABLED === "true",
     deviceIp: process.env.DIVOOM_DEVICE_IP ?? "",
+    devicePort: parseInt(process.env.DIVOOM_DEVICE_PORT ?? "9000", 10),
     refreshIntervalMs: parseInt(process.env.DIVOOM_REFRESH_MS ?? "10000", 10),
     brightness: parseInt(process.env.DIVOOM_BRIGHTNESS ?? "80", 10),
+    backgroundUrl: process.env.DIVOOM_BACKGROUND_URL ?? "",
+    chartBaseUrl: process.env.DIVOOM_CHART_BASE_URL ?? "",
   },
   ops: {
     webhookUrl: process.env.OPS_WEBHOOK_URL ?? "",
@@ -85,5 +88,9 @@ export const config = {
   },
   inbox: {
     ttlDays: parseInt(process.env.INBOX_TTL_DAYS ?? "7", 10),
+  },
+  importInbox: {
+    path: process.env.IMPORT_INBOX_PATH ?? "",
+    pollIntervalMs: parseInt(process.env.IMPORT_INBOX_POLL_MS ?? "5000", 10),
   },
 };

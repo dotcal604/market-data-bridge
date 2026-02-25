@@ -398,16 +398,16 @@ Recommended propagation sequence (parallel where possible):
 - [x] Copilot (#5) — `.github/agents/` updated ✅
 
 **Wave 2 — Repo-aware (just open the project):**
-- [ ] Codex (#6) — assign acceptance test issue
+- [x] Codex (#6) — 3 PRs merged, acceptance test passed ✅
 - [ ] Windsurf (#9) — open project, paste card
 - [x] Antigravity (#13) — open project, paste card ✅
 - [ ] Qodo Gen (#8) — install extension, generate tests
 
 **Wave 3 — Manual paste:**
 - [x] Claude Code Pair (#3) — cloud session with prompt ✅
-- [ ] ChatGPT (#4) — paste in chat
-- [ ] Jules (#7) — paste at jules.google
-- [ ] v0 (#10) — paste spec at v0.dev
+- [x] ChatGPT (#4) — acceptance test passed (quadratic penalty rationale) ✅
+- [x] Jules (#7) — branch: jules-shared-colors ✅
+- [x] v0 (#10) — cloned repo, found existing component ✅
 
 **Wave 4 — Upload/Connect:**
 - [x] NotebookLM (#12) — upload AGENTS.md + CLAUDE.md ✅

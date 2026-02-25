@@ -1,216 +1,102 @@
 /**
- * Divoom Display Updater
+ * Divoom TimesFrame Updater
  *
- * Periodically fetches live trading data and updates the Divoom Times Gate display.
- * Follows the same pattern as holly/watcher.ts: config-gated, polling, logger, shutdown.
+ * Push-based dashboard: enters custom control mode with a full layout,
+ * then re-enters on each refresh cycle to update content AND colors.
+ *
+ * Since UpdateDisplayItems only changes TextMessage (not FontColor),
+ * we re-enter custom mode each cycle so dynamic colors (green/red for
+ * price direction) are always current.
+ *
+ * Session-aware: detects session changes and adjusts content
+ * (e.g. movers during regular hours, futures during off-hours).
+ *
+ * Chart-enabled: renders server-side charts (sparklines, gauges, heatmaps)
+ * and embeds them as Image elements that the TimesFrame fetches via URL.
  */
 
-import { DivoomDisplay } from "./display.js";
-import {
-  buildDashboard,
-  type PnLData,
-  type Position,
-  type HollyAlert,
-  type MarketStatus,
-  type RecentTrade,
-} from "./dashboard.js";
+import { TimesFrameDisplay } from "./display.js";
+import { buildElements, type ChartUrls } from "./layout.js";
+import { fetchDashboardWithCharts, currentSession } from "./screens.js";
+import { renderAllCharts } from "./charts.js";
+import { isConnected } from "../ibkr/connection.js";
 import { config } from "../config.js";
 import { logger } from "../logging.js";
-import { getPnL } from "../ibkr/account.js";
-import { isConnected } from "../ibkr/connection.js";
-import { queryHollyAlerts } from "../db/database.js";
-import { getQuote } from "../providers/yahoo.js";
 
 const log = logger.child({ module: "divoom-updater" });
 
-let timer: ReturnType<typeof setInterval> | null = null;
-let display: DivoomDisplay | null = null;
+let refreshTimer: ReturnType<typeof setInterval> | null = null;
+let display: TimesFrameDisplay | null = null;
+let lastSession = "";
+let lastIbkrConnected = false;
 
 /**
- * Fetch current P&L data
+ * Build chart URLs from the base URL config.
+ * Returns undefined if chartBaseUrl is not configured.
  */
-async function fetchPnLData(): Promise<PnLData> {
-  if (!isConnected()) {
-    return {
-      realizedPnL: 0,
-      unrealizedPnL: 0,
-      totalPnL: 0,
-      winRate: 0,
-      tradeCount: 0,
-    };
-  }
+function buildChartUrls(): ChartUrls | undefined {
+  const base = config.divoom.chartBaseUrl;
+  if (!base) return undefined;
 
-  try {
-    const pnl = await getPnL();
+  // Trim trailing slash
+  const baseUrl = base.replace(/\/+$/, "");
 
-    // Calculate win rate from today's executions
-    const { queryExecutions } = await import("../db/database.js");
-    const today = new Date().toISOString().split("T")[0];
-    const todaysExecs = queryExecutions({ limit: 1000 }) as Array<Record<string, unknown>>;
-    
-    // Group by correlation_id to count trades (not individual executions)
-    const tradeMap = new Map<string, number>();
-    for (const exec of todaysExecs) {
-      const timestamp = String(exec.timestamp ?? "");
-      if (!timestamp.startsWith(today)) continue;
-      
-      const correlationId = String(exec.correlation_id ?? "");
-      const pnl = Number(exec.realized_pnl ?? 0);
-      if (correlationId && pnl !== 0) {
-        tradeMap.set(correlationId, (tradeMap.get(correlationId) ?? 0) + pnl);
-      }
-    }
-
-    const trades = Array.from(tradeMap.values());
-    const winningTrades = trades.filter((pnl) => pnl > 0).length;
-    const tradeCount = trades.length;
-    const winRate = tradeCount > 0 ? winningTrades / tradeCount : 0;
-
-    return {
-      realizedPnL: pnl.realizedPnL ?? 0,
-      unrealizedPnL: pnl.unrealizedPnL ?? 0,
-      totalPnL: pnl.dailyPnL ?? 0,
-      winRate,
-      tradeCount,
-    };
-  } catch (err) {
-    log.error({ err }, "Failed to fetch P&L");
-    return {
-      realizedPnL: 0,
-      unrealizedPnL: 0,
-      totalPnL: 0,
-      winRate: 0,
-      tradeCount: 0,
-    };
-  }
+  return {
+    spySparkline: `${baseUrl}/api/divoom/charts/spy-sparkline`,
+    sectorHeatmap: `${baseUrl}/api/divoom/charts/sector-heatmap`,
+    pnlCurve: `${baseUrl}/api/divoom/charts/pnl-curve`,
+    rsiGauge: `${baseUrl}/api/divoom/charts/rsi-gauge`,
+    vixGauge: `${baseUrl}/api/divoom/charts/vix-gauge`,
+    volumeBars: `${baseUrl}/api/divoom/charts/volume-bars`,
+  };
 }
 
 /**
- * Fetch current positions
+ * Refresh the dashboard: fetch all data, render charts, build elements, push to display.
  */
-async function fetchPositions(): Promise<Position[]> {
-  if (!isConnected()) {
-    return [];
-  }
-
-  try {
-    const { getPositions } = await import("../ibkr/account.js");
-    const positions = await getPositions();
-    
-    // Note: IBKR getPositions() doesn't return current market price
-    // To get unrealized P&L, we'd need to fetch quotes for each position
-    // For the Divoom display, we show position count rather than individual P&L
-    const positionsWithPnL: Position[] = [];
-    for (const pos of positions) {
-      positionsWithPnL.push({
-        symbol: pos.symbol,
-        quantity: pos.position,
-        avgPrice: pos.avgCost,
-        currentPrice: pos.avgCost, // No market price available from getPositions
-        unrealizedPnL: 0, // Would need to fetch quotes to calculate
-      });
-    }
-    
-    return positionsWithPnL;
-  } catch (err) {
-    log.error({ err }, "Failed to fetch positions");
-    return [];
-  }
-}
-
-/**
- * Fetch latest Holly alert
- */
-async function fetchLatestHollyAlert(): Promise<HollyAlert | null> {
-  try {
-    const alerts = queryHollyAlerts({ limit: 1 });
-    if (alerts.length === 0) return null;
-
-    const alert = alerts[0];
-    return {
-      symbol: String(alert.symbol ?? ""),
-      strategy: String(alert.strategy ?? ""),
-      entryPrice: Number(alert.entry_price ?? 0),
-      stopPrice: alert.stop_price != null ? Number(alert.stop_price) : undefined,
-      alertTime: String(alert.alert_time ?? ""),
-    };
-  } catch (err) {
-    log.error({ err }, "Failed to fetch Holly alert");
-    return null;
-  }
-}
-
-/**
- * Fetch market status (SPY/QQQ)
- */
-async function fetchMarketStatus(): Promise<MarketStatus> {
-  try {
-    const [spyQuote, qqqQuote] = await Promise.all([
-      getQuote("SPY"),
-      getQuote("QQQ"),
-    ]);
-
-    return {
-      spy: spyQuote.last ?? 0,
-      qqq: qqqQuote.last ?? 0,
-      spyChange: spyQuote.changePercent ?? undefined,
-      qqqChange: qqqQuote.changePercent ?? undefined,
-    };
-  } catch (err) {
-    log.error({ err }, "Failed to fetch market status");
-    return { spy: 0, qqq: 0 };
-  }
-}
-
-/**
- * Fetch the most recent trade
- */
-async function fetchRecentTrade(): Promise<RecentTrade | null> {
-  try {
-    const { queryExecutions } = await import("../db/database.js");
-    const execs = queryExecutions({ limit: 1 });
-    if (execs.length === 0) return null;
-
-    const exec = execs[0] as Record<string, unknown>;
-    return {
-      symbol: String(exec.symbol ?? ""),
-      quantity: Number(exec.quantity ?? 0),
-      price: Number(exec.price ?? 0),
-      side: String(exec.side ?? "") as "BUY" | "SELL",
-      timestamp: String(exec.timestamp ?? ""),
-    };
-  } catch (err) {
-    log.error({ err }, "Failed to fetch recent trade");
-    return null;
-  }
-}
-
-/**
- * Update the display with latest data
- */
-async function updateDisplay(): Promise<void> {
+async function refreshDashboard(): Promise<void> {
   if (!display) return;
 
   try {
-    const [pnlData, positions, hollyAlert, marketStatus, recentTrade] = await Promise.all([
-      fetchPnLData(),
-      fetchPositions(),
-      fetchLatestHollyAlert(),
-      fetchMarketStatus(),
-      fetchRecentTrade(),
-    ]);
+    // Detect state changes for logging
+    const session = currentSession();
+    const ibkr = isConnected();
 
-    const dashboardData = buildDashboard(pnlData, positions, hollyAlert, marketStatus, recentTrade);
-    await display.sendDashboard(dashboardData);
-    
-    log.debug("Display updated successfully");
+    if (session !== lastSession || ibkr !== lastIbkrConnected) {
+      log.info({
+        from: lastSession || "(init)", to: session,
+        ibkr: lastIbkrConnected !== ibkr ? `${lastIbkrConnected} → ${ibkr}` : ibkr,
+      }, "State changed — refreshing layout");
+      lastSession = session;
+      lastIbkrConnected = ibkr;
+    }
+
+    // Fetch data and chart inputs in parallel
+    const { dashboard, chartInput } = await fetchDashboardWithCharts();
+
+    // Render charts (populates cache for the REST endpoint)
+    const chartUrls = buildChartUrls();
+    if (chartUrls) {
+      try {
+        await renderAllCharts(chartInput);
+      } catch (err) {
+        log.warn({ err }, "Chart rendering failed — continuing with text-only layout");
+      }
+    }
+
+    const elements = buildElements(dashboard, chartUrls);
+
+    // Re-enter custom mode each cycle for dynamic colors
+    await display.enterCustomMode(elements, config.divoom.backgroundUrl);
+
+    log.debug({ session, elementCount: elements.length, charts: !!chartUrls }, "Dashboard refreshed");
   } catch (err) {
-    log.error({ err }, "Failed to update display");
+    log.error({ err }, "Failed to refresh dashboard");
   }
 }
 
 /**
- * Start the Divoom display updater
+ * Start the Divoom TimesFrame updater.
  */
 export async function startDivoomUpdater(): Promise<void> {
   if (!config.divoom.enabled) {
@@ -223,20 +109,22 @@ export async function startDivoomUpdater(): Promise<void> {
     return;
   }
 
-  display = new DivoomDisplay(config.divoom.deviceIp);
+  display = new TimesFrameDisplay(config.divoom.deviceIp, config.divoom.devicePort);
 
-  // Test connection
   const connected = await display.testConnection();
   if (!connected) {
-    log.error({ deviceIp: config.divoom.deviceIp }, "Failed to connect to Divoom device");
+    log.error({ deviceIp: config.divoom.deviceIp, port: config.divoom.devicePort },
+      "Failed to connect to TimesFrame device");
     return;
   }
 
   log.info({
     deviceIp: config.divoom.deviceIp,
+    port: config.divoom.devicePort,
     refreshIntervalMs: config.divoom.refreshIntervalMs,
     brightness: config.divoom.brightness,
-  }, "Divoom updater starting");
+    chartBaseUrl: config.divoom.chartBaseUrl || "(charts disabled)",
+  }, "TimesFrame updater starting");
 
   // Set initial brightness
   try {
@@ -245,36 +133,54 @@ export async function startDivoomUpdater(): Promise<void> {
     log.warn({ err }, "Failed to set initial brightness");
   }
 
-  // Initial update
-  await updateDisplay();
+  // Initial state
+  lastSession = currentSession();
+  lastIbkrConnected = isConnected();
 
-  // Start periodic updates
-  timer = setInterval(updateDisplay, config.divoom.refreshIntervalMs);
+  // First render
+  await refreshDashboard();
+
+  // Periodic refresh
+  refreshTimer = setInterval(refreshDashboard, config.divoom.refreshIntervalMs);
 }
 
 /**
- * Stop the Divoom display updater
+ * Stop the Divoom TimesFrame updater.
  */
 export async function stopDivoomUpdater(): Promise<void> {
-  if (timer) {
-    clearInterval(timer);
-    timer = null;
+  if (refreshTimer) {
+    clearInterval(refreshTimer);
+    refreshTimer = null;
   }
 
   if (display) {
     try {
-      await display.clear();
-      log.info("Divoom updater stopped and display cleared");
+      if (display.isInCustomMode) {
+        await display.exitCustomMode();
+      }
+      log.info("TimesFrame updater stopped");
     } catch (err) {
-      log.warn({ err }, "Failed to clear display on shutdown");
+      log.warn({ err }, "Failed to exit custom mode on shutdown");
     }
     display = null;
   }
+
+  lastSession = "";
+  lastIbkrConnected = false;
 }
 
 /**
- * Get the current display instance (for testing/MCP tools)
+ * Get the current display instance (for MCP tools).
  */
-export function getDivoomDisplay(): DivoomDisplay | null {
+export function getDivoomDisplay(): TimesFrameDisplay | null {
   return display;
+}
+
+/**
+ * Force an immediate dashboard refresh (for MCP tools).
+ */
+export async function forceRefresh(): Promise<string> {
+  if (!display) return "TimesFrame not active";
+  await refreshDashboard();
+  return `Dashboard refreshed [${lastSession}]`;
 }

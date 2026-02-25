@@ -22,30 +22,31 @@ describe("extractStructuredReasoning", () => {
         75
       );
 
-      expect(result.key_drivers.length).toBeGreaterThanOrEqual(1);
+      expect(result.key_drivers.some(d => d.feature === "rvol")).toBe(true);
       expect(result.key_drivers[0].feature).toBe("rvol");
       expect(result.key_drivers[0].weight).toBe(1.0); // First mentioned = primary
     });
 
     it("should extract relative volume as rvol", () => {
       const result = extractStructuredReasoning(
-        "Relative volume indicates interest",
+        "Relative volume indicates notable interest",
         60,
         65
       );
 
+      // "relative volume" matches rvol, and the word "volume" also matches the general volume feature
       expect(result.key_drivers.length).toBeGreaterThanOrEqual(1);
       expect(result.key_drivers[0].feature).toBe("rvol");
     });
 
     it("should extract spread feature", () => {
       const result = extractStructuredReasoning(
-        "Tight spread on the ticker",
+        "Tight spread shows good conditions",
         70,
         75
       );
 
-      expect(result.key_drivers.length).toBeGreaterThanOrEqual(1);
+      expect(result.key_drivers).toHaveLength(1);
       expect(result.key_drivers[0].feature).toBe("spread_pct");
     });
 
@@ -56,29 +57,29 @@ describe("extractStructuredReasoning", () => {
         70
       );
 
-      expect(result.key_drivers.length).toBeGreaterThanOrEqual(1);
+      expect(result.key_drivers).toHaveLength(1);
       expect(result.key_drivers[0].feature).toBe("vwap_deviation_pct");
     });
 
     it("should extract atr feature", () => {
       const result = extractStructuredReasoning(
-        "ATR expansion noted on the chart",
+        "ATR expansion signals widening range",
         60,
         65
       );
 
-      expect(result.key_drivers.length).toBeGreaterThanOrEqual(1);
+      expect(result.key_drivers).toHaveLength(1);
       expect(result.key_drivers[0].feature).toBe("atr_pct");
     });
 
     it("should extract gap feature", () => {
       const result = extractStructuredReasoning(
-        "Large gap up this morning",
+        "Large gap up on the open",
         75,
         80
       );
 
-      expect(result.key_drivers.length).toBeGreaterThanOrEqual(1);
+      expect(result.key_drivers).toHaveLength(1);
       expect(result.key_drivers[0].feature).toBe("gap_pct");
     });
 
@@ -95,12 +96,12 @@ describe("extractStructuredReasoning", () => {
 
     it("should extract time_of_day feature", () => {
       const result = extractStructuredReasoning(
-        "Open drive pattern forming here",
+        "Open drive shows favorable conditions",
         65,
         70
       );
 
-      expect(result.key_drivers.length).toBeGreaterThanOrEqual(1);
+      expect(result.key_drivers).toHaveLength(1);
       expect(result.key_drivers[0].feature).toBe("time_of_day");
     });
 
@@ -150,20 +151,20 @@ describe("extractStructuredReasoning", () => {
 
     it("should extract multiple features with correct weights", () => {
       const result = extractStructuredReasoning(
-        "High rvol with tight spread and VWAP deviation noted",
+        "High rvol with tight spread and VWAP level",
         70,
         75
       );
 
-      // rvol (first match), volume (from "high" context), spread_pct, vwap_deviation_pct may all match
-      // plus "support" keyword matches support feature. Use >= to handle regex overlaps.
-      expect(result.key_drivers.length).toBeGreaterThanOrEqual(3);
+      // Features are extracted in FEATURE_KEYWORDS definition order, not text order
+      // rvol (index 0), vwap (index 4), spread (index 5)
+      expect(result.key_drivers).toHaveLength(3);
       expect(result.key_drivers[0].feature).toBe("rvol");
       expect(result.key_drivers[0].weight).toBe(1.0); // First = primary
-      // All subsequent features get 0.5
-      for (let i = 1; i < result.key_drivers.length; i++) {
-        expect(result.key_drivers[i].weight).toBe(0.5);
-      }
+      expect(result.key_drivers[1].feature).toBe("vwap_deviation_pct");
+      expect(result.key_drivers[1].weight).toBe(0.5); // Subsequent = secondary
+      expect(result.key_drivers[2].feature).toBe("spread_pct");
+      expect(result.key_drivers[2].weight).toBe(0.5);
     });
 
     it("should not duplicate features", () => {
@@ -511,7 +512,7 @@ describe("extractStructuredReasoning", () => {
       expect(result.key_drivers).toEqual([]);
       expect(result.risk_factors).toEqual([]);
       expect(result.uncertainties).toEqual([]);
-      expect(result.conviction).toBeNull(); // Early return for null reasoning
+      expect(result.conviction).toBeNull(); // Early return skips conviction inference
     });
 
     it("should handle empty string reasoning", () => {
@@ -520,7 +521,7 @@ describe("extractStructuredReasoning", () => {
       expect(result.key_drivers).toEqual([]);
       expect(result.risk_factors).toEqual([]);
       expect(result.uncertainties).toEqual([]);
-      expect(result.conviction).toBeNull(); // Early return for empty reasoning
+      expect(result.conviction).toBeNull(); // Early return skips conviction inference
     });
 
     it("should handle whitespace-only reasoning", () => {
@@ -529,7 +530,7 @@ describe("extractStructuredReasoning", () => {
       expect(result.key_drivers).toEqual([]);
       expect(result.risk_factors).toEqual([]);
       expect(result.uncertainties).toEqual([]);
-      expect(result.conviction).toBeNull(); // Early return for whitespace-only
+      expect(result.conviction).toBeNull(); // Early return skips conviction inference
     });
 
     it("should handle reasoning with no matching features", () => {
@@ -605,7 +606,6 @@ describe("extractStructuredReasoning", () => {
       );
 
       expect(result.key_drivers.length).toBeGreaterThan(0);
-      // "Weak" is checked after bullish words — but no bullish words here, so bearish matches
       expect(result.key_drivers[0].direction).toBe("bearish");
       expect(result.conviction).toBe("low");
       expect(result.risk_factors.length).toBeGreaterThan(0);

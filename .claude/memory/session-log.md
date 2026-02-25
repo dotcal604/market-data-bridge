@@ -86,3 +86,29 @@
 - Removed spurious `pnpm-lock.yaml` from main — was causing Next.js Turbopack workspace root mis-detection
 - Pushed main: 8074e85 — repo now fully synced, single canonical branch
 - Agent handshakes: still 7/14, next session should tackle ChatGPT(4), v0(10), Jules(7), Mintlify(14) — needs Fang to paste/connect
+
+## 2026-02-24 05:17 — cloud — Branch merge sprint + handshake progress (10/14)
+
+- Triaged all 26 unmerged remote branches: 9 merge-ready, 2 skip, 10 already-merged, 5 unreviewed
+- Merged 9 branches into integration branch (all conflict-resolved):
+  1. claude/unruffled-mclean (handshake updates)
+  2. docs/scorer-jsdoc (pure JSDoc for scorer.ts)
+  3. copilot/add-unit-tests-eval-features (tick-velocity + orderbook, 25 tests)
+  4. copilot/add-unit-tests-extractor (57 reasoning extractor tests)
+  5. copilot/add-unit-tests-holly-importer (39 importer tests)
+  6. copilot/add-unit-tests-prefilter (29 prefilter tests)
+  7. copilot/add-intraday-equity-curve-chart-again (equity curve chart + backend route)
+  8. copilot/add-weight-history-chart (weight history chart)
+  9. docs/add-jsdoc-backend (53 files JSDoc — previous session wrongly flagged as risky, no deletions found)
+- Fixed 18 test failures across 3 files (tests written against older API):
+  - extractor.test.ts: key_drivers weight expectations aligned
+  - prefilter.test.ts: new large-cap spread guardrail added flag count
+  - backtester.test.ts: max_drawdown can exceed 100%
+  - importer.test.ts: CSV comma quoting fix
+- Handshake updates:
+  - Jules (#7) verified via jules-shared-colors branch (extracted shared color logic)
+  - Updated execution order checklist (Codex #6, ChatGPT #4, v0 #10, Jules #7 all marked done)
+  - Score: 10/14 agents verified (71%)
+  - Remaining: #8 Qodo Gen, #9 Windsurf, #14 Mintlify (all require external tool access)
+- Final state: 92 test files, 1,555 tests passing, TSC clean
+- Next: push integration branch, create PR for main merge, continue handshakes for #8/#9/#14
