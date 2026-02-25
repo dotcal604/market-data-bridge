@@ -23,6 +23,21 @@ import { isConnected } from "../ibkr/connection.js";
 import { config } from "../config.js";
 import { logger } from "../logging.js";
 
+// Widget engine (feature-flagged via DIVOOM_USE_WIDGET_ENGINE)
+import { renderLayout, CANVAS_W, PAD_X, CONTENT_W } from "./widgets/index.js";
+import type { WidgetContext } from "./widgets/index.js";
+import { getLayoutForSession } from "./widgets/layouts.js";
+// Side-effect import: registers all widgets in the registry
+import "./widgets/header.js";
+import "./widgets/indices.js";
+import "./widgets/spy-sparkline.js";
+import "./widgets/sectors.js";
+import "./widgets/movers.js";
+import "./widgets/portfolio.js";
+import "./widgets/news.js";
+import "./widgets/indicators.js";
+import "./widgets/volume-bars.js";
+
 const log = logger.child({ module: "divoom-updater" });
 
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
@@ -54,7 +69,82 @@ function buildChartUrls(): ChartUrls | undefined {
 }
 
 /**
- * Refresh the dashboard: fetch all data, render charts, build elements, push to display.
+ * Refresh via the legacy monolith path (buildElements from layout.ts).
+ */
+async function refreshLegacy(): Promise<void> {
+  if (!display) return;
+
+  // Fetch data and chart inputs in parallel
+  const { dashboard, chartInput } = await fetchDashboardWithCharts();
+  lastDashboardData = dashboard;
+  lastRefreshAt = new Date().toISOString();
+
+  // Render charts (populates cache for the REST endpoint)
+  const chartUrls = buildChartUrls();
+  if (chartUrls) {
+    try {
+      await renderAllCharts(chartInput);
+    } catch (err) {
+      log.warn({ err }, "Chart rendering failed — continuing with text-only layout");
+    }
+  }
+
+  const elements = buildElements(dashboard, chartUrls);
+
+  // Re-enter custom mode each cycle for dynamic colors
+  await display.enterCustomMode(elements, config.divoom.backgroundUrl);
+
+  log.debug({ elementCount: elements.length, charts: !!chartUrls }, "Legacy refresh done");
+}
+
+/**
+ * Refresh via the widget engine (renderLayout from widgets/engine.ts).
+ */
+async function refreshWidgetEngine(): Promise<void> {
+  if (!display) return;
+
+  const session = currentSession();
+  const layout = getLayoutForSession(session);
+
+  // Pre-render charts so Image URLs are populated in cache
+  const chartUrls = buildChartUrls();
+  if (chartUrls) {
+    try {
+      const { chartInput } = await fetchDashboardWithCharts();
+      await renderAllCharts(chartInput);
+    } catch (err) {
+      log.warn({ err }, "Chart pre-render failed — widgets will degrade gracefully");
+    }
+  }
+
+  const ctx: WidgetContext = {
+    session,
+    ibkrConnected: isConnected(),
+    chartBaseUrl: config.divoom.chartBaseUrl || undefined,
+    canvas: { width: CANVAS_W, padX: PAD_X, contentWidth: CONTENT_W },
+  };
+
+  const result = await renderLayout(layout, ctx);
+
+  if (result.elements.length === 0) {
+    log.warn({ layout: layout.name, skipped: result.skipped }, "Widget engine produced no elements");
+    return;
+  }
+
+  await display.enterCustomMode(result.elements, config.divoom.backgroundUrl);
+
+  log.debug({
+    layout: layout.name,
+    counts: `${result.counts.text}T/${result.counts.image}I/${result.counts.netdata}N`,
+    rendered: result.rendered.length,
+    skipped: result.skipped.length,
+    degraded: result.degraded,
+  }, "Widget engine refresh done");
+}
+
+/**
+ * Refresh the dashboard: detect state changes, then delegate to the
+ * appropriate rendering path (widget engine or legacy monolith).
  */
 async function refreshDashboard(): Promise<void> {
   if (!display) return;
@@ -73,27 +163,11 @@ async function refreshDashboard(): Promise<void> {
       lastIbkrConnected = ibkr;
     }
 
-    // Fetch data and chart inputs in parallel
-    const { dashboard, chartInput } = await fetchDashboardWithCharts();
-    lastDashboardData = dashboard;
-    lastRefreshAt = new Date().toISOString();
-
-    // Render charts (populates cache for the REST endpoint)
-    const chartUrls = buildChartUrls();
-    if (chartUrls) {
-      try {
-        await renderAllCharts(chartInput);
-      } catch (err) {
-        log.warn({ err }, "Chart rendering failed — continuing with text-only layout");
-      }
+    if (config.divoom.useWidgetEngine) {
+      await refreshWidgetEngine();
+    } else {
+      await refreshLegacy();
     }
-
-    const elements = buildElements(dashboard, chartUrls);
-
-    // Re-enter custom mode each cycle for dynamic colors
-    await display.enterCustomMode(elements, config.divoom.backgroundUrl);
-
-    log.debug({ session, elementCount: elements.length, charts: !!chartUrls }, "Dashboard refreshed");
   } catch (err) {
     log.error({ err }, "Failed to refresh dashboard");
   }
@@ -128,6 +202,7 @@ export async function startDivoomUpdater(): Promise<void> {
     refreshIntervalMs: config.divoom.refreshIntervalMs,
     brightness: config.divoom.brightness,
     chartBaseUrl: config.divoom.chartBaseUrl || "(charts disabled)",
+    engine: config.divoom.useWidgetEngine ? "widget" : "legacy",
   }, "TimesFrame updater starting");
 
   // Set initial brightness

@@ -19,7 +19,7 @@ const log = logger.child({ module: "divoom-screens" });
 
 // ─── Colors ─────────────────────────────────────────────────
 
-const C = {
+export const C = {
   green: "#00FF00",
   red: "#FF0000",
   yellow: "#FFFF00",
@@ -33,28 +33,28 @@ const C = {
 
 // ─── Helpers ────────────────────────────────────────────────
 
-function changeColor(change: number): string {
+export function changeColor(change: number): string {
   if (change > 0) return C.green;
   if (change < 0) return C.red;
   return C.gray;
 }
 
-function fmtPrice(price: number): string {
+export function fmtPrice(price: number): string {
   return price >= 1000 ? price.toFixed(1) : price.toFixed(2);
 }
 
-function fmtPct(pct: number): string {
+export function fmtPct(pct: number): string {
   return `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`;
 }
 
-function fmtDollar(amount: number): string {
+export function fmtDollar(amount: number): string {
   const abs = Math.abs(amount);
   if (abs >= 1e6) return `${(amount / 1e6).toFixed(1)}M`;
   if (abs >= 1e3) return `${(amount / 1e3).toFixed(1)}K`;
   return amount.toFixed(0);
 }
 
-function sessionLabel(session: string): string {
+export function sessionLabel(session: string): string {
   switch (session) {
     case "pre-market": return "PRE";
     case "regular": return "OPEN";
@@ -64,7 +64,7 @@ function sessionLabel(session: string): string {
   }
 }
 
-function trim(text: string, max: number): string {
+export function trim(text: string, max: number): string {
   return text.length > max ? text.slice(0, max - 1) + "~" : text;
 }
 
@@ -84,7 +84,7 @@ export interface SmartQuoteResult {
   source: "LIVE" | "DLY";
 }
 
-async function smartQuote(symbol: string): Promise<SmartQuoteResult | null> {
+export async function smartQuote(symbol: string): Promise<SmartQuoteResult | null> {
   if (isConnected()) {
     try {
       const { getIBKRQuote } = await import("../ibkr/marketdata.js");

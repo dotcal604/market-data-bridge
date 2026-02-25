@@ -66,6 +66,7 @@ export const config = {
     brightness: parseInt(process.env.DIVOOM_BRIGHTNESS ?? "80", 10),
     backgroundUrl: process.env.DIVOOM_BACKGROUND_URL ?? "",
     chartBaseUrl: process.env.DIVOOM_CHART_BASE_URL ?? "",
+    useWidgetEngine: process.env.DIVOOM_USE_WIDGET_ENGINE === "true",
   },
   ops: {
     webhookUrl: process.env.OPS_WEBHOOK_URL ?? "",
