@@ -16,7 +16,7 @@
  */
 
 import { TimesFrameDisplay } from "./display.js";
-import { buildElements, type ChartUrls } from "./layout.js";
+import { buildElements, type ChartUrls, type DashboardData } from "./layout.js";
 import { fetchDashboardWithCharts, currentSession } from "./screens.js";
 import { renderAllCharts } from "./charts.js";
 import { isConnected } from "../ibkr/connection.js";
@@ -29,6 +29,8 @@ let refreshTimer: ReturnType<typeof setInterval> | null = null;
 let display: TimesFrameDisplay | null = null;
 let lastSession = "";
 let lastIbkrConnected = false;
+let lastDashboardData: DashboardData | null = null;
+let lastRefreshAt: string | null = null;
 
 /**
  * Build chart URLs from the base URL config.
@@ -73,6 +75,8 @@ async function refreshDashboard(): Promise<void> {
 
     // Fetch data and chart inputs in parallel
     const { dashboard, chartInput } = await fetchDashboardWithCharts();
+    lastDashboardData = dashboard;
+    lastRefreshAt = new Date().toISOString();
 
     // Render charts (populates cache for the REST endpoint)
     const chartUrls = buildChartUrls();
@@ -142,6 +146,41 @@ export async function startDivoomUpdater(): Promise<void> {
 
   // Periodic refresh
   refreshTimer = setInterval(refreshDashboard, config.divoom.refreshIntervalMs);
+}
+
+/**
+ * Get the current Divoom updater state for the admin dashboard.
+ */
+export interface DivoomState {
+  enabled: boolean;
+  connected: boolean;
+  deviceIp: string;
+  port: number;
+  refreshIntervalMs: number;
+  brightness: number;
+  lastSession: string;
+  lastIbkrConnected: boolean;
+  inCustomMode: boolean;
+  lastRefreshAt: string | null;
+  chartBaseUrl: string;
+  preview: DashboardData | null;
+}
+
+export function getDivoomState(): DivoomState {
+  return {
+    enabled: config.divoom.enabled,
+    connected: display !== null,
+    deviceIp: config.divoom.deviceIp,
+    port: config.divoom.devicePort,
+    refreshIntervalMs: config.divoom.refreshIntervalMs,
+    brightness: config.divoom.brightness,
+    lastSession,
+    lastIbkrConnected,
+    inCustomMode: display?.isInCustomMode ?? false,
+    lastRefreshAt,
+    chartBaseUrl: config.divoom.chartBaseUrl,
+    preview: lastDashboardData,
+  };
 }
 
 /**

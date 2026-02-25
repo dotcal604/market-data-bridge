@@ -24,6 +24,7 @@ import {
   CalendarDays,
   DollarSign,
   PieChart,
+  Monitor,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -55,6 +56,7 @@ const NAV_ITEMS = [
   { href: "/session", label: "Session", icon: Shield },
   { href: "/orders", label: "Orders", icon: ShoppingCart },
   { href: "/collab", label: "Collaboration", icon: MessageSquare },
+  { href: "/divoom", label: "Display", icon: Monitor },
 ] as const;
 
 export function Sidebar() {

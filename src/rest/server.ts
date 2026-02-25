@@ -18,6 +18,7 @@ import { initWebSocket } from "../ws/server.js";
 import { getMetrics, getRecentIncidents } from "../ops/metrics.js";
 import { isReady } from "../ops/readiness.js";
 import { getCachedChart } from "../divoom/charts.js";
+import { getDivoomState, getDivoomDisplay, forceRefresh } from "../divoom/updater.js";
 
 function apiKeyAuth(req: Request, res: Response, next: NextFunction): void {
   const key = config.rest.apiKey;
@@ -297,6 +298,52 @@ export function createApp(): express.Express {
     res.set("Content-Type", "image/png");
     res.set("Cache-Control", "no-cache, no-store");
     res.send(buffer);
+  });
+
+  // ── Divoom admin endpoints (authenticated) ──
+
+  app.get("/api/divoom/status", apiKeyAuth, (_req: Request, res: Response) => {
+    const state = getDivoomState();
+    // Return status without preview data
+    const { preview: _preview, ...status } = state;
+    res.json({ data: status });
+  });
+
+  app.get("/api/divoom/preview", apiKeyAuth, (_req: Request, res: Response) => {
+    const state = getDivoomState();
+    if (!state.preview) {
+      res.json({ data: null });
+      return;
+    }
+    res.json({ data: state.preview });
+  });
+
+  app.post("/api/divoom/brightness", apiKeyAuth, async (req: Request, res: Response) => {
+    const display = getDivoomDisplay();
+    if (!display) {
+      res.status(503).json({ error: "TimesFrame not active" });
+      return;
+    }
+    const value = Number(req.body?.value);
+    if (isNaN(value) || value < 0 || value > 100) {
+      res.status(400).json({ error: "value must be 0-100" });
+      return;
+    }
+    try {
+      await display.setBrightness(value);
+      res.json({ data: { brightness: value } });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to set brightness" });
+    }
+  });
+
+  app.post("/api/divoom/refresh", apiKeyAuth, async (_req: Request, res: Response) => {
+    try {
+      const result = await forceRefresh();
+      res.json({ data: { message: result } });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to refresh dashboard" });
+    }
   });
 
   // ── MCP Streamable HTTP endpoint (for ChatGPT MCP connector) ──

@@ -488,3 +488,40 @@ export interface OptionsChainData {
   calls: OptionContract[];
   puts: OptionContract[];
 }
+
+// Divoom types
+
+export interface DivoomTextRow {
+  text: string;
+  color: string;
+}
+
+export interface DivoomSection {
+  header: DivoomTextRow;
+  rows: DivoomTextRow[];
+}
+
+export interface DivoomStatusData {
+  enabled: boolean;
+  connected: boolean;
+  deviceIp: string;
+  port: number;
+  refreshIntervalMs: number;
+  brightness: number;
+  lastSession: string;
+  lastIbkrConnected: boolean;
+  inCustomMode: boolean;
+  lastRefreshAt: string | null;
+  chartBaseUrl: string;
+}
+
+export interface DivoomPreviewData {
+  header: DivoomTextRow;
+  indices: DivoomTextRow[];
+  vix: DivoomTextRow | null;
+  sectors: DivoomSection;
+  movers: DivoomSection;
+  portfolio: DivoomSection;
+  news: DivoomSection;
+  indicators: DivoomSection;
+}
