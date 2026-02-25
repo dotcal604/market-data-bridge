@@ -11,6 +11,7 @@
 
 import { DivoomDisplay } from "./display.js";
 import { getScreens, currentSession, buildScrollingTicker, type Screen } from "./screens.js";
+import { isConnected } from "../ibkr/connection.js";
 import { config } from "../config.js";
 import { logger } from "../logging.js";
 
@@ -21,21 +22,30 @@ let display: DivoomDisplay | null = null;
 let screens: Screen[] = [];
 let currentScreenIndex = 0;
 let lastSession: string = "";
+let lastIbkrConnected: boolean = false;
 
 /**
- * Reload screens if the market session has changed.
+ * Reload screens if the market session or IBKR connection state has changed.
  * Returns true if screens were reloaded.
  */
-function reloadScreensIfSessionChanged(): boolean {
+function reloadScreensIfChanged(): boolean {
   const session = currentSession();
-  if (session === lastSession) return false;
+  const ibkr = isConnected();
+
+  if (session === lastSession && ibkr === lastIbkrConnected) return false;
 
   const prev = lastSession;
+  const prevIbkr = lastIbkrConnected;
   lastSession = session;
+  lastIbkrConnected = ibkr;
   screens = getScreens(session);
   currentScreenIndex = 0;
 
-  log.info({ from: prev || "(init)", to: session, screenCount: screens.length }, "Session changed — screens reloaded");
+  log.info({
+    from: prev || "(init)", to: session,
+    ibkr: prevIbkr !== ibkr ? `${prevIbkr} → ${ibkr}` : ibkr,
+    screenCount: screens.length,
+  }, "State changed — screens reloaded");
   return true;
 }
 
@@ -46,7 +56,7 @@ async function renderCurrentScreen(): Promise<void> {
   if (!display || screens.length === 0) return;
 
   // Check for session change before each render
-  reloadScreensIfSessionChanged();
+  reloadScreensIfChanged();
 
   const screen = screens[currentScreenIndex % screens.length];
 
@@ -107,13 +117,15 @@ export async function startDivoomUpdater(): Promise<void> {
     log.warn({ err }, "Failed to set initial brightness");
   }
 
-  // Load screens for current session
+  // Load screens for current session + IBKR state
   lastSession = currentSession();
+  lastIbkrConnected = isConnected();
   screens = getScreens(lastSession);
   currentScreenIndex = 0;
 
   log.info({
     session: lastSession,
+    ibkr: lastIbkrConnected,
     screenCount: screens.length,
     screens: screens.map((s) => s.name),
   }, "Screens loaded");
@@ -147,6 +159,7 @@ export async function stopDivoomUpdater(): Promise<void> {
   screens = [];
   currentScreenIndex = 0;
   lastSession = "";
+  lastIbkrConnected = false;
 }
 
 /**

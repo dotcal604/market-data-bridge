@@ -23,9 +23,37 @@ vi.mock("../../logging.js", () => ({
   logger: { child: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }) },
 }));
 
+vi.mock("../../ibkr/marketdata.js", () => ({
+  getIBKRQuote: vi.fn(),
+}));
+
+vi.mock("../../ibkr/account.js", () => ({
+  getAccountSummary: vi.fn(),
+  getPnL: vi.fn(),
+  getPositions: vi.fn(),
+}));
+
+vi.mock("../../ibkr/portfolio.js", () => ({
+  computePortfolioExposure: vi.fn(),
+}));
+
+vi.mock("../../indicators/engine.js", () => ({
+  getSnapshot: vi.fn(),
+  getTrackedSymbols: vi.fn(),
+}));
+
+vi.mock("../../db/database.js", () => ({
+  queryHollyAlerts: vi.fn(),
+}));
+
 import { getQuote, getNews, getHistoricalBars, runScreener, getTrendingSymbols } from "../../providers/yahoo.js";
 import { getStatus } from "../../providers/status.js";
 import { isConnected } from "../../ibkr/connection.js";
+import { getIBKRQuote } from "../../ibkr/marketdata.js";
+import { getAccountSummary, getPnL, getPositions } from "../../ibkr/account.js";
+import { computePortfolioExposure } from "../../ibkr/portfolio.js";
+import { getSnapshot, getTrackedSymbols } from "../../indicators/engine.js";
+import { queryHollyAlerts } from "../../db/database.js";
 
 const mockGetQuote = vi.mocked(getQuote);
 const mockGetNews = vi.mocked(getNews);
@@ -34,6 +62,14 @@ const mockRunScreener = vi.mocked(runScreener);
 const mockGetTrending = vi.mocked(getTrendingSymbols);
 const mockGetStatus = vi.mocked(getStatus);
 const mockIsConnected = vi.mocked(isConnected);
+const mockGetIBKRQuote = vi.mocked(getIBKRQuote);
+const mockGetAccountSummary = vi.mocked(getAccountSummary);
+const mockGetPnL = vi.mocked(getPnL);
+const mockGetPositions = vi.mocked(getPositions);
+const mockComputeExposure = vi.mocked(computePortfolioExposure);
+const mockGetSnapshot = vi.mocked(getSnapshot);
+const mockGetTrackedSymbols = vi.mocked(getTrackedSymbols);
+const mockQueryHollyAlerts = vi.mocked(queryHollyAlerts);
 
 // ─── Fixtures ───────────────────────────────────────────────
 
@@ -382,7 +418,7 @@ describe("screens", () => {
 
       const lines = await getScreens("regular").find((s) => s.name === "sectors")!.fetch();
 
-      expect(lines[0].text).toBe("SECTORS");
+      expect(lines[0].text).toContain("SECTORS");
       expect(lines[0].color).toBe("#4488FF");
       expect(lines).toHaveLength(6); // 1 header + 5 sectors
     });
@@ -408,6 +444,440 @@ describe("screens", () => {
       expect(lines[0].text).toBe("PORTFOLIO");
       expect(lines[1].text).toBe("IBKR Disconnected");
       expect(lines[1].color).toBe("#808080");
+    });
+
+    it("renders PnL and positions when IBKR connected", async () => {
+      mockIsConnected.mockReturnValue(true);
+      mockGetPnL.mockResolvedValue({
+        account: "DU12345",
+        dailyPnL: 523.45,
+        unrealizedPnL: 200,
+        realizedPnL: 323.45,
+        timestamp: new Date().toISOString(),
+      });
+      mockGetPositions.mockResolvedValue([
+        { account: "DU12345", symbol: "AAPL", secType: "STK", exchange: "SMART", currency: "USD", position: 100, avgCost: 178.50 },
+        { account: "DU12345", symbol: "MSFT", secType: "STK", exchange: "SMART", currency: "USD", position: 50, avgCost: 420.00 },
+      ]);
+      mockQueryHollyAlerts.mockReturnValue([]);
+
+      const screen = getScreens("regular").find((s) => s.name === "portfolio")!;
+      const lines = await screen.fetch();
+
+      expect(lines[0].text).toBe("PORTFOLIO");
+      expect(lines[1].text).toContain("+$523.45");
+      expect(lines[1].color).toBe("#00FF00");
+      expect(lines[2].text).toContain("Positions: 2");
+      expect(lines[3].text).toContain("AAPL");
+    });
+
+    it("renders negative PnL in red", async () => {
+      mockIsConnected.mockReturnValue(true);
+      mockGetPnL.mockResolvedValue({
+        account: "DU12345",
+        dailyPnL: -150.00,
+        unrealizedPnL: -150,
+        realizedPnL: 0,
+        timestamp: new Date().toISOString(),
+      });
+      mockGetPositions.mockResolvedValue([]);
+      mockQueryHollyAlerts.mockReturnValue([]);
+
+      const screen = getScreens("regular").find((s) => s.name === "portfolio")!;
+      const lines = await screen.fetch();
+
+      expect(lines[1].text).toContain("-$150.00");
+      expect(lines[1].color).toBe("#FF0000");
+    });
+  });
+
+  // ─── IBKR-Connected Screen Counts ───────────────────────────
+
+  describe("getScreens — IBKR connected", () => {
+    beforeEach(() => {
+      mockIsConnected.mockReturnValue(true);
+    });
+
+    it("adds account, exposure, indicators screens when IBKR connected (regular)", () => {
+      const screens = getScreens("regular");
+      const names = screens.map((s) => s.name);
+      expect(names).toContain("account");
+      expect(names).toContain("exposure");
+      expect(names).toContain("indicators");
+      expect(screens).toHaveLength(11); // 4 core + 4 ibkr + 3 session
+    });
+
+    it("adds IBKR screens during pre-market when connected", () => {
+      const screens = getScreens("pre-market");
+      const names = screens.map((s) => s.name);
+      expect(names).toContain("account");
+      expect(names).toContain("indicators");
+      expect(screens).toHaveLength(11); // 4 core + 4 ibkr + 3 session
+    });
+
+    it("adds IBKR screens during closed when connected", () => {
+      const screens = getScreens("closed");
+      const names = screens.map((s) => s.name);
+      expect(names).toContain("account");
+      expect(names).toContain("exposure");
+      expect(screens).toHaveLength(12); // 4 core + 4 ibkr + 4 session
+    });
+
+    it("does NOT include account/exposure/indicators when IBKR disconnected", () => {
+      mockIsConnected.mockReturnValue(false);
+      const names = getScreens("regular").map((s) => s.name);
+      expect(names).not.toContain("account");
+      expect(names).not.toContain("exposure");
+      expect(names).not.toContain("indicators");
+    });
+  });
+
+  // ─── Account Screen (IBKR) ──────────────────────────────────
+
+  describe("account screen", () => {
+    it("shows disconnected message when IBKR not connected", async () => {
+      mockIsConnected.mockReturnValue(false);
+
+      // Get screens with IBKR disconnected — account not in registry,
+      // so we test via IBKR-connected registry
+      mockIsConnected.mockReturnValue(true);
+      const screen = getScreens("regular").find((s) => s.name === "account")!;
+
+      // Now disconnect for the fetch
+      mockIsConnected.mockReturnValue(false);
+      const lines = await screen.fetch();
+
+      expect(lines[0].text).toBe("ACCOUNT");
+      expect(lines[1].text).toBe("IBKR Disconnected");
+      expect(lines[1].color).toBe("#808080");
+    });
+
+    it("renders account summary when IBKR connected", async () => {
+      mockIsConnected.mockReturnValue(true);
+      mockGetAccountSummary.mockResolvedValue({
+        account: "DU12345",
+        netLiquidation: 125000,
+        totalCashValue: 45000,
+        settledCash: 45000,
+        buyingPower: 250000,
+        grossPositionValue: 80000,
+        maintMarginReq: 25000,
+        excessLiquidity: 100000,
+        availableFunds: 100000,
+        currency: "USD",
+        timestamp: new Date().toISOString(),
+      });
+
+      const screen = getScreens("regular").find((s) => s.name === "account")!;
+      const lines = await screen.fetch();
+
+      expect(lines[0].text).toBe("ACCOUNT");
+      expect(lines[1].text).toContain("Net Liq");
+      expect(lines[1].text).toContain("125.0K");
+      expect(lines[2].text).toContain("Cash");
+      expect(lines[3].text).toContain("BP");
+      expect(lines[4].text).toContain("Margin");
+      expect(lines[4].text).toContain("20.0%"); // 25000/125000 = 20%
+      expect(lines[5].text).toContain("Excess");
+    });
+
+    it("colors margin red when > 80%", async () => {
+      mockIsConnected.mockReturnValue(true);
+      mockGetAccountSummary.mockResolvedValue({
+        account: "DU12345",
+        netLiquidation: 50000,
+        totalCashValue: 5000,
+        settledCash: 5000,
+        buyingPower: 10000,
+        grossPositionValue: 45000,
+        maintMarginReq: 42000, // 84% of net liq
+        excessLiquidity: 8000,
+        availableFunds: 8000,
+        currency: "USD",
+        timestamp: new Date().toISOString(),
+      });
+
+      const screen = getScreens("regular").find((s) => s.name === "account")!;
+      const lines = await screen.fetch();
+
+      const marginLine = lines.find((l) => l.text.includes("Margin"));
+      expect(marginLine!.color).toBe("#FF0000"); // red for > 80%
+    });
+
+    it("handles account fetch failure", async () => {
+      mockIsConnected.mockReturnValue(true);
+      mockGetAccountSummary.mockRejectedValue(new Error("IBKR error"));
+
+      const screen = getScreens("regular").find((s) => s.name === "account")!;
+      const lines = await screen.fetch();
+
+      expect(lines[0].text).toBe("ACCOUNT");
+      expect(lines[1].text).toBe("Data unavailable");
+    });
+  });
+
+  // ─── Indicators Screen (IBKR) ────────────────────────────────
+
+  describe("indicators screen", () => {
+    it("shows no subscriptions when nothing tracked", async () => {
+      mockIsConnected.mockReturnValue(true);
+      mockGetTrackedSymbols.mockReturnValue([]);
+
+      const screen = getScreens("regular").find((s) => s.name === "indicators")!;
+      const lines = await screen.fetch();
+
+      expect(lines[0].text).toBe("INDICATORS");
+      expect(lines[1].text).toBe("No subscriptions");
+    });
+
+    it("shows warming up when snapshot has no price", async () => {
+      mockIsConnected.mockReturnValue(true);
+      mockGetTrackedSymbols.mockReturnValue(["SPY"]);
+      mockGetSnapshot.mockReturnValue({ symbol: "SPY", price_last: null } as any);
+
+      const screen = getScreens("regular").find((s) => s.name === "indicators")!;
+      const lines = await screen.fetch();
+
+      expect(lines[0].text).toContain("IND SPY");
+      expect(lines[1].text).toBe("Warming up...");
+    });
+
+    it("renders RSI, MACD, VWAP, EMA, ATR when available", async () => {
+      mockIsConnected.mockReturnValue(true);
+      mockGetTrackedSymbols.mockReturnValue(["SPY"]);
+      mockGetSnapshot.mockReturnValue({
+        symbol: "SPY",
+        price_last: 580.50,
+        rsi_14: 65.2,
+        macd_histogram: 0.125,
+        vwap: 579.00,
+        vwap_dev_pct: 0.26,
+        ema_9: 581.00,
+        ema_21: 578.00,
+        atr_14_pct: 1.15,
+      } as any);
+
+      const screen = getScreens("regular").find((s) => s.name === "indicators")!;
+      const lines = await screen.fetch();
+
+      expect(lines[0].text).toContain("IND SPY");
+      expect(lines[0].text).toContain("580.50");
+      expect(lines[1].text).toContain("RSI(14)");
+      expect(lines[1].text).toContain("65.2");
+      expect(lines[2].text).toContain("MACD H");
+      expect(lines[3].text).toContain("VWAP");
+      expect(lines[3].text).toContain("above");
+      expect(lines[4].text).toContain("EMA 9/21");
+      expect(lines[4].text).toContain("BULL");
+      expect(lines[4].color).toBe("#00FF00");
+      expect(lines[5].text).toContain("ATR(14)");
+    });
+
+    it("colors RSI red when overbought (> 70)", async () => {
+      mockIsConnected.mockReturnValue(true);
+      mockGetTrackedSymbols.mockReturnValue(["SPY"]);
+      mockGetSnapshot.mockReturnValue({
+        symbol: "SPY",
+        price_last: 585.00,
+        rsi_14: 75.3,
+        macd_histogram: null,
+        vwap: null,
+        vwap_dev_pct: null,
+        ema_9: null,
+        ema_21: null,
+        atr_14_pct: null,
+      } as any);
+
+      const screen = getScreens("regular").find((s) => s.name === "indicators")!;
+      const lines = await screen.fetch();
+
+      const rsiLine = lines.find((l) => l.text.includes("RSI"));
+      expect(rsiLine!.color).toBe("#FF0000");
+    });
+
+    it("shows BEAR when EMA 9 < EMA 21", async () => {
+      mockIsConnected.mockReturnValue(true);
+      mockGetTrackedSymbols.mockReturnValue(["SPY"]);
+      mockGetSnapshot.mockReturnValue({
+        symbol: "SPY",
+        price_last: 575.00,
+        rsi_14: null,
+        macd_histogram: null,
+        vwap: null,
+        vwap_dev_pct: null,
+        ema_9: 574.00,
+        ema_21: 578.00,
+        atr_14_pct: null,
+      } as any);
+
+      const screen = getScreens("regular").find((s) => s.name === "indicators")!;
+      const lines = await screen.fetch();
+
+      const emaLine = lines.find((l) => l.text.includes("EMA"));
+      expect(emaLine!.text).toContain("BEAR");
+      expect(emaLine!.color).toBe("#FF0000");
+    });
+
+    it("handles indicator engine failure", async () => {
+      mockIsConnected.mockReturnValue(true);
+      mockGetTrackedSymbols.mockImplementation(() => { throw new Error("Engine error"); });
+
+      const screen = getScreens("regular").find((s) => s.name === "indicators")!;
+      const lines = await screen.fetch();
+
+      expect(lines[0].text).toBe("INDICATORS");
+      expect(lines[1].text).toBe("Unavailable");
+    });
+  });
+
+  // ─── Exposure Screen (IBKR) ──────────────────────────────────
+
+  describe("exposure screen", () => {
+    it("shows disconnected message when IBKR not connected", async () => {
+      mockIsConnected.mockReturnValue(true);
+      const screen = getScreens("regular").find((s) => s.name === "exposure")!;
+
+      mockIsConnected.mockReturnValue(false);
+      const lines = await screen.fetch();
+
+      expect(lines[0].text).toBe("EXPOSURE");
+      expect(lines[1].text).toBe("IBKR Disconnected");
+    });
+
+    it("shows flat message when no positions", async () => {
+      mockIsConnected.mockReturnValue(true);
+      mockComputeExposure.mockResolvedValue({
+        positionCount: 0,
+        percentDeployed: 0,
+        grossExposure: 0,
+        netExposure: 0,
+        portfolioHeat: 0,
+        largestPosition: null,
+        largestPositionPercent: 0,
+        sectorBreakdown: {},
+        betaWeightedExposure: 0,
+        netLiquidation: 100000,
+      } as any);
+
+      const screen = getScreens("regular").find((s) => s.name === "exposure")!;
+      const lines = await screen.fetch();
+
+      expect(lines[0].text).toBe("EXPOSURE");
+      expect(lines[1].text).toBe("Flat - no positions");
+    });
+
+    it("renders exposure data with positions", async () => {
+      mockIsConnected.mockReturnValue(true);
+      mockComputeExposure.mockResolvedValue({
+        positionCount: 5,
+        percentDeployed: 65.2,
+        grossExposure: 81500,
+        netExposure: 45000,
+        portfolioHeat: 3.2,
+        largestPosition: "AAPL",
+        largestPositionPercent: 22.5,
+        sectorBreakdown: { Technology: 40 },
+        betaWeightedExposure: 50000,
+        netLiquidation: 125000,
+      } as any);
+
+      const screen = getScreens("regular").find((s) => s.name === "exposure")!;
+      const lines = await screen.fetch();
+
+      expect(lines[0].text).toBe("EXPOSURE");
+      expect(lines[1].text).toContain("Deployed");
+      expect(lines[1].text).toContain("65.2%");
+      expect(lines[2].text).toContain("Gross");
+      expect(lines[3].text).toContain("Net");
+      expect(lines[4].text).toContain("Heat");
+      expect(lines[4].text).toContain("3.20%");
+      expect(lines[5].text).toContain("AAPL");
+      expect(lines[5].text).toContain("22.5%");
+    });
+
+    it("colors deployed red when > 80%", async () => {
+      mockIsConnected.mockReturnValue(true);
+      mockComputeExposure.mockResolvedValue({
+        positionCount: 3,
+        percentDeployed: 92.0,
+        grossExposure: 115000,
+        netExposure: 100000,
+        portfolioHeat: 6.5,
+        largestPosition: "NVDA",
+        largestPositionPercent: 45.0,
+        sectorBreakdown: {},
+        betaWeightedExposure: 90000,
+        netLiquidation: 125000,
+      } as any);
+
+      const screen = getScreens("regular").find((s) => s.name === "exposure")!;
+      const lines = await screen.fetch();
+
+      expect(lines[1].color).toBe("#FF0000"); // deployed > 80%
+      expect(lines[4].color).toBe("#FF0000"); // heat > 5
+    });
+
+    it("handles exposure fetch failure", async () => {
+      mockIsConnected.mockReturnValue(true);
+      mockComputeExposure.mockRejectedValue(new Error("Portfolio error"));
+
+      const screen = getScreens("regular").find((s) => s.name === "exposure")!;
+      const lines = await screen.fetch();
+
+      expect(lines[0].text).toBe("EXPOSURE");
+      expect(lines[1].text).toBe("Data unavailable");
+    });
+  });
+
+  // ─── SmartQuote IBKR-First Routing ────────────────────────────
+
+  describe("smartQuote routing (via market-pulse)", () => {
+    it("uses IBKR quote when connected (shows LIVE badge)", async () => {
+      mockIsConnected.mockReturnValue(true);
+      mockGetIBKRQuote.mockResolvedValue({
+        symbol: "SPY",
+        bid: 580.0,
+        ask: 580.10,
+        last: 580.05,
+        open: 578.0,
+        high: 582.0,
+        low: 577.0,
+        close: 578.0,
+        volume: 50000000,
+        timestamp: new Date().toISOString(),
+        delayed: false,
+        staleness_warning: null,
+      });
+
+      const screen = getScreens("regular").find((s) => s.name === "market-pulse")!;
+      const lines = await screen.fetch();
+
+      expect(lines[0].text).toContain("LIVE");
+      expect(mockGetIBKRQuote).toHaveBeenCalledWith({ symbol: "SPY" });
+    });
+
+    it("falls back to Yahoo when IBKR fails", async () => {
+      mockIsConnected.mockReturnValue(true);
+      mockGetIBKRQuote.mockRejectedValue(new Error("IBKR timeout"));
+      mockGetQuote.mockResolvedValue(makeQuote());
+
+      const screen = getScreens("regular").find((s) => s.name === "market-pulse")!;
+      const lines = await screen.fetch();
+
+      expect(lines[0].text).toContain("DLY");
+      expect(mockGetQuote).toHaveBeenCalled();
+    });
+
+    it("uses Yahoo directly when IBKR disconnected", async () => {
+      mockIsConnected.mockReturnValue(false);
+      mockGetQuote.mockResolvedValue(makeQuote());
+
+      const screen = getScreens("regular").find((s) => s.name === "market-pulse")!;
+      const lines = await screen.fetch();
+
+      expect(lines[0].text).toContain("DLY");
+      expect(mockGetIBKRQuote).not.toHaveBeenCalled();
+      expect(mockGetQuote).toHaveBeenCalled();
     });
   });
 
@@ -519,12 +989,13 @@ describe("screens", () => {
       expect(mockGetQuote).toHaveBeenCalledWith("RTY=F");
     });
 
-    it("renders header in cyan", async () => {
+    it("renders header in cyan with source badge", async () => {
       mockGetQuote.mockResolvedValue(makeQuote());
 
       const lines = await getScreens("closed").find((s) => s.name === "futures")!.fetch();
 
-      expect(lines[0].text).toBe("FUTURES");
+      expect(lines[0].text).toContain("FUTURES");
+      expect(lines[0].text).toContain("DLY");
       expect(lines[0].color).toBe("#00FFFF");
     });
 
