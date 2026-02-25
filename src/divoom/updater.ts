@@ -1,212 +1,52 @@
 /**
  * Divoom Display Updater
  *
- * Periodically fetches live trading data and updates the Divoom Times Gate display.
+ * Rotates through market data screens on the Divoom TimeFrame display.
+ * Each screen fetches its own data (indices, movers, sectors, portfolio, etc.)
+ * and renders color-coded text lines.
+ *
  * Follows the same pattern as holly/watcher.ts: config-gated, polling, logger, shutdown.
  */
 
 import { DivoomDisplay } from "./display.js";
-import {
-  buildDashboard,
-  type PnLData,
-  type Position,
-  type HollyAlert,
-  type MarketStatus,
-  type RecentTrade,
-} from "./dashboard.js";
+import { getScreens, buildScrollingTicker, type Screen } from "./screens.js";
 import { config } from "../config.js";
 import { logger } from "../logging.js";
-import { getPnL } from "../ibkr/account.js";
-import { isConnected } from "../ibkr/connection.js";
-import { queryHollyAlerts } from "../db/database.js";
-import { getQuote } from "../providers/yahoo.js";
 
 const log = logger.child({ module: "divoom-updater" });
 
-let timer: ReturnType<typeof setInterval> | null = null;
+let rotationTimer: ReturnType<typeof setInterval> | null = null;
 let display: DivoomDisplay | null = null;
+let screens: Screen[] = [];
+let currentScreenIndex = 0;
 
 /**
- * Fetch current P&L data
+ * Render the current screen on the display
  */
-async function fetchPnLData(): Promise<PnLData> {
-  if (!isConnected()) {
-    return {
-      realizedPnL: 0,
-      unrealizedPnL: 0,
-      totalPnL: 0,
-      winRate: 0,
-      tradeCount: 0,
-    };
-  }
+async function renderCurrentScreen(): Promise<void> {
+  if (!display || screens.length === 0) return;
+
+  const screen = screens[currentScreenIndex % screens.length];
 
   try {
-    const pnl = await getPnL();
+    const lines = await screen.fetch();
 
-    // Calculate win rate from today's executions
-    const { queryExecutions } = await import("../db/database.js");
-    const today = new Date().toISOString().split("T")[0];
-    const todaysExecs = queryExecutions({ limit: 1000 }) as Array<Record<string, unknown>>;
-    
-    // Group by correlation_id to count trades (not individual executions)
-    const tradeMap = new Map<string, number>();
-    for (const exec of todaysExecs) {
-      const timestamp = String(exec.timestamp ?? "");
-      if (!timestamp.startsWith(today)) continue;
-      
-      const correlationId = String(exec.correlation_id ?? "");
-      const pnl = Number(exec.realized_pnl ?? 0);
-      if (correlationId && pnl !== 0) {
-        tradeMap.set(correlationId, (tradeMap.get(correlationId) ?? 0) + pnl);
-      }
-    }
+    // Clear previous text slots, then send new lines
+    await display.clearAllTexts(8);
+    await display.sendLines(lines);
 
-    const trades = Array.from(tradeMap.values());
-    const winningTrades = trades.filter((pnl) => pnl > 0).length;
-    const tradeCount = trades.length;
-    const winRate = tradeCount > 0 ? winningTrades / tradeCount : 0;
-
-    return {
-      realizedPnL: pnl.realizedPnL ?? 0,
-      unrealizedPnL: pnl.unrealizedPnL ?? 0,
-      totalPnL: pnl.dailyPnL ?? 0,
-      winRate,
-      tradeCount,
-    };
+    log.debug({ screen: screen.name, lineCount: lines.length }, "Screen rendered");
   } catch (err) {
-    log.error({ err }, "Failed to fetch P&L");
-    return {
-      realizedPnL: 0,
-      unrealizedPnL: 0,
-      totalPnL: 0,
-      winRate: 0,
-      tradeCount: 0,
-    };
+    log.error({ err, screen: screen.name }, "Failed to render screen");
   }
 }
 
 /**
- * Fetch current positions
+ * Advance to next screen and render it
  */
-async function fetchPositions(): Promise<Position[]> {
-  if (!isConnected()) {
-    return [];
-  }
-
-  try {
-    const { getPositions } = await import("../ibkr/account.js");
-    const positions = await getPositions();
-    
-    // Note: IBKR getPositions() doesn't return current market price
-    // To get unrealized P&L, we'd need to fetch quotes for each position
-    // For the Divoom display, we show position count rather than individual P&L
-    const positionsWithPnL: Position[] = [];
-    for (const pos of positions) {
-      positionsWithPnL.push({
-        symbol: pos.symbol,
-        quantity: pos.position,
-        avgPrice: pos.avgCost,
-        currentPrice: pos.avgCost, // No market price available from getPositions
-        unrealizedPnL: 0, // Would need to fetch quotes to calculate
-      });
-    }
-    
-    return positionsWithPnL;
-  } catch (err) {
-    log.error({ err }, "Failed to fetch positions");
-    return [];
-  }
-}
-
-/**
- * Fetch latest Holly alert
- */
-async function fetchLatestHollyAlert(): Promise<HollyAlert | null> {
-  try {
-    const alerts = queryHollyAlerts({ limit: 1 });
-    if (alerts.length === 0) return null;
-
-    const alert = alerts[0];
-    return {
-      symbol: String(alert.symbol ?? ""),
-      strategy: String(alert.strategy ?? ""),
-      entryPrice: Number(alert.entry_price ?? 0),
-      stopPrice: alert.stop_price != null ? Number(alert.stop_price) : undefined,
-      alertTime: String(alert.alert_time ?? ""),
-    };
-  } catch (err) {
-    log.error({ err }, "Failed to fetch Holly alert");
-    return null;
-  }
-}
-
-/**
- * Fetch market status (SPY/QQQ)
- */
-async function fetchMarketStatus(): Promise<MarketStatus> {
-  try {
-    const [spyQuote, qqqQuote] = await Promise.all([
-      getQuote("SPY"),
-      getQuote("QQQ"),
-    ]);
-
-    return {
-      spy: spyQuote.last ?? 0,
-      qqq: qqqQuote.last ?? 0,
-      spyChange: spyQuote.changePercent ?? undefined,
-      qqqChange: qqqQuote.changePercent ?? undefined,
-    };
-  } catch (err) {
-    log.error({ err }, "Failed to fetch market status");
-    return { spy: 0, qqq: 0 };
-  }
-}
-
-/**
- * Fetch the most recent trade
- */
-async function fetchRecentTrade(): Promise<RecentTrade | null> {
-  try {
-    const { queryExecutions } = await import("../db/database.js");
-    const execs = queryExecutions({ limit: 1 });
-    if (execs.length === 0) return null;
-
-    const exec = execs[0] as Record<string, unknown>;
-    return {
-      symbol: String(exec.symbol ?? ""),
-      quantity: Number(exec.quantity ?? 0),
-      price: Number(exec.price ?? 0),
-      side: String(exec.side ?? "") as "BUY" | "SELL",
-      timestamp: String(exec.timestamp ?? ""),
-    };
-  } catch (err) {
-    log.error({ err }, "Failed to fetch recent trade");
-    return null;
-  }
-}
-
-/**
- * Update the display with latest data
- */
-async function updateDisplay(): Promise<void> {
-  if (!display) return;
-
-  try {
-    const [pnlData, positions, hollyAlert, marketStatus, recentTrade] = await Promise.all([
-      fetchPnLData(),
-      fetchPositions(),
-      fetchLatestHollyAlert(),
-      fetchMarketStatus(),
-      fetchRecentTrade(),
-    ]);
-
-    const dashboardData = buildDashboard(pnlData, positions, hollyAlert, marketStatus, recentTrade);
-    await display.sendDashboard(dashboardData);
-    
-    log.debug("Display updated successfully");
-  } catch (err) {
-    log.error({ err }, "Failed to update display");
-  }
+async function rotateScreen(): Promise<void> {
+  currentScreenIndex = (currentScreenIndex + 1) % screens.length;
+  await renderCurrentScreen();
 }
 
 /**
@@ -234,7 +74,7 @@ export async function startDivoomUpdater(): Promise<void> {
 
   log.info({
     deviceIp: config.divoom.deviceIp,
-    refreshIntervalMs: config.divoom.refreshIntervalMs,
+    screenRotationMs: config.divoom.screenRotationMs,
     brightness: config.divoom.brightness,
   }, "Divoom updater starting");
 
@@ -245,20 +85,26 @@ export async function startDivoomUpdater(): Promise<void> {
     log.warn({ err }, "Failed to set initial brightness");
   }
 
-  // Initial update
-  await updateDisplay();
+  // Load screens
+  screens = getScreens();
+  currentScreenIndex = 0;
 
-  // Start periodic updates
-  timer = setInterval(updateDisplay, config.divoom.refreshIntervalMs);
+  log.info({ screenCount: screens.length, screens: screens.map((s) => s.name) }, "Screens loaded");
+
+  // Render first screen immediately
+  await renderCurrentScreen();
+
+  // Rotate screens on interval
+  rotationTimer = setInterval(rotateScreen, config.divoom.screenRotationMs);
 }
 
 /**
  * Stop the Divoom display updater
  */
 export async function stopDivoomUpdater(): Promise<void> {
-  if (timer) {
-    clearInterval(timer);
-    timer = null;
+  if (rotationTimer) {
+    clearInterval(rotationTimer);
+    rotationTimer = null;
   }
 
   if (display) {
@@ -270,6 +116,9 @@ export async function stopDivoomUpdater(): Promise<void> {
     }
     display = null;
   }
+
+  screens = [];
+  currentScreenIndex = 0;
 }
 
 /**
@@ -277,4 +126,38 @@ export async function stopDivoomUpdater(): Promise<void> {
  */
 export function getDivoomDisplay(): DivoomDisplay | null {
   return display;
+}
+
+/**
+ * Get current screen info (for diagnostics)
+ */
+export function getCurrentScreenInfo(): { name: string; index: number; total: number } | null {
+  if (screens.length === 0) return null;
+  const idx = currentScreenIndex % screens.length;
+  return { name: screens[idx].name, index: idx, total: screens.length };
+}
+
+/**
+ * Force advance to next screen (for MCP tool)
+ */
+export async function nextScreen(): Promise<string> {
+  if (!display || screens.length === 0) return "Divoom not active";
+  await rotateScreen();
+  const info = getCurrentScreenInfo();
+  return info ? `Now showing: ${info.name} (${info.index + 1}/${info.total})` : "No screens";
+}
+
+/**
+ * Force show scrolling ticker (for MCP tool)
+ */
+export async function showScrollingTicker(): Promise<void> {
+  if (!display) return;
+
+  try {
+    const ticker = await buildScrollingTicker();
+    await display.sendScrollingText(ticker.text, ticker.color);
+    log.info("Scrolling ticker displayed");
+  } catch (err) {
+    log.error({ err }, "Failed to show scrolling ticker");
+  }
 }

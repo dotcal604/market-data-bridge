@@ -1,11 +1,11 @@
 /**
- * Divoom Times Gate Display Controller
+ * Divoom Display Controller
  *
- * Sends live trading data to Divoom Times Gate pixel art display over HTTP API.
+ * HTTP client for Divoom pixel-art displays (TimeFrame, Times Gate, Pixoo-64).
  * Protocol: POST to http://<device-ip>/post with JSON body.
  *
  * API Docs:
- * - Official: https://docin.divoom-gz.com/web/#/5/140
+ * - Official: https://docin.divoom-gz.com/web/#/5/358
  * - Community: https://divoom.2a03.party/api/app.html
  */
 
@@ -14,6 +14,7 @@ import { logger } from "../logging.js";
 const log = logger.child({ module: "divoom" });
 
 export interface DivoomTextOptions {
+  id?: number; // TextId — unique per text slot (0–19)
   x?: number;
   y?: number;
   color?: string; // Hex format: "#FF0000"
@@ -22,6 +23,16 @@ export interface DivoomTextOptions {
   scrollSpeed?: number; // 0-100
   scrollDirection?: 0 | 1; // 0=left, 1=right
   align?: 1 | 2 | 3; // 1=left, 2=center, 3=right
+}
+
+export interface TextLine {
+  text: string;
+  y: number;
+  color: string;
+  id?: number;
+  font?: number;
+  align?: 1 | 2 | 3;
+  scrollSpeed?: number;
 }
 
 export interface DashboardData {
@@ -42,7 +53,7 @@ export interface DashboardData {
 }
 
 /**
- * DivoomDisplay - HTTP client for Divoom Times Gate API
+ * DivoomDisplay — HTTP client for Divoom device REST API
  */
 export class DivoomDisplay {
   private readonly deviceIp: string;
@@ -105,7 +116,7 @@ export class DivoomDisplay {
    */
   async sendText(text: string, options: DivoomTextOptions = {}): Promise<void> {
     const payload = {
-      TextId: 1,
+      TextId: options.id ?? 1,
       x: options.x ?? 0,
       y: options.y ?? 0,
       dir: options.scrollDirection ?? 0,
@@ -119,6 +130,34 @@ export class DivoomDisplay {
 
     await this.sendCommand("Draw/SendHttpText", payload);
     log.debug({ text, options }, "Text sent to display");
+  }
+
+  /**
+   * Send multiple text lines in sequence, each with its own TextId slot
+   */
+  async sendLines(lines: TextLine[]): Promise<void> {
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      await this.sendText(line.text, {
+        id: line.id ?? i,
+        x: 0,
+        y: line.y,
+        color: line.color,
+        font: line.font ?? 2,
+        align: line.align ?? 1,
+        scrollSpeed: line.scrollSpeed,
+      });
+    }
+  }
+
+  /**
+   * Clear all text slots (send empty strings to slots 0–maxSlots)
+   */
+  async clearAllTexts(maxSlots = 10): Promise<void> {
+    for (let i = 0; i < maxSlots; i++) {
+      await this.sendText(" ", { id: i, x: 0, y: 0 });
+    }
+    log.debug({ maxSlots }, "All text slots cleared");
   }
 
   /**
@@ -149,7 +188,7 @@ export class DivoomDisplay {
   }
 
   /**
-   * Send multi-line dashboard data
+   * Send multi-line dashboard data (legacy format)
    */
   async sendDashboard(data: DashboardData): Promise<void> {
     const lines: Array<{ text: string; y: number; color: string }> = [];
