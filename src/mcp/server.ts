@@ -114,6 +114,8 @@ import {
   closeExitPlan, getExitPlanStats, recommendPolicy,
 } from "../exit-plan/index.js";
 import type { ExitPlanState, OverrideReason } from "../exit-plan/types.js";
+import { getRecalibrationStatus } from "../eval/ensemble/recalibration-hook.js";
+import { classifyVolatilityRegime } from "../eval/features/volatility-regime.js";
 
 const log = logger.child({ subsystem: "mcp" });
 
@@ -135,16 +137,51 @@ function withErrorHandling<T = any>(toolName: string, handler: ToolHandler<T>): 
   };
 }
 
+/** Tools that mutate state — skipped in readonly mode */
+const MUTATING_TOOLS = new Set([
+  "place_order", "place_bracket_order", "place_advanced_bracket",
+  "modify_order", "cancel_order", "cancel_all_orders", "flatten_positions",
+  "collab_post", "collab_clear",
+  "session_record_trade", "session_lock", "session_unlock", "session_reset",
+  "tune_risk_params", "trade_journal_write", "record_outcome",
+  "tradersync_import", "holly_import", "import_file",
+  "holly_predictor_refresh", "holly_trade_import_file",
+  "trailing_stop_optimize", "auto_eval_toggle",
+  "divoom_refresh", "divoom_set_brightness",
+  "update_risk_config", "run_analytics",
+  "exit_plan_create", "exit_plan_activate", "exit_plan_update_policy",
+  "exit_plan_record_override", "exit_plan_close",
+  "subscribe_real_time_bars", "unsubscribe_real_time_bars",
+  "subscribe_account_updates", "unsubscribe_account_updates",
+  "set_market_data_type", "set_auto_open_orders",
+]);
+
 /**
  * Initialize and configure the Model Context Protocol (MCP) server.
  * Registers all tools for market data, trading, analysis, and operations.
+ * @param opts.readonly When true, only read-only tools are registered (no order/mutation tools).
  * @returns Configured McpServer instance
  */
-export function createMcpServer(): McpServer {
+export function createMcpServer(opts?: { readonly?: boolean }): McpServer {
+  const readonly = opts?.readonly ?? false;
   const server = new McpServer({
-    name: "market-data-bridge",
+    name: readonly ? "market-data-bridge-readonly" : "market-data-bridge",
     version: "2.0.0",
   });
+
+  // In readonly mode, intercept tool registration to skip mutating tools
+  if (readonly) {
+    const originalTool = server.tool.bind(server);
+    server.tool = ((...args: unknown[]) => {
+      const name = args[0] as string;
+      if (MUTATING_TOOLS.has(name)) {
+        log.debug({ tool: name }, "Skipping mutating tool in readonly mode");
+        return;
+      }
+      return (originalTool as Function)(...args);
+    }) as typeof server.tool;
+    log.info({ mutatingToolsSkipped: MUTATING_TOOLS.size }, "Readonly mode — mutating tools will be skipped");
+  }
 
   // --- Tool: debug_runtime --- Proves what THIS process is actually using
   server.tool(
@@ -2764,6 +2801,89 @@ export function createMcpServer(): McpServer {
       const { getAnalyticsSchedule } = await import("../scheduler.js");
       const schedule = getAnalyticsSchedule();
       return { content: [{ type: "text", text: JSON.stringify(schedule, null, 2) }] };
+    })
+  );
+
+  // ── Analytics summary tools (always registered, read-only) ──
+
+  // --- Tool: edge_summary --- Lightweight edge report (current stats only)
+  server.tool(
+    "edge_summary",
+    "Quick edge analytics: win rate, Sharpe, expectancy, edge score. No walk-forward or rolling metrics — use edge_report for the full version.",
+    {},
+    withErrorHandling("edge_summary", async () => {
+      const report = computeEdgeReport({ includeWalkForward: false });
+      return { content: [{ type: "text", text: JSON.stringify(report.current, null, 2) }] };
+    })
+  );
+
+  // --- Tool: exit_recommendation --- Recommended exit policy (preview, no plan created)
+  server.tool(
+    "exit_recommendation",
+    "Get recommended exit policy (TP ladder, runner, protect trigger, archetype) for a trade setup. Read-only preview — does not create an exit plan.",
+    {
+      symbol: z.string().describe("Ticker symbol"),
+      direction: z.enum(["long", "short"]).describe("Trade direction"),
+      entry_price: z.number().describe("Entry price"),
+      stop_price: z.number().describe("Stop loss price"),
+      total_shares: z.number().describe("Position size in shares"),
+      strategy: z.string().optional().describe("Holly strategy name (improves archetype detection)"),
+    },
+    withErrorHandling("exit_recommendation", async (params) => {
+      const policy = recommendPolicy({
+        symbol: params.symbol,
+        direction: params.direction,
+        entry_price: params.entry_price,
+        stop_price: params.stop_price,
+        total_shares: params.total_shares,
+        strategy: params.strategy,
+      });
+      return { content: [{ type: "text", text: JSON.stringify(policy, null, 2) }] };
+    })
+  );
+
+  // --- Tool: regime_summary --- Composite regime diagnostics
+  server.tool(
+    "regime_summary",
+    "Composite regime snapshot: volatility classification, model drift status, and Bayesian recalibration weights. No parameters — reads current state.",
+    {},
+    withErrorHandling("regime_summary", async () => {
+      const drift = computeDriftReport();
+      const recal = getRecalibrationStatus();
+
+      // Derive volatility regime from drift report's recent accuracy trend
+      // Use a simple heuristic: if regime_shift_detected, classify as "high"
+      const volatilityRegime = drift.regime_shift_detected
+        ? classifyVolatilityRegime(6) // >5% → "high"
+        : classifyVolatilityRegime(3); // 2-5% → "normal" (default)
+
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            volatility: {
+              regime: volatilityRegime,
+              regime_shift_detected: drift.regime_shift_detected,
+            },
+            drift: {
+              overall_accuracy: drift.overall_accuracy,
+              by_model: drift.by_model.map((m) => ({
+                model_id: m.model_id,
+                sample_size: m.sample_size,
+                rolling_accuracy: m.rolling_accuracy,
+                calibration_error: m.calibration_error,
+                regime_shift_detected: m.regime_shift_detected,
+              })),
+              recommendation: drift.recommendation,
+            },
+            bayesian_weights: recal.bayesian_weights,
+            recalibration: {
+              outcomes_since_last: recal.outcomes_since_last_recal,
+              batch_interval: recal.batch_interval,
+            },
+          }, null, 2),
+        }],
+      };
     })
   );
 

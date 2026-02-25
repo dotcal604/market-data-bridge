@@ -24,13 +24,13 @@ import { validateConfig } from "./config-validator.js";
 import { recordIncident, incrementUnhandledRejections, stopMetrics } from "./ops/metrics.js";
 import { setReady } from "./ops/readiness.js";
 
-type Mode = "mcp" | "rest" | "both";
+type Mode = "mcp" | "mcp-readonly" | "rest" | "both";
 
 function parseMode(): Mode {
   const idx = process.argv.indexOf("--mode");
   if (idx !== -1 && process.argv[idx + 1]) {
     const val = process.argv[idx + 1].toLowerCase();
-    if (val === "mcp" || val === "rest" || val === "both") return val;
+    if (val === "mcp" || val === "mcp-readonly" || val === "rest" || val === "both") return val as Mode;
   }
   return "both";
 }
@@ -98,23 +98,28 @@ async function main() {
     await new Promise((r) => setTimeout(r, 5000));
   }
 
-  // A) Connect to TWS — all modes try this.
+  // A) Connect to TWS — all modes except mcp-readonly try this.
   // MCP connects directly for tool calls instead of proxying through REST.
-  try {
-    logger.info("Delaying IBKR connect by 5s to allow TWS cleanup");
-    await sleep(5_000);
-    await connect();
-    logger.info("IBKR connected — account data available");
-  } catch (e: any) {
-    logger.warn({ err: e.message }, "IBKR not available — market data still works via Yahoo");
-    logger.info("Will keep retrying IBKR connection in background...");
-    scheduleReconnect();
+  // mcp-readonly is analytics-only: uses local DB, no live account needed.
+  if (mode !== "mcp-readonly") {
+    try {
+      logger.info("Delaying IBKR connect by 5s to allow TWS cleanup");
+      await sleep(5_000);
+      await connect();
+      logger.info("IBKR connected — account data available");
+    } catch (e: any) {
+      logger.warn({ err: e.message }, "IBKR not available — market data still works via Yahoo");
+      logger.info("Will keep retrying IBKR connection in background...");
+      scheduleReconnect();
+    }
+  } else {
+    logger.info("mcp-readonly mode — skipping IBKR connect (analytics-only)");
   }
 
   // B) Background automation — only the always-on bridge process (rest/both).
   // MCP processes are lean: connect + serve tools, no scheduler/flatten/reconciliation.
   // Running these in multiple MCP clients risks duplicate EOD flatten orders.
-  if (mode !== "mcp") {
+  if (mode !== "mcp" && mode !== "mcp-readonly") {
     attachPersistentOrderListeners();
 
     onReconnect(() => {
@@ -138,7 +143,7 @@ async function main() {
 
   // Holly watcher + Divoom updater only run in bridge mode (rest/both).
   // MCP clients are lean — no file watchers or display drivers.
-  if (mode !== "mcp") {
+  if (mode !== "mcp" && mode !== "mcp-readonly") {
     startHollyWatcher();
     startInboxWatcher({
       inboxPath: config.importInbox.path,
@@ -153,8 +158,8 @@ async function main() {
   }
 
   // Start MCP server on stdio
-  if (mode === "mcp" || mode === "both") {
-    const mcpServer = createMcpServer();
+  if (mode === "mcp" || mode === "mcp-readonly" || mode === "both") {
+    const mcpServer = createMcpServer({ readonly: mode === "mcp-readonly" });
     const transport = new StdioServerTransport();
     
     // Add error handlers for stdio transport
