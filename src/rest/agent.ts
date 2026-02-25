@@ -807,30 +807,20 @@ const actions: Record<string, ActionHandler> = {
     const { getDivoomDisplay } = await import("../divoom/updater.js");
     const display = getDivoomDisplay();
     if (!display) {
-      throw new Error("Divoom display not initialized. Check DIVOOM_ENABLED and DIVOOM_DEVICE_IP config.");
+      throw new Error("TimesFrame display not initialized. Check DIVOOM_ENABLED and DIVOOM_DEVICE_IP config.");
     }
-    return display.getDeviceInfo();
+    const info = await display.getDeviceInfo();
+    return { ...info, inCustomMode: display.isInCustomMode };
   },
-  divoom_send_text: async (p) => {
-    const { getDivoomDisplay } = await import("../divoom/updater.js");
-    const display = getDivoomDisplay();
-    if (!display) {
-      throw new Error("Divoom display not initialized. Check DIVOOM_ENABLED and DIVOOM_DEVICE_IP config.");
-    }
-    await display.sendText(str(p, "text"), {
-      color: str(p, "color") || undefined,
-      x: p.x != null ? num(p, "x") : undefined,
-      y: p.y != null ? num(p, "y") : undefined,
-      font: p.font != null ? num(p, "font") : undefined,
-      scrollSpeed: p.scrollSpeed != null ? num(p, "scrollSpeed") : undefined,
-    });
-    return { success: true, text: str(p, "text") };
+  divoom_refresh: async () => {
+    const { forceRefresh } = await import("../divoom/updater.js");
+    return { result: await forceRefresh() };
   },
   divoom_set_brightness: async (p) => {
     const { getDivoomDisplay } = await import("../divoom/updater.js");
     const display = getDivoomDisplay();
     if (!display) {
-      throw new Error("Divoom display not initialized. Check DIVOOM_ENABLED and DIVOOM_DEVICE_IP config.");
+      throw new Error("TimesFrame display not initialized. Check DIVOOM_ENABLED and DIVOOM_DEVICE_IP config.");
     }
     const brightness = num(p, "brightness");
     await display.setBrightness(brightness);
@@ -1805,20 +1795,10 @@ export const actionsMeta: Record<string, ActionMeta> = {
   },
 
   // Divoom Display
-  divoom_status: { description: "Check Divoom Times Gate display connection and get device info" },
-  divoom_send_text: { 
-    description: "Send text to Divoom Times Gate display", 
-    params: {
-      text: { type: "string", description: "Text to display", required: true },
-      color: { type: "string", description: "Text color in hex format (e.g., '#FF0000')" },
-      x: { type: "number", description: "X position (0-63)" },
-      y: { type: "number", description: "Y position (0-63)" },
-      font: { type: "number", description: "Font ID (0-7)" },
-      scrollSpeed: { type: "number", description: "Scroll speed (ms per pixel)" },
-    },
-  },
-  divoom_set_brightness: { 
-    description: "Set Divoom Times Gate display brightness (0-100)", 
+  divoom_status: { description: "Check Divoom TimesFrame display connection and get device info" },
+  divoom_refresh: { description: "Force an immediate refresh of the TimesFrame market data dashboard" },
+  divoom_set_brightness: {
+    description: "Set Divoom TimesFrame display brightness (0-100)",
     params: {
       brightness: { type: "number", description: "Brightness level (0-100)", required: true },
     },

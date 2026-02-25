@@ -1,16 +1,17 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { DivoomDisplay } from "../display.js";
-import type { DashboardData } from "../display.js";
+import { TimesFrameDisplay } from "../display.js";
+import type { DisplayElement, TextUpdate } from "../display.js";
 
 // Mock fetch globally
 global.fetch = vi.fn();
 
-describe("DivoomDisplay", () => {
-  let display: DivoomDisplay;
+describe("TimesFrameDisplay", () => {
+  let display: TimesFrameDisplay;
   const testIp = "192.168.1.100";
+  const testPort = 9000;
 
   beforeEach(() => {
-    display = new DivoomDisplay(testIp);
+    display = new TimesFrameDisplay(testIp, testPort);
     vi.clearAllMocks();
   });
 
@@ -18,18 +19,50 @@ describe("DivoomDisplay", () => {
     vi.restoreAllMocks();
   });
 
+  function mockOk(data: any = { error_code: 0 }) {
+    (global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => data,
+    });
+  }
+
+  function parseBody(callIndex = 0): any {
+    const call = (global.fetch as any).mock.calls[callIndex];
+    return JSON.parse(call[1].body);
+  }
+
+  // ─── Constructor ─────────────────────────────────────────
+
+  it("builds correct base URL with IP and port", () => {
+    const d = new TimesFrameDisplay("10.0.0.5", 8080);
+    // Verify via a command that the URL is constructed correctly
+    (global.fetch as any).mockResolvedValueOnce({
+      ok: true, json: async () => ({}),
+    });
+    d.getDeviceInfo();
+    expect((global.fetch as any).mock.calls[0][0]).toBe("http://10.0.0.5:8080/divoom_api");
+  });
+
+  it("defaults to port 9000", () => {
+    const d = new TimesFrameDisplay("10.0.0.5");
+    (global.fetch as any).mockResolvedValueOnce({
+      ok: true, json: async () => ({}),
+    });
+    d.getDeviceInfo();
+    expect((global.fetch as any).mock.calls[0][0]).toBe("http://10.0.0.5:9000/divoom_api");
+  });
+
+  // ─── getDeviceInfo ───────────────────────────────────────
+
   describe("getDeviceInfo", () => {
     it("sends Device/GetDeviceId command", async () => {
-      const mockResponse = { DeviceId: 123456, DeviceName: "Times Gate" };
-      (global.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockResponse,
-      });
+      const mockResponse = { DeviceId: 123456, DeviceName: "TimesFrame" };
+      mockOk(mockResponse);
 
       const result = await display.getDeviceInfo();
 
       expect(global.fetch).toHaveBeenCalledWith(
-        `http://${testIp}/post`,
+        `http://${testIp}:${testPort}/divoom_api`,
         expect.objectContaining({
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -39,353 +72,169 @@ describe("DivoomDisplay", () => {
       expect(result).toEqual(mockResponse);
     });
 
-    it("throws error on fetch failure", async () => {
+    it("throws error on HTTP failure", async () => {
       (global.fetch as any).mockResolvedValueOnce({
-        ok: false,
-        status: 500,
-        statusText: "Internal Server Error",
+        ok: false, status: 500, statusText: "Internal Server Error",
       });
-
       await expect(display.getDeviceInfo()).rejects.toThrow("HTTP 500");
     });
 
     it("throws error on network timeout", async () => {
       (global.fetch as any).mockRejectedValueOnce(new Error("Network timeout"));
-
       await expect(display.getDeviceInfo()).rejects.toThrow("Network timeout");
     });
   });
 
+  // ─── setBrightness ──────────────────────────────────────
+
   describe("setBrightness", () => {
-    it("sends Channel/SetBrightness command with valid level", async () => {
-      (global.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ error_code: 0 }),
-      });
-
+    it("sends Channel/SetBrightness with valid level", async () => {
+      mockOk();
       await display.setBrightness(75);
-
-      expect(global.fetch).toHaveBeenCalledWith(
-        `http://${testIp}/post`,
-        expect.objectContaining({
-          body: JSON.stringify({
-            Command: "Channel/SetBrightness",
-            Brightness: 75,
-          }),
-        })
-      );
+      const body = parseBody();
+      expect(body.Command).toBe("Channel/SetBrightness");
+      expect(body.Brightness).toBe(75);
     });
 
-    it("throws error for brightness < 0", async () => {
+    it("throws for brightness < 0", async () => {
       await expect(display.setBrightness(-1)).rejects.toThrow("Brightness must be between 0 and 100");
     });
 
-    it("throws error for brightness > 100", async () => {
+    it("throws for brightness > 100", async () => {
       await expect(display.setBrightness(101)).rejects.toThrow("Brightness must be between 0 and 100");
     });
 
-    it("accepts brightness 0", async () => {
-      (global.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ error_code: 0 }),
-      });
-
+    it("accepts boundary values 0 and 100", async () => {
+      mockOk();
       await display.setBrightness(0);
-      expect(global.fetch).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          body: expect.stringContaining('"Brightness":0'),
-        })
-      );
-    });
+      expect(parseBody().Brightness).toBe(0);
 
-    it("accepts brightness 100", async () => {
-      (global.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ error_code: 0 }),
-      });
-
+      mockOk();
       await display.setBrightness(100);
-      expect(global.fetch).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          body: expect.stringContaining('"Brightness":100'),
-        })
-      );
+      expect(parseBody(1).Brightness).toBe(100);
     });
   });
 
-  describe("sendText", () => {
-    it("sends Draw/SendHttpText command with text and default options", async () => {
-      (global.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ error_code: 0 }),
-      });
+  // ─── enterCustomMode ────────────────────────────────────
 
-      await display.sendText("Hello World");
+  describe("enterCustomMode", () => {
+    it("sends Device/EnterCustomControlMode with elements and background", async () => {
+      mockOk();
 
-      const call = (global.fetch as any).mock.calls[0];
-      const body = JSON.parse(call[1].body);
-
-      expect(body.Command).toBe("Draw/SendHttpText");
-      expect(body.TextString).toBe("Hello World");
-      expect(body.TextId).toBe(1);
-      expect(body.x).toBe(0);
-      expect(body.y).toBe(0);
-      expect(body.color).toBe("#FFFFFF");
-      expect(body.font).toBe(2);
-      expect(body.speed).toBe(50);
-    });
-
-    it("sends Draw/SendHttpText with custom options", async () => {
-      (global.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ error_code: 0 }),
-      });
-
-      await display.sendText("Custom", {
-        x: 10,
-        y: 20,
-        color: "#FF0000",
-        font: 5,
-        scrollSpeed: 80,
-        align: 2,
-      });
-
-      const call = (global.fetch as any).mock.calls[0];
-      const body = JSON.parse(call[1].body);
-
-      expect(body.x).toBe(10);
-      expect(body.y).toBe(20);
-      expect(body.color).toBe("#FF0000");
-      expect(body.font).toBe(5);
-      expect(body.speed).toBe(80);
-      expect(body.align).toBe(2);
-    });
-  });
-
-  describe("sendScrollingText", () => {
-    it("sends Led/SetText command with RGB color conversion", async () => {
-      (global.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ error_code: 0 }),
-      });
-
-      await display.sendScrollingText("Scrolling Text", "#00FF00");
-
-      const call = (global.fetch as any).mock.calls[0];
-      const body = JSON.parse(call[1].body);
-
-      expect(body.Command).toBe("Led/SetText");
-      expect(body.TextString).toBe("Scrolling Text");
-      expect(body.r).toBe(0);
-      expect(body.g).toBe(255);
-      expect(body.b).toBe(0);
-    });
-
-    it("converts hex color #FF0000 to RGB (255,0,0)", async () => {
-      (global.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ error_code: 0 }),
-      });
-
-      await display.sendScrollingText("Red", "#FF0000");
-
-      const call = (global.fetch as any).mock.calls[0];
-      const body = JSON.parse(call[1].body);
-
-      expect(body.r).toBe(255);
-      expect(body.g).toBe(0);
-      expect(body.b).toBe(0);
-    });
-  });
-
-  describe("clear", () => {
-    it("sends blank text to clear display", async () => {
-      (global.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ error_code: 0 }),
-      });
-
-      await display.clear();
-
-      const call = (global.fetch as any).mock.calls[0];
-      const body = JSON.parse(call[1].body);
-
-      expect(body.Command).toBe("Draw/SendHttpText");
-      expect(body.TextString).toBe(" ");
-      expect(body.x).toBe(0);
-      expect(body.y).toBe(0);
-    });
-  });
-
-  describe("sendDashboard", () => {
-    it("sends multi-line dashboard with color-coded P&L", async () => {
-      (global.fetch as any).mockResolvedValue({
-        ok: true,
-        json: async () => ({ error_code: 0 }),
-      });
-
-      const data: DashboardData = {
-        pnl: 250.75,
-        winRate: 0.65,
-        tradeCount: 10,
-        positions: [
-          { symbol: "AAPL", quantity: 100, avgPrice: 150, currentPrice: 155 },
-        ],
-        spy: 525.50,
-        qqq: 480.25,
-      };
-
-      await display.sendDashboard(data);
-
-      // Should have made 4 fetch calls (4 lines minimum)
-      expect((global.fetch as any).mock.calls.length).toBeGreaterThanOrEqual(4);
-
-      // Check P&L line (green for positive)
-      const pnlCall = (global.fetch as any).mock.calls[0];
-      const pnlBody = JSON.parse(pnlCall[1].body);
-      expect(pnlBody.TextString).toContain("PnL: +$250.75");
-      expect(pnlBody.color).toBe("#00FF00");
-      expect(pnlBody.y).toBe(0);
-
-      // Check win rate line
-      const wrCall = (global.fetch as any).mock.calls[1];
-      const wrBody = JSON.parse(wrCall[1].body);
-      expect(wrBody.TextString).toContain("WR: 65.0% (10)");
-      expect(wrBody.y).toBe(16);
-
-      // Check positions line
-      const posCall = (global.fetch as any).mock.calls[2];
-      const posBody = JSON.parse(posCall[1].body);
-      expect(posBody.TextString).toContain("Positions: 1");
-      expect(posBody.y).toBe(32);
-
-      // Check market line
-      const mktCall = (global.fetch as any).mock.calls[3];
-      const mktBody = JSON.parse(mktCall[1].body);
-      expect(mktBody.TextString).toContain("SPY: 525.50");
-      expect(mktBody.TextString).toContain("QQQ: 480.25");
-      expect(mktBody.y).toBe(48);
-    });
-
-    it("uses red color for negative P&L", async () => {
-      (global.fetch as any).mockResolvedValue({
-        ok: true,
-        json: async () => ({ error_code: 0 }),
-      });
-
-      const data: DashboardData = {
-        pnl: -150.25,
-        winRate: 0.4,
-        tradeCount: 5,
-        positions: [],
-        spy: 525.50,
-        qqq: 480.25,
-      };
-
-      await display.sendDashboard(data);
-
-      const pnlCall = (global.fetch as any).mock.calls[0];
-      const pnlBody = JSON.parse(pnlCall[1].body);
-      expect(pnlBody.TextString).toContain("PnL: -$150.25");
-      expect(pnlBody.color).toBe("#FF0000");
-    });
-
-    it("displays Holly alert when present", async () => {
-      (global.fetch as any).mockResolvedValue({
-        ok: true,
-        json: async () => ({ error_code: 0 }),
-      });
-
-      const data: DashboardData = {
-        pnl: 0,
-        winRate: 0,
-        tradeCount: 0,
-        positions: [],
-        hollyAlert: {
-          symbol: "AAPL",
-          strategy: "Holly Grail",
-          entryPrice: 150.50,
+      const elements: DisplayElement[] = [
+        {
+          ID: 1,
+          Type: "Text",
+          StartX: 10,
+          StartY: 20,
+          Width: 780,
+          Height: 40,
+          Align: 1,
+          FontSize: 36,
+          FontID: 52,
+          FontColor: "#00FFFF",
+          BgColor: "#00000000",
+          TextMessage: "OPEN · LIVE · 10:30 AM",
         },
-        spy: 525.50,
-        qqq: 480.25,
-      };
+      ];
 
-      await display.sendDashboard(data);
+      await display.enterCustomMode(elements, "http://example.com/bg.png");
 
-      // Should have 5 lines (4 default + 1 Holly)
-      expect((global.fetch as any).mock.calls.length).toBe(5);
-
-      const hollyCall = (global.fetch as any).mock.calls[4];
-      const hollyBody = JSON.parse(hollyCall[1].body);
-      expect(hollyBody.TextString).toContain("Holly: AAPL");
-      expect(hollyBody.TextString).toContain("@150.50");
-      expect(hollyBody.color).toBe("#FF00FF");
-      expect(hollyBody.y).toBe(64);
+      const body = parseBody();
+      expect(body.Command).toBe("Device/EnterCustomControlMode");
+      expect(body.BackgroudImageAddr).toBe("http://example.com/bg.png");
+      expect(body.DispList).toHaveLength(1);
+      expect(body.DispList[0].ID).toBe(1);
+      expect(body.DispList[0].Type).toBe("Text");
+      expect(body.DispList[0].TextMessage).toBe("OPEN · LIVE · 10:30 AM");
+      expect(body.DispList[0].FontID).toBe(52);
     });
 
-    it("shows gray positions color when no positions", async () => {
-      (global.fetch as any).mockResolvedValue({
-        ok: true,
-        json: async () => ({ error_code: 0 }),
-      });
-
-      const data: DashboardData = {
-        pnl: 0,
-        winRate: 0,
-        tradeCount: 0,
-        positions: [],
-        spy: 525.50,
-        qqq: 480.25,
-      };
-
-      await display.sendDashboard(data);
-
-      const posCall = (global.fetch as any).mock.calls[2];
-      const posBody = JSON.parse(posCall[1].body);
-      expect(posBody.color).toBe("#808080");
+    it("defaults background URL to empty string", async () => {
+      mockOk();
+      await display.enterCustomMode([]);
+      expect(parseBody().BackgroudImageAddr).toBe("");
     });
 
-    it("shows cyan positions color when positions exist", async () => {
-      (global.fetch as any).mockResolvedValue({
-        ok: true,
-        json: async () => ({ error_code: 0 }),
-      });
+    it("sets isInCustomMode to true after entering", async () => {
+      mockOk();
+      expect(display.isInCustomMode).toBe(false);
+      await display.enterCustomMode([]);
+      expect(display.isInCustomMode).toBe(true);
+    });
 
-      const data: DashboardData = {
-        pnl: 0,
-        winRate: 0,
-        tradeCount: 0,
-        positions: [
-          { symbol: "AAPL", quantity: 100, avgPrice: 150, currentPrice: 155 },
-        ],
-        spy: 525.50,
-        qqq: 480.25,
-      };
+    it("handles multiple elements", async () => {
+      mockOk();
 
-      await display.sendDashboard(data);
+      const elements: DisplayElement[] = [
+        { ID: 1, Type: "Text", StartX: 0, StartY: 0, Width: 800, Height: 40, Align: 1, FontSize: 36, FontID: 52, FontColor: "#FFFFFF", BgColor: "#00000000", TextMessage: "Header" },
+        { ID: 10, Type: "Text", StartX: 16, StartY: 70, Width: 768, Height: 34, Align: 0, FontSize: 30, FontID: 52, FontColor: "#00FF00", BgColor: "#00000000", TextMessage: "SPY 580.25 +0.35%" },
+        { ID: 11, Type: "Text", StartX: 16, StartY: 104, Width: 768, Height: 34, Align: 0, FontSize: 30, FontID: 52, FontColor: "#FF0000", BgColor: "#00000000", TextMessage: "QQQ 495.50 -0.12%" },
+      ];
 
-      const posCall = (global.fetch as any).mock.calls[2];
-      const posBody = JSON.parse(posCall[1].body);
-      expect(posBody.color).toBe("#00FFFF");
+      await display.enterCustomMode(elements);
+      expect(parseBody().DispList).toHaveLength(3);
     });
   });
+
+  // ─── updateTexts ────────────────────────────────────────
+
+  describe("updateTexts", () => {
+    it("sends Device/UpdateDisplayItems with text updates", async () => {
+      mockOk(); // for enterCustomMode
+      await display.enterCustomMode([]);
+
+      mockOk();
+      const updates: TextUpdate[] = [
+        { ID: 1, TextMessage: "Updated header" },
+        { ID: 10, TextMessage: "SPY 581.00 +0.48%" },
+      ];
+
+      await display.updateTexts(updates);
+      const body = parseBody(1);
+      expect(body.Command).toBe("Device/UpdateDisplayItems");
+      expect(body.DispList).toHaveLength(2);
+      expect(body.DispList[0].ID).toBe(1);
+      expect(body.DispList[0].TextMessage).toBe("Updated header");
+    });
+  });
+
+  // ─── exitCustomMode ─────────────────────────────────────
+
+  describe("exitCustomMode", () => {
+    it("sends Device/ExitCustomControlMode", async () => {
+      mockOk(); // enter
+      await display.enterCustomMode([]);
+
+      mockOk(); // exit
+      await display.exitCustomMode();
+
+      const body = parseBody(1);
+      expect(body.Command).toBe("Device/ExitCustomControlMode");
+    });
+
+    it("sets isInCustomMode to false after exiting", async () => {
+      mockOk();
+      await display.enterCustomMode([]);
+      expect(display.isInCustomMode).toBe(true);
+
+      mockOk();
+      await display.exitCustomMode();
+      expect(display.isInCustomMode).toBe(false);
+    });
+  });
+
+  // ─── testConnection ─────────────────────────────────────
 
   describe("testConnection", () => {
     it("returns true when device responds", async () => {
-      (global.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ DeviceId: 123 }),
-      });
-
+      mockOk({ DeviceId: 123 });
       const result = await display.testConnection();
       expect(result).toBe(true);
     });
 
     it("returns false when device is offline", async () => {
       (global.fetch as any).mockRejectedValueOnce(new Error("Connection refused"));
-
       const result = await display.testConnection();
       expect(result).toBe(false);
     });

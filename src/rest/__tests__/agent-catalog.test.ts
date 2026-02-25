@@ -22,7 +22,7 @@ describe("Action Catalog", () => {
         "collab_post",
         "collab_read",
         "collab_stats",
-        "divoom_send_text",
+        "divoom_refresh",
         "divoom_set_brightness",
         "divoom_status",
         "drift_alerts",

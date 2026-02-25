@@ -2268,24 +2268,24 @@ export function createMcpServer(): McpServer {
   // --- Tool: divoom_status ---
   server.tool(
     "divoom_status",
-    "Check if Divoom Times Gate display is connected and retrieve device information.",
+    "Check if Divoom TimesFrame display is connected and retrieve device information.",
     {},
     async () => {
       const { getDivoomDisplay } = await import("../divoom/updater.js");
       const display = getDivoomDisplay();
-      
+
       if (!display) {
         return {
           content: [{
             type: "text",
-            text: JSON.stringify({ error: "Divoom display not initialized. Check DIVOOM_ENABLED and DIVOOM_DEVICE_IP config." }, null, 2)
+            text: JSON.stringify({ error: "TimesFrame display not initialized. Check DIVOOM_ENABLED and DIVOOM_DEVICE_IP config." }, null, 2)
           }],
         };
       }
 
       try {
         const deviceInfo = await display.getDeviceInfo();
-        return { content: [{ type: "text", text: JSON.stringify(deviceInfo, null, 2) }] };
+        return { content: [{ type: "text", text: JSON.stringify({ ...deviceInfo, inCustomMode: display.isInCustomMode }, null, 2) }] };
       } catch (e: any) {
         return {
           content: [{ type: "text", text: `Error: ${e.message}` }],
@@ -2295,40 +2295,17 @@ export function createMcpServer(): McpServer {
     }
   );
 
-  // --- Tool: divoom_send_text ---
+  // --- Tool: divoom_refresh ---
   server.tool(
-    "divoom_send_text",
-    "Manually send text to the Divoom Times Gate display.",
-    {
-      text: z.string().describe("Text to display"),
-      color: z.string().optional().describe("Hex color, e.g. #FF0000 (default: #FFFFFF)"),
-      x: z.number().optional().describe("X position (default: 0)"),
-      y: z.number().optional().describe("Y position (default: 0)"),
-      font: z.number().optional().describe("Font ID (default: 2)"),
-      scrollSpeed: z.number().optional().describe("Scroll speed 0-100 (default: 50)"),
-    },
-    async (params) => {
-      const { getDivoomDisplay } = await import("../divoom/updater.js");
-      const display = getDivoomDisplay();
-      
-      if (!display) {
-        return {
-          content: [{
-            type: "text",
-            text: JSON.stringify({ error: "Divoom display not initialized. Check DIVOOM_ENABLED and DIVOOM_DEVICE_IP config." }, null, 2)
-          }],
-        };
-      }
+    "divoom_refresh",
+    "Force an immediate refresh of the TimesFrame market data dashboard.",
+    {},
+    async () => {
+      const { forceRefresh } = await import("../divoom/updater.js");
 
       try {
-        await display.sendText(params.text, {
-          color: params.color,
-          x: params.x,
-          y: params.y,
-          font: params.font,
-          scrollSpeed: params.scrollSpeed,
-        });
-        return { content: [{ type: "text", text: JSON.stringify({ success: true, text: params.text }, null, 2) }] };
+        const result = await forceRefresh();
+        return { content: [{ type: "text", text: JSON.stringify({ success: true, result }, null, 2) }] };
       } catch (e: any) {
         return {
           content: [{ type: "text", text: `Error: ${e.message}` }],
@@ -2341,19 +2318,19 @@ export function createMcpServer(): McpServer {
   // --- Tool: divoom_set_brightness ---
   server.tool(
     "divoom_set_brightness",
-    "Adjust Divoom Times Gate display brightness (0-100).",
+    "Adjust Divoom TimesFrame display brightness (0-100).",
     {
       brightness: z.number().min(0).max(100).describe("Brightness level 0-100"),
     },
     async (params) => {
       const { getDivoomDisplay } = await import("../divoom/updater.js");
       const display = getDivoomDisplay();
-      
+
       if (!display) {
         return {
           content: [{
             type: "text",
-            text: JSON.stringify({ error: "Divoom display not initialized. Check DIVOOM_ENABLED and DIVOOM_DEVICE_IP config." }, null, 2)
+            text: JSON.stringify({ error: "TimesFrame display not initialized. Check DIVOOM_ENABLED and DIVOOM_DEVICE_IP config." }, null, 2)
           }],
         };
       }

@@ -1,88 +1,65 @@
 /**
- * Divoom Display Updater
+ * Divoom TimesFrame Updater
  *
- * Rotates through market data screens on the Divoom TimeFrame display.
- * Each screen fetches its own data (indices, movers, sectors, portfolio, etc.)
- * and renders color-coded text lines.
+ * Push-based dashboard: enters custom control mode with a full layout,
+ * then re-enters on each refresh cycle to update content AND colors.
  *
- * Session-aware: reloads the screen set when the market session changes
- * (e.g. pre-market -> regular -> after-hours -> closed).
+ * Since UpdateDisplayItems only changes TextMessage (not FontColor),
+ * we re-enter custom mode each cycle so dynamic colors (green/red for
+ * price direction) are always current.
+ *
+ * Session-aware: detects session changes and adjusts content
+ * (e.g. movers during regular hours, futures during off-hours).
  */
 
-import { DivoomDisplay } from "./display.js";
-import { getScreens, currentSession, buildScrollingTicker, type Screen } from "./screens.js";
+import { TimesFrameDisplay } from "./display.js";
+import { buildElements } from "./layout.js";
+import { fetchDashboardData, currentSession } from "./screens.js";
 import { isConnected } from "../ibkr/connection.js";
 import { config } from "../config.js";
 import { logger } from "../logging.js";
 
 const log = logger.child({ module: "divoom-updater" });
 
-let rotationTimer: ReturnType<typeof setInterval> | null = null;
-let display: DivoomDisplay | null = null;
-let screens: Screen[] = [];
-let currentScreenIndex = 0;
-let lastSession: string = "";
-let lastIbkrConnected: boolean = false;
+let refreshTimer: ReturnType<typeof setInterval> | null = null;
+let display: TimesFrameDisplay | null = null;
+let lastSession = "";
+let lastIbkrConnected = false;
 
 /**
- * Reload screens if the market session or IBKR connection state has changed.
- * Returns true if screens were reloaded.
+ * Refresh the dashboard: fetch all data, build elements, push to display.
  */
-function reloadScreensIfChanged(): boolean {
-  const session = currentSession();
-  const ibkr = isConnected();
-
-  if (session === lastSession && ibkr === lastIbkrConnected) return false;
-
-  const prev = lastSession;
-  const prevIbkr = lastIbkrConnected;
-  lastSession = session;
-  lastIbkrConnected = ibkr;
-  screens = getScreens(session);
-  currentScreenIndex = 0;
-
-  log.info({
-    from: prev || "(init)", to: session,
-    ibkr: prevIbkr !== ibkr ? `${prevIbkr} → ${ibkr}` : ibkr,
-    screenCount: screens.length,
-  }, "State changed — screens reloaded");
-  return true;
-}
-
-/**
- * Render the current screen on the display
- */
-async function renderCurrentScreen(): Promise<void> {
-  if (!display || screens.length === 0) return;
-
-  // Check for session change before each render
-  reloadScreensIfChanged();
-
-  const screen = screens[currentScreenIndex % screens.length];
+async function refreshDashboard(): Promise<void> {
+  if (!display) return;
 
   try {
-    const lines = await screen.fetch();
+    // Detect state changes for logging
+    const session = currentSession();
+    const ibkr = isConnected();
 
-    // Clear previous text slots, then send new lines
-    await display.clearAllTexts(8);
-    await display.sendLines(lines);
+    if (session !== lastSession || ibkr !== lastIbkrConnected) {
+      log.info({
+        from: lastSession || "(init)", to: session,
+        ibkr: lastIbkrConnected !== ibkr ? `${lastIbkrConnected} → ${ibkr}` : ibkr,
+      }, "State changed — refreshing layout");
+      lastSession = session;
+      lastIbkrConnected = ibkr;
+    }
 
-    log.debug({ screen: screen.name, lineCount: lines.length }, "Screen rendered");
+    const data = await fetchDashboardData();
+    const elements = buildElements(data);
+
+    // Re-enter custom mode each cycle for dynamic colors
+    await display.enterCustomMode(elements, config.divoom.backgroundUrl);
+
+    log.debug({ session, elementCount: elements.length }, "Dashboard refreshed");
   } catch (err) {
-    log.error({ err, screen: screen.name }, "Failed to render screen");
+    log.error({ err }, "Failed to refresh dashboard");
   }
 }
 
 /**
- * Advance to next screen and render it
- */
-async function rotateScreen(): Promise<void> {
-  currentScreenIndex = (currentScreenIndex + 1) % screens.length;
-  await renderCurrentScreen();
-}
-
-/**
- * Start the Divoom display updater
+ * Start the Divoom TimesFrame updater.
  */
 export async function startDivoomUpdater(): Promise<void> {
   if (!config.divoom.enabled) {
@@ -95,20 +72,21 @@ export async function startDivoomUpdater(): Promise<void> {
     return;
   }
 
-  display = new DivoomDisplay(config.divoom.deviceIp);
+  display = new TimesFrameDisplay(config.divoom.deviceIp, config.divoom.devicePort);
 
-  // Test connection
   const connected = await display.testConnection();
   if (!connected) {
-    log.error({ deviceIp: config.divoom.deviceIp }, "Failed to connect to Divoom device");
+    log.error({ deviceIp: config.divoom.deviceIp, port: config.divoom.devicePort },
+      "Failed to connect to TimesFrame device");
     return;
   }
 
   log.info({
     deviceIp: config.divoom.deviceIp,
-    screenRotationMs: config.divoom.screenRotationMs,
+    port: config.divoom.devicePort,
+    refreshIntervalMs: config.divoom.refreshIntervalMs,
     brightness: config.divoom.brightness,
-  }, "Divoom updater starting");
+  }, "TimesFrame updater starting");
 
   // Set initial brightness
   try {
@@ -117,88 +95,54 @@ export async function startDivoomUpdater(): Promise<void> {
     log.warn({ err }, "Failed to set initial brightness");
   }
 
-  // Load screens for current session + IBKR state
+  // Initial state
   lastSession = currentSession();
   lastIbkrConnected = isConnected();
-  screens = getScreens(lastSession);
-  currentScreenIndex = 0;
 
-  log.info({
-    session: lastSession,
-    ibkr: lastIbkrConnected,
-    screenCount: screens.length,
-    screens: screens.map((s) => s.name),
-  }, "Screens loaded");
+  // First render
+  await refreshDashboard();
 
-  // Render first screen immediately
-  await renderCurrentScreen();
-
-  // Rotate screens on interval
-  rotationTimer = setInterval(rotateScreen, config.divoom.screenRotationMs);
+  // Periodic refresh
+  refreshTimer = setInterval(refreshDashboard, config.divoom.refreshIntervalMs);
 }
 
 /**
- * Stop the Divoom display updater
+ * Stop the Divoom TimesFrame updater.
  */
 export async function stopDivoomUpdater(): Promise<void> {
-  if (rotationTimer) {
-    clearInterval(rotationTimer);
-    rotationTimer = null;
+  if (refreshTimer) {
+    clearInterval(refreshTimer);
+    refreshTimer = null;
   }
 
   if (display) {
     try {
-      await display.clear();
-      log.info("Divoom updater stopped and display cleared");
+      if (display.isInCustomMode) {
+        await display.exitCustomMode();
+      }
+      log.info("TimesFrame updater stopped");
     } catch (err) {
-      log.warn({ err }, "Failed to clear display on shutdown");
+      log.warn({ err }, "Failed to exit custom mode on shutdown");
     }
     display = null;
   }
 
-  screens = [];
-  currentScreenIndex = 0;
   lastSession = "";
   lastIbkrConnected = false;
 }
 
 /**
- * Get the current display instance (for testing/MCP tools)
+ * Get the current display instance (for MCP tools).
  */
-export function getDivoomDisplay(): DivoomDisplay | null {
+export function getDivoomDisplay(): TimesFrameDisplay | null {
   return display;
 }
 
 /**
- * Get current screen info (for diagnostics)
+ * Force an immediate dashboard refresh (for MCP tools).
  */
-export function getCurrentScreenInfo(): { name: string; index: number; total: number; session: string } | null {
-  if (screens.length === 0) return null;
-  const idx = currentScreenIndex % screens.length;
-  return { name: screens[idx].name, index: idx, total: screens.length, session: lastSession };
-}
-
-/**
- * Force advance to next screen (for MCP tool)
- */
-export async function nextScreen(): Promise<string> {
-  if (!display || screens.length === 0) return "Divoom not active";
-  await rotateScreen();
-  const info = getCurrentScreenInfo();
-  return info ? `Now showing: ${info.name} (${info.index + 1}/${info.total}) [${info.session}]` : "No screens";
-}
-
-/**
- * Force show scrolling ticker (for MCP tool)
- */
-export async function showScrollingTicker(): Promise<void> {
-  if (!display) return;
-
-  try {
-    const ticker = await buildScrollingTicker();
-    await display.sendScrollingText(ticker.text, ticker.color);
-    log.info("Scrolling ticker displayed");
-  } catch (err) {
-    log.error({ err }, "Failed to show scrolling ticker");
-  }
+export async function forceRefresh(): Promise<string> {
+  if (!display) return "TimesFrame not active";
+  await refreshDashboard();
+  return `Dashboard refreshed [${lastSession}]`;
 }
