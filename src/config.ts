@@ -65,6 +65,7 @@ export const config = {
     refreshIntervalMs: parseInt(process.env.DIVOOM_REFRESH_MS ?? "10000", 10),
     brightness: parseInt(process.env.DIVOOM_BRIGHTNESS ?? "80", 10),
     backgroundUrl: process.env.DIVOOM_BACKGROUND_URL ?? "",
+    chartBaseUrl: process.env.DIVOOM_CHART_BASE_URL ?? "",
   },
   ops: {
     webhookUrl: process.env.OPS_WEBHOOK_URL ?? "",

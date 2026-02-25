@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { buildElements, SLOTS, getLayoutHeight } from "../layout.js";
-import type { DashboardData, DashboardSection, TextRow } from "../layout.js";
+import type { DashboardData, DashboardSection, TextRow, ChartUrls } from "../layout.js";
 
 // ─── Fixtures ───────────────────────────────────────────────
 
@@ -33,6 +33,15 @@ function makeDashboardData(overrides: Partial<DashboardData> = {}): DashboardDat
   };
 }
 
+const CHART_URLS: ChartUrls = {
+  spySparkline: "http://localhost:3000/api/divoom/charts/spy-sparkline",
+  sectorHeatmap: "http://localhost:3000/api/divoom/charts/sector-heatmap",
+  pnlCurve: "http://localhost:3000/api/divoom/charts/pnl-curve",
+  rsiGauge: "http://localhost:3000/api/divoom/charts/rsi-gauge",
+  vixGauge: "http://localhost:3000/api/divoom/charts/vix-gauge",
+  volumeBars: "http://localhost:3000/api/divoom/charts/volume-bars",
+};
+
 // ─── Tests ──────────────────────────────────────────────────
 
 describe("layout", () => {
@@ -46,21 +55,30 @@ describe("layout", () => {
       expect(ids).toContain(13);
       // VIX
       expect(ids).toContain(14);
-      // Sectors
+      // SPY sparkline image
+      expect(ids).toContain(15);
+      // Sectors header + heatmap image
       expect(ids).toContain(20);
-      expect(ids).toContain(25);
+      expect(ids).toContain(21);
       // Movers
       expect(ids).toContain(30);
       expect(ids).toContain(34);
       // Portfolio
       expect(ids).toContain(40);
       expect(ids).toContain(44);
+      // PnL curve image
+      expect(ids).toContain(45);
       // News
       expect(ids).toContain(50);
       expect(ids).toContain(53);
-      // Indicators
+      // Indicators header + gauge images + text rows
       expect(ids).toContain(60);
+      expect(ids).toContain(61);
+      expect(ids).toContain(62);
+      expect(ids).toContain(63);
       expect(ids).toContain(65);
+      // Volume bars image
+      expect(ids).toContain(70);
     });
 
     it("has all unique IDs", () => {
@@ -75,14 +93,30 @@ describe("layout", () => {
         expect(sorted[i].y).toBeGreaterThanOrEqual(prev.y);
       }
     });
+
+    it("marks image slots with type=image", () => {
+      const imageSlots = SLOTS.filter((s) => s.type === "image");
+      const imageIds = imageSlots.map((s) => s.id);
+      // SPY sparkline, sector heatmap, PnL curve, RSI gauge, VIX gauge, volume bars
+      expect(imageIds).toContain(15);
+      expect(imageIds).toContain(21);
+      expect(imageIds).toContain(45);
+      expect(imageIds).toContain(61);
+      expect(imageIds).toContain(62);
+      expect(imageIds).toContain(70);
+      expect(imageSlots.length).toBe(6);
+    });
   });
 
-  describe("buildElements", () => {
-    it("creates a DisplayElement for each slot", () => {
+  describe("buildElements (text only)", () => {
+    it("creates text-only elements when no chartUrls provided", () => {
       const data = makeDashboardData();
       const elements = buildElements(data);
 
-      expect(elements.length).toBe(SLOTS.length);
+      // All should be Text type
+      for (const el of elements) {
+        expect(el.Type).toBe("Text");
+      }
     });
 
     it("maps header to element ID 1 center-aligned", () => {
@@ -174,16 +208,6 @@ describe("layout", () => {
       expect(elements.find((e) => e.ID === 13)!.TextMessage).toBe("");
     });
 
-    it("sets all elements to Text type with FontID 52", () => {
-      const data = makeDashboardData();
-      const elements = buildElements(data);
-
-      for (const el of elements) {
-        expect(el.Type).toBe("Text");
-        expect(el.FontID).toBe(52);
-      }
-    });
-
     it("uses transparent background on all elements", () => {
       const data = makeDashboardData();
       const elements = buildElements(data);
@@ -194,11 +218,70 @@ describe("layout", () => {
     });
   });
 
+  describe("buildElements (with charts)", () => {
+    it("includes Image elements when chartUrls provided", () => {
+      const data = makeDashboardData();
+      const elements = buildElements(data, CHART_URLS);
+
+      const imageElements = elements.filter((e) => e.Type === "Image");
+      expect(imageElements.length).toBe(6);
+    });
+
+    it("sets correct URLs on Image elements", () => {
+      const data = makeDashboardData();
+      const elements = buildElements(data, CHART_URLS);
+
+      const sparkline = elements.find((e) => e.ID === 15)!;
+      expect(sparkline.Type).toBe("Image");
+      expect(sparkline.Url).toBe(CHART_URLS.spySparkline);
+      expect(sparkline.ImgLocalFlag).toBe(0);
+
+      const heatmap = elements.find((e) => e.ID === 21)!;
+      expect(heatmap.Type).toBe("Image");
+      expect(heatmap.Url).toBe(CHART_URLS.sectorHeatmap);
+    });
+
+    it("omits Image elements for missing chart URLs", () => {
+      const data = makeDashboardData();
+      const partialUrls: ChartUrls = {
+        spySparkline: "http://localhost:3000/api/divoom/charts/spy-sparkline",
+      };
+      const elements = buildElements(data, partialUrls);
+
+      const imageElements = elements.filter((e) => e.Type === "Image");
+      expect(imageElements.length).toBe(1);
+      expect(imageElements[0].ID).toBe(15);
+    });
+
+    it("positions RSI and VIX gauges side by side", () => {
+      const data = makeDashboardData();
+      const elements = buildElements(data, CHART_URLS);
+
+      const rsi = elements.find((e) => e.ID === 61)!;
+      const vix = elements.find((e) => e.ID === 62)!;
+
+      expect(rsi.Type).toBe("Image");
+      expect(vix.Type).toBe("Image");
+      expect(rsi.StartY).toBe(vix.StartY); // Same Y
+      expect(rsi.StartX).toBeLessThan(vix.StartX); // RSI on left
+    });
+
+    it("includes more elements than text-only mode", () => {
+      const data = makeDashboardData();
+      const textOnly = buildElements(data);
+      const withCharts = buildElements(data, CHART_URLS);
+
+      expect(withCharts.length).toBeGreaterThan(textOnly.length);
+    });
+  });
+
   describe("getLayoutHeight", () => {
-    it("returns height within 800x1280 canvas bounds", () => {
+    it("returns a reasonable height for the expanded chart layout", () => {
       const height = getLayoutHeight();
-      expect(height).toBeGreaterThan(800);
-      expect(height).toBeLessThanOrEqual(1280);
+      // With chart images, layout extends beyond the base 1280 canvas
+      // TimesFrame supports scrollable content on the 1080P display
+      expect(height).toBeGreaterThan(1000);
+      expect(height).toBeLessThanOrEqual(2000);
     });
   });
 });

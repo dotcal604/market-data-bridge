@@ -9,6 +9,7 @@
  */
 
 import type { DashboardData, DashboardSection, TextRow } from "./layout.js";
+import type { ChartInputData, HeatmapCell, OHLC } from "./charts.js";
 import { getQuote, getNews, runScreener, getHistoricalBars, getTrendingSymbols } from "../providers/yahoo.js";
 import { getStatus } from "../providers/status.js";
 import { isConnected } from "../ibkr/connection.js";
@@ -422,26 +423,148 @@ async function fetchIndicators(): Promise<DashboardSection> {
   }
 }
 
+// ─── Chart Data Collectors ───────────────────────────────────
+
+async function fetchSpyChartData(): Promise<{ prices: number[]; candles: OHLC[] }> {
+  try {
+    const bars = await getHistoricalBars("SPY", "1d", "1mo");
+    const prices = bars.map((b: any) => b.close).filter((v: any): v is number => v != null);
+    const candles: OHLC[] = bars
+      .filter((b: any) => b.open != null && b.high != null && b.low != null && b.close != null)
+      .map((b: any) => ({
+        open: b.open as number,
+        high: b.high as number,
+        low: b.low as number,
+        close: b.close as number,
+      }));
+    return { prices, candles };
+  } catch (err) {
+    log.warn({ err }, "Failed to fetch SPY chart data");
+    return { prices: [], candles: [] };
+  }
+}
+
+async function fetchSectorHeatmapData(): Promise<HeatmapCell[]> {
+  const SECTORS = [
+    { symbol: "XLK", label: "Tech" },
+    { symbol: "XLF", label: "Fin" },
+    { symbol: "XLE", label: "Engy" },
+    { symbol: "XLV", label: "Hlth" },
+    { symbol: "XLY", label: "Cons" },
+    { symbol: "XLI", label: "Ind" },
+    { symbol: "XLU", label: "Util" },
+    { symbol: "XLP", label: "Stpl" },
+    { symbol: "XLRE", label: "RE" },
+    { symbol: "XLB", label: "Mtrl" },
+  ];
+
+  const quotes = await Promise.all(SECTORS.map((s) => smartQuote(s.symbol).catch(() => null)));
+
+  return SECTORS
+    .map((s, i) => ({
+      label: s.label,
+      value: quotes[i]?.changePercent ?? 0,
+    }))
+    .filter((c) => c.value !== 0 || quotes[SECTORS.findIndex((s) => s.label === c.label)] !== null);
+}
+
+async function fetchPnlChartData(): Promise<{ values: number[]; labels: string[] } | null> {
+  if (!isConnected()) return null;
+
+  try {
+    const { getPnL } = await import("../ibkr/account.js");
+    const pnl = await getPnL();
+    // Return just the daily PnL as a single-point (fuller data requires historical tracking)
+    if (pnl.dailyPnL != null) {
+      return { values: [0, pnl.dailyPnL], labels: ["Open", "Now"] };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchIndicatorValues(): Promise<{
+  rsi: number | null;
+  vix: number | null;
+  volumeBars: Array<{ label: string; volume: number; change: number }>;
+}> {
+  let rsi: number | null = null;
+  let vix: number | null = null;
+  const volumeBars: Array<{ label: string; volume: number; change: number }> = [];
+
+  // RSI from indicator engine
+  try {
+    const { getSnapshot, getTrackedSymbols } = await import("../indicators/engine.js");
+    const tracked = getTrackedSymbols();
+    if (tracked.length > 0) {
+      const snap = getSnapshot(tracked[0]);
+      if (snap?.rsi_14 != null) rsi = snap.rsi_14;
+    }
+  } catch { /* no indicator data */ }
+
+  // VIX
+  try {
+    const vixQuote = await smartQuote("^VIX");
+    if (vixQuote) vix = vixQuote.last;
+  } catch { /* no VIX data */ }
+
+  // Volume bars for major indices
+  const volSymbols = ["SPY", "QQQ", "DIA", "IWM"];
+  const volQuotes = await Promise.all(volSymbols.map((s) => smartQuote(s).catch(() => null)));
+  for (let i = 0; i < volSymbols.length; i++) {
+    const q = volQuotes[i];
+    if (q?.volume) {
+      volumeBars.push({
+        label: volSymbols[i],
+        volume: q.volume,
+        change: q.changePercent,
+      });
+    }
+  }
+
+  return { rsi, vix, volumeBars };
+}
+
 // ─── Main Dashboard Fetch ───────────────────────────────────
+
+export interface DashboardResult {
+  dashboard: DashboardData;
+  chartInput: ChartInputData;
+}
 
 /**
  * Fetch all market data in parallel and return a unified DashboardData object.
  */
 export async function fetchDashboardData(): Promise<DashboardData> {
+  const result = await fetchDashboardWithCharts();
+  return result.dashboard;
+}
+
+/**
+ * Fetch all market data and chart input data in parallel.
+ */
+export async function fetchDashboardWithCharts(): Promise<DashboardResult> {
   const session = currentSession();
 
-  const [headerResult, indicesResult, sectors, movers, portfolio, news, indicators] =
-    await Promise.all([
-      fetchHeader(),
-      fetchIndices(),
-      fetchSectors(),
-      fetchMovers(session),
-      fetchPortfolio(),
-      fetchNews(),
-      fetchIndicators(),
-    ]);
+  const [
+    headerResult, indicesResult, sectors, movers, portfolio, news, indicators,
+    spyChart, sectorHeatmap, pnlData, indicatorValues,
+  ] = await Promise.all([
+    fetchHeader(),
+    fetchIndices(),
+    fetchSectors(),
+    fetchMovers(session),
+    fetchPortfolio(),
+    fetchNews(),
+    fetchIndicators(),
+    fetchSpyChartData(),
+    fetchSectorHeatmapData(),
+    fetchPnlChartData(),
+    fetchIndicatorValues(),
+  ]);
 
-  return {
+  const dashboard: DashboardData = {
     header: headerResult.header,
     indices: indicesResult.indices,
     vix: indicesResult.vix,
@@ -451,4 +574,17 @@ export async function fetchDashboardData(): Promise<DashboardData> {
     news,
     indicators,
   };
+
+  const chartInput: ChartInputData = {
+    spyPrices: spyChart.prices,
+    spyCandles: spyChart.candles,
+    sectorHeatmap,
+    pnlCurve: pnlData,
+    rsiValue: indicatorValues.rsi,
+    vixValue: indicatorValues.vix,
+    volumeBars: indicatorValues.volumeBars,
+    allocation: null, // TODO: derive from portfolio positions
+  };
+
+  return { dashboard, chartInput };
 }

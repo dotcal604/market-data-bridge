@@ -10,11 +10,15 @@
  *
  * Session-aware: detects session changes and adjusts content
  * (e.g. movers during regular hours, futures during off-hours).
+ *
+ * Chart-enabled: renders server-side charts (sparklines, gauges, heatmaps)
+ * and embeds them as Image elements that the TimesFrame fetches via URL.
  */
 
 import { TimesFrameDisplay } from "./display.js";
-import { buildElements } from "./layout.js";
-import { fetchDashboardData, currentSession } from "./screens.js";
+import { buildElements, type ChartUrls } from "./layout.js";
+import { fetchDashboardWithCharts, currentSession } from "./screens.js";
+import { renderAllCharts } from "./charts.js";
 import { isConnected } from "../ibkr/connection.js";
 import { config } from "../config.js";
 import { logger } from "../logging.js";
@@ -27,7 +31,28 @@ let lastSession = "";
 let lastIbkrConnected = false;
 
 /**
- * Refresh the dashboard: fetch all data, build elements, push to display.
+ * Build chart URLs from the base URL config.
+ * Returns undefined if chartBaseUrl is not configured.
+ */
+function buildChartUrls(): ChartUrls | undefined {
+  const base = config.divoom.chartBaseUrl;
+  if (!base) return undefined;
+
+  // Trim trailing slash
+  const baseUrl = base.replace(/\/+$/, "");
+
+  return {
+    spySparkline: `${baseUrl}/api/divoom/charts/spy-sparkline`,
+    sectorHeatmap: `${baseUrl}/api/divoom/charts/sector-heatmap`,
+    pnlCurve: `${baseUrl}/api/divoom/charts/pnl-curve`,
+    rsiGauge: `${baseUrl}/api/divoom/charts/rsi-gauge`,
+    vixGauge: `${baseUrl}/api/divoom/charts/vix-gauge`,
+    volumeBars: `${baseUrl}/api/divoom/charts/volume-bars`,
+  };
+}
+
+/**
+ * Refresh the dashboard: fetch all data, render charts, build elements, push to display.
  */
 async function refreshDashboard(): Promise<void> {
   if (!display) return;
@@ -46,13 +71,25 @@ async function refreshDashboard(): Promise<void> {
       lastIbkrConnected = ibkr;
     }
 
-    const data = await fetchDashboardData();
-    const elements = buildElements(data);
+    // Fetch data and chart inputs in parallel
+    const { dashboard, chartInput } = await fetchDashboardWithCharts();
+
+    // Render charts (populates cache for the REST endpoint)
+    const chartUrls = buildChartUrls();
+    if (chartUrls) {
+      try {
+        await renderAllCharts(chartInput);
+      } catch (err) {
+        log.warn({ err }, "Chart rendering failed — continuing with text-only layout");
+      }
+    }
+
+    const elements = buildElements(dashboard, chartUrls);
 
     // Re-enter custom mode each cycle for dynamic colors
     await display.enterCustomMode(elements, config.divoom.backgroundUrl);
 
-    log.debug({ session, elementCount: elements.length }, "Dashboard refreshed");
+    log.debug({ session, elementCount: elements.length, charts: !!chartUrls }, "Dashboard refreshed");
   } catch (err) {
     log.error({ err }, "Failed to refresh dashboard");
   }
@@ -86,6 +123,7 @@ export async function startDivoomUpdater(): Promise<void> {
     port: config.divoom.devicePort,
     refreshIntervalMs: config.divoom.refreshIntervalMs,
     brightness: config.divoom.brightness,
+    chartBaseUrl: config.divoom.chartBaseUrl || "(charts disabled)",
   }, "TimesFrame updater starting");
 
   // Set initial brightness
