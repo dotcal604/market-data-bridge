@@ -19,7 +19,7 @@ import { C, fmtPrice, fmtPct, trim } from "../screens.js";
 import { runScreener } from "../../providers/yahoo.js";
 import { registerWidget } from "./registry.js";
 
-const FONT_SIZE = 46;
+const FONT_SIZE = 36;
 
 function sessionLabel(session: string): string {
   switch (session) {

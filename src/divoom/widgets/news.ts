@@ -3,9 +3,9 @@
  *
  * Renders as ONE multi-line Text element:
  *
- *   "▸ Fed signals rate cut timeline"
- *   "▸ NVDA beats on strong AI demand"
- *   "▸ Dollar rises vs yen on data"
+ *   "> Fed signals rate cut timeline"
+ *   "> NVDA beats on strong AI demand"
+ *   "> Dollar rises vs yen on data"
  *
  * Each headline trimmed to ~32 chars to fit at fontSize=40 across 768px.
  * Gray color — news is context, not a signal.
@@ -19,8 +19,8 @@ import { C, trim } from "../screens.js";
 import { getNews } from "../../providers/yahoo.js";
 import { registerWidget } from "./registry.js";
 
-const FONT_SIZE = 40;
-const MAX_CHARS = 32; // per headline at fontSize=40 (~24px/char avg = 768px fits ~32 chars)
+const FONT_SIZE = 36;
+const MAX_CHARS = 38; // per headline at fontSize=36 (~20px/char avg = 768px fits ~38 chars)
 
 export const newsWidget: Widget = {
   id: "news",
@@ -39,12 +39,12 @@ export const newsWidget: Widget = {
     ctx: WidgetContext,
     origin: { y: number; firstId: number; height: number },
   ): Promise<WidgetOutput> {
-    let lines: string[] = ["▸ No news available", "", ""];
+    let lines: string[] = ["> No news available", "", ""];
 
     try {
       const news = await getNews("SPY");
       if (news.length > 0) {
-        lines = news.slice(0, 3).map((n) => `▸ ${trim(n.title, MAX_CHARS)}`);
+        lines = news.slice(0, 3).map((n) => `> ${trim(n.title, MAX_CHARS)}`);
         // Pad to 3 lines so panel height is consistent
         while (lines.length < 3) lines.push("");
       }

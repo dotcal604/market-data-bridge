@@ -47,7 +47,7 @@ interface WidgetStyle {
 const WIDGET_STYLES: Record<string, WidgetStyle> = {
   // Session chrome — cyan = "system status / ambient awareness"
   header: {
-    accent: "rgba(0,255,255,0.85)",
+    accent: "#00FFFF",
     bg: "rgba(0,255,255,0.04)",
     fontSize: "text-[11px]",
     fontWeight: "font-bold",
@@ -55,7 +55,7 @@ const WIDGET_STYLES: Record<string, WidgetStyle> = {
   },
   // Market structure — blue = "broad market context"
   indices: {
-    accent: "rgba(68,136,255,0.85)",
+    accent: "#4488FF",
     bg: "rgba(68,136,255,0.04)",
     fontSize: "text-[9px]",
     fontWeight: "font-medium",
@@ -63,7 +63,7 @@ const WIDGET_STYLES: Record<string, WidgetStyle> = {
   },
   // Momentum — magenta = "actionable movement / energy"
   movers: {
-    accent: "rgba(255,0,255,0.75)",
+    accent: "#FF00FF",
     bg: "rgba(255,0,255,0.03)",
     fontSize: "text-[9px]",
     fontWeight: "font-normal",
@@ -71,7 +71,7 @@ const WIDGET_STYLES: Record<string, WidgetStyle> = {
   },
   // Portfolio — green/emerald = "your money / account health"
   portfolio: {
-    accent: "rgba(0,255,100,0.75)",
+    accent: "#00FF64",
     bg: "rgba(0,255,100,0.04)",
     fontSize: "text-[9px]",
     fontWeight: "font-medium",
@@ -79,7 +79,7 @@ const WIDGET_STYLES: Record<string, WidgetStyle> = {
   },
   // News — amber/warm = "external signal / catalyst"
   news: {
-    accent: "rgba(255,170,0,0.7)",
+    accent: "#FFAA00",
     bg: "rgba(255,170,0,0.03)",
     fontSize: "text-[8.5px]",
     fontWeight: "font-normal",
@@ -87,7 +87,7 @@ const WIDGET_STYLES: Record<string, WidgetStyle> = {
   },
   // Footer chrome — dim gray = "attribution / metadata"
   footer: {
-    accent: "rgba(160,160,160,0.5)",
+    accent: "#808080",
     bg: "rgba(128,128,128,0.02)",
     fontSize: "text-[7.5px]",
     fontWeight: "font-normal",
@@ -202,25 +202,16 @@ function ElementPreview({ data }: { data: DivoomPreviewElements }) {
           style={{
             top: `${group.topPct}%`,
             height: `${group.heightPct}%`,
+            zIndex: 1,
+            borderLeft: `3px solid ${group.style.accent}`,
+            background: group.style.bg,
           }}
         >
-          {/* Background tint */}
-          <div
-            className="absolute inset-0"
-            style={{ background: group.style.bg }}
-          />
-
-          {/* Left accent rail — 4px wayfinding strip */}
-          <div
-            className="absolute left-0 top-0 bottom-0 w-[4px]"
-            style={{ background: group.style.accent }}
-          />
-
           {/* Section divider (bottom edge, skip last group) */}
           {gi < groups.length - 1 && (
             <div
-              className="absolute bottom-0 left-3 right-3 h-px"
-              style={{ background: "rgba(255,255,255,0.04)" }}
+              className="absolute bottom-0 left-1 right-3 h-px"
+              style={{ background: "rgba(255,255,255,0.08)" }}
             />
           )}
         </div>
@@ -240,7 +231,7 @@ function ElementPreview({ data }: { data: DivoomPreviewElements }) {
             style={{
               top: `${topPct}%`,
               height: `${heightPct}%`,
-              // Left padding: 8px (past accent rail) + 4px gap
+              // Left padding: 6px rail + 6px gap
               paddingLeft: "12px",
               paddingRight: "8px",
             }}

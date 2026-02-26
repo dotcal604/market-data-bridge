@@ -22,7 +22,7 @@ import { registerWidget } from "./registry.js";
 const INDEX_SYMBOLS = ["SPY", "QQQ", "DIA", "IWM"] as const;
 const VIX_SYMBOL = "^VIX";
 
-const FONT_SIZE = 52;
+const FONT_SIZE = 36;
 const SPARKLINE_WIDTH = 12; // braille chars after VIX label
 
 function vixLabel(level: number): string {

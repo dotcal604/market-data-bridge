@@ -33,10 +33,36 @@ export const C = {
 
 // ─── Helpers ────────────────────────────────────────────────
 
+/**
+ * Graduated color by change magnitude — brighter = bigger move.
+ *
+ * Buckets (absolute %):
+ *   < 0.1  → gray   (noise)
+ *   0.1–0.5 → muted  (minor drift)
+ *   0.5–1.5 → medium (typical intraday)
+ *   1.5–3.0 → full   (significant)
+ *   > 3.0  → vivid  (extreme — hue-shifted for attention)
+ *
+ * Device constraint: FontColor is flat hex, no alpha — intensity
+ * is baked into RGB values (darker = less saturated toward gray).
+ */
 export function changeColor(change: number): string {
-  if (change > 0) return C.green;
-  if (change < 0) return C.red;
-  return C.gray;
+  const abs = Math.abs(change);
+
+  if (abs < 0.1) return C.gray;
+
+  if (change > 0) {
+    if (abs < 0.5) return "#2D8B2D"; // muted green
+    if (abs < 1.5) return "#00CC00"; // medium green
+    if (abs < 3.0) return C.green;   // full #00FF00
+    return "#00FF88";                 // extreme — green-cyan pop
+  }
+
+  // change < 0
+  if (abs < 0.5) return "#8B2D2D"; // muted red
+  if (abs < 1.5) return "#CC0000"; // medium red
+  if (abs < 3.0) return C.red;     // full #FF0000
+  return "#FF4400";                 // extreme — red-orange pop
 }
 
 export function fmtPrice(price: number): string {
