@@ -5,13 +5,15 @@
  * are silently ignored. All layouts use only text-capable widgets:
  *
  *   header    → 1 Text (session badge)           80px
- *   indices   → 1 Text (3-line panel)           280px  ← was 2T, now 1T
- *   movers    → 1 Text (3-line panel)           280px
- *   portfolio → 1 Text (connected) or 0         200px  ← opts out when disconnected
+ *   indices   → 1 Text (3-line panel)           280px
+ *   movers    → 1 Text (3-line panel)           280px  (session-labelled: AFTER HOURS, PRE-MARKET, PRIOR SESSION)
+ *   portfolio → 1 Text (connected) or 0         200px  opts out when IBKR disconnected
  *   news      → 1 Text (3 headlines)            280px
- *   footer    → 1 Text (source attribution)     120px  ← freed slot from indices 2T→1T
+ *   footer    → 1 Text (source attribution)     120px
  *
- * Canvas math: 8 top-pad + 80 + 280 + 200 + 280 + 280 + 120 = 1248px (97% coverage)
+ * All session layouts use the same 6-widget set — movers uses session-aware labels.
+ * Canvas math (IBKR connected): 8 top-pad + 80 + 280 + 280 + 200 + 280 + 120 = 1248px (97%)
+ * Canvas math (IBKR disconnected): portfolio opts out → 1048px raw, flex engine fills to 1280px
  *
  * Budget: 6 Text (connected) · 5 Text (disconnected) · 0 Image · 0 NetData ✓
  */
@@ -35,6 +37,7 @@ export const PRE_MARKET_LAYOUT: LayoutConfig = {
   widgets: [
     "header",
     "indices",
+    "movers",
     "portfolio",
     "news",
     "footer",
@@ -46,6 +49,7 @@ export const AFTER_HOURS_LAYOUT: LayoutConfig = {
   widgets: [
     "header",
     "indices",
+    "movers",
     "portfolio",
     "news",
     "footer",
@@ -57,6 +61,8 @@ export const CLOSED_LAYOUT: LayoutConfig = {
   widgets: [
     "header",
     "indices",
+    "movers",
+    "portfolio",
     "news",
     "footer",
   ],

@@ -47,48 +47,48 @@ interface WidgetStyle {
 const WIDGET_STYLES: Record<string, WidgetStyle> = {
   // Session chrome — cyan = "system status / ambient awareness"
   header: {
-    accent: "rgba(0,255,255,0.6)",
-    bg: "rgba(0,255,255,0.03)",
+    accent: "rgba(0,255,255,0.85)",
+    bg: "rgba(0,255,255,0.04)",
     fontSize: "text-[11px]",
     fontWeight: "font-bold",
     opacity: 1,
   },
   // Market structure — blue = "broad market context"
   indices: {
-    accent: "rgba(68,136,255,0.6)",
-    bg: "rgba(68,136,255,0.025)",
+    accent: "rgba(68,136,255,0.85)",
+    bg: "rgba(68,136,255,0.04)",
     fontSize: "text-[9px]",
     fontWeight: "font-medium",
     opacity: 1,
   },
   // Momentum — magenta = "actionable movement / energy"
   movers: {
-    accent: "rgba(255,0,255,0.5)",
-    bg: "rgba(255,0,255,0.02)",
+    accent: "rgba(255,0,255,0.75)",
+    bg: "rgba(255,0,255,0.03)",
     fontSize: "text-[9px]",
     fontWeight: "font-normal",
     opacity: 0.95,
   },
   // Portfolio — green/emerald = "your money / account health"
   portfolio: {
-    accent: "rgba(0,255,100,0.5)",
-    bg: "rgba(0,255,100,0.025)",
+    accent: "rgba(0,255,100,0.75)",
+    bg: "rgba(0,255,100,0.04)",
     fontSize: "text-[9px]",
     fontWeight: "font-medium",
     opacity: 1,
   },
   // News — amber/warm = "external signal / catalyst"
   news: {
-    accent: "rgba(255,170,0,0.45)",
-    bg: "rgba(255,170,0,0.02)",
+    accent: "rgba(255,170,0,0.7)",
+    bg: "rgba(255,170,0,0.03)",
     fontSize: "text-[8.5px]",
     fontWeight: "font-normal",
     opacity: 0.8,
   },
   // Footer chrome — dim gray = "attribution / metadata"
   footer: {
-    accent: "rgba(128,128,128,0.3)",
-    bg: "rgba(128,128,128,0.015)",
+    accent: "rgba(160,160,160,0.5)",
+    bg: "rgba(128,128,128,0.02)",
     fontSize: "text-[7.5px]",
     fontWeight: "font-normal",
     opacity: 0.5,
@@ -210,9 +210,9 @@ function ElementPreview({ data }: { data: DivoomPreviewElements }) {
             style={{ background: group.style.bg }}
           />
 
-          {/* Left accent rail — 2px wayfinding strip */}
+          {/* Left accent rail — 4px wayfinding strip */}
           <div
-            className="absolute left-0 top-[4%] bottom-[4%] w-[2px] rounded-full"
+            className="absolute left-0 top-0 bottom-0 w-[4px]"
             style={{ background: group.style.accent }}
           />
 

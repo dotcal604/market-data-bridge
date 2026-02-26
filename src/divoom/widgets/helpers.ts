@@ -87,24 +87,24 @@ export function textEl(
   };
 }
 
-// ─── Braille Sparkline ──────────────────────────────────────
+// ─── Block Sparkline ────────────────────────────────────────
 
 /**
- * Render a numeric series as a braille sparkline string.
+ * Render a numeric series as a sparkline using Unicode lower-block characters.
  *
- * Each braille character (U+2800–U+28FF) is a 2×4 dot grid.
- * We use the left column only (dots 1,2,3,7 = bits 0,1,2,6)
- * to create a single-column-per-character mini chart.
+ * Uses U+2581–U+2588 (▁▂▃▄▅▆▇█) — the same Unicode block as the full-block
+ * character (█ U+2588) already confirmed to render on FontID 52.
+ * Braille U+2800–28FF is NOT supported by this font.
  *
  * @param values  - Array of numbers (e.g. closing prices)
- * @param width   - Number of braille characters to output (default: 20)
- * @returns A string of braille characters representing the sparkline
+ * @param width   - Number of characters to output (default: 20)
+ * @returns A string of block characters representing the sparkline
  *
  * @example
- * brailleSparkline([100, 102, 98, 105, 103, 101, 107, 110])
- * // → "⡀⡄⡀⣄⡄⡀⣤⣴" (visual: price going up overall)
+ * blockSparkline([100, 102, 98, 105, 103, 101, 107, 110])
+ * // → "▃▄▂▆▅▃▇█"
  */
-export function brailleSparkline(values: number[], width = 20): string {
+export function blockSparkline(values: number[], width = 20): string {
   if (values.length === 0) return "";
 
   // Resample to target width using nearest-neighbor
@@ -116,28 +116,23 @@ export function brailleSparkline(values: number[], width = 20): string {
 
   const min = Math.min(...resampled);
   const max = Math.max(...resampled);
-  const range = max - min || 1; // avoid division by zero
+  const range = max - min || 1;
 
-  // Braille left-column dot positions (bottom to top): dots 7,3,2,1
-  // In the Unicode braille encoding: dot 1=bit0, dot 2=bit1, dot 3=bit2, dot 7=bit6
-  // We fill from bottom: level 0=none, 1=dot7, 2=dot7+3, 3=dot7+3+2, 4=dot7+3+2+1
-  const dotBits = [
-    0,                                  // level 0: empty
-    (1 << 6),                           // level 1: dot 7 only (bottom)
-    (1 << 6) | (1 << 2),               // level 2: dots 7+3
-    (1 << 6) | (1 << 2) | (1 << 1),   // level 3: dots 7+3+2
-    (1 << 6) | (1 << 2) | (1 << 1) | (1 << 0), // level 4: dots 7+3+2+1 (full)
-  ];
+  // U+2581–U+2588: ▁▂▃▄▅▆▇█ (8 levels, bottom-to-top fill)
+  const BLOCKS = "▁▂▃▄▅▆▇█";
 
   let result = "";
   for (const val of resampled) {
     const normalized = (val - min) / range; // 0..1
-    const level = Math.round(normalized * 4); // 0..4
-    result += String.fromCharCode(0x2800 + dotBits[level]);
+    const level = Math.min(7, Math.round(normalized * 7)); // 0..7
+    result += BLOCKS[level];
   }
 
   return result;
 }
+
+/** @deprecated Use blockSparkline — braille U+2800–28FF not in FontID 52 */
+export const brailleSparkline = blockSparkline;
 
 /**
  * Create an Image DisplayElement.
