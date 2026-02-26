@@ -5,7 +5,7 @@
  *
  *   "████ SPY ▲+1.24%   QQQ ▲+1.73%"
  *   "     DIA ▲+0.57%   IWM ▲+0.45%"
- *   "     VIX 18.4⚡  ⡀⡄⡀⣄⡄⡀⣤⣴⣤⣠"
+ *   "     VIX 18 ▼3.5%  ⡀⡄⡀⣄⡄⡀⣤⣴⣤⣠"
  *
  * Uses \n to separate rows within a single Text element.
  * Height = PANEL_INDICES_H (280px) to accommodate 3 lines at large font.
@@ -25,10 +25,16 @@ const VIX_SYMBOL = "^VIX";
 const FONT_SIZE = 36;
 const SPARKLINE_WIDTH = 12; // braille chars after VIX label
 
-function vixLabel(level: number): string {
-  if (level > 25) return `VIX ${Math.round(level)}⚡⚡`;
-  if (level > 20) return `VIX ${Math.round(level)}⚡`;
-  return `VIX ${Math.round(level)}`;
+function vixLabel(level: number, changePct: number | null): string {
+  const base = level > 25
+    ? `VIX ${Math.round(level)}⚡⚡`
+    : level > 20
+      ? `VIX ${Math.round(level)}⚡`
+      : `VIX ${Math.round(level)}`;
+
+  if (changePct === null) return base;
+  const dir = changePct >= 0 ? "▲" : "▼";
+  return `${base} ${dir}${Math.abs(changePct).toFixed(1)}%`;
 }
 
 function vixColor(level: number): string {
@@ -85,7 +91,7 @@ export const indicesWidget: Widget = {
       : `     DIA --  IWM --`;
 
     // ── Line 3: VIX + braille sparkline ───────────────────────────────
-    const vixPart = vixQ ? vixLabel(vixQ.last) : "VIX --";
+    const vixPart = vixQ ? vixLabel(vixQ.last, vixQ.changePercent) : "VIX --";
     const sparkline = spyBars.length > 2
       ? "  " + brailleSparkline(spyBars.map((b) => b.close), SPARKLINE_WIDTH)
       : "";

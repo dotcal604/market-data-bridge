@@ -20,7 +20,7 @@ import { getNews } from "../../providers/yahoo.js";
 import { registerWidget } from "./registry.js";
 
 const FONT_SIZE = 36;
-const MAX_CHARS = 38; // per headline at fontSize=36 (~20px/char avg = 768px fits ~38 chars)
+const MAX_CHARS = 32; // per headline at fontSize=36 (~21.6px/char, 768px / 21.6 ≈ 35 total, minus "> " prefix = 33, -1 margin)
 
 export const newsWidget: Widget = {
   id: "news",

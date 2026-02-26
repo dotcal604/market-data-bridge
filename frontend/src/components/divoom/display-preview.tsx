@@ -203,14 +203,24 @@ function ElementPreview({ data }: { data: DivoomPreviewElements }) {
             top: `${group.topPct}%`,
             height: `${group.heightPct}%`,
             zIndex: 1,
-            borderLeft: `3px solid ${group.style.accent}`,
             background: group.style.bg,
           }}
         >
+          {/* Accent rail — 4px wide, 1px inset to avoid rounded-corner clipping */}
+          <div
+            className="absolute top-0 bottom-0"
+            style={{
+              left: "1px",
+              width: "4px",
+              background: group.style.accent,
+              borderRadius: "1px",
+            }}
+          />
+
           {/* Section divider (bottom edge, skip last group) */}
           {gi < groups.length - 1 && (
             <div
-              className="absolute bottom-0 left-1 right-3 h-px"
+              className="absolute bottom-0 left-2 right-3 h-px"
               style={{ background: "rgba(255,255,255,0.08)" }}
             />
           )}
