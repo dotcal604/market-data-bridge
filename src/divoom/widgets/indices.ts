@@ -14,7 +14,7 @@
  */
 
 import type { Widget, WidgetContext, WidgetOutput, SlotCost } from "./types.js";
-import { textEl, brailleSparkline, PANEL_INDICES_H } from "./helpers.js";
+import { textEl, brailleSparkline, PANEL_INDICES_H, SectionBg } from "./helpers.js";
 import { C, changeColor, fmtPct, smartQuote } from "../screens.js";
 import { getHistoricalBars } from "../../providers/yahoo.js";
 import { registerWidget } from "./registry.js";
@@ -80,27 +80,28 @@ export const indicesWidget: Widget = {
     const spyArrow = arrow(spyQ?.changePercent ?? null);
     const qqqArrow = arrow(qqqQ?.changePercent ?? null);
     const line1 = spyQ && qqqQ
-      ? `████ SPY ${spyArrow}${fmtPct(spyQ.changePercent)}  QQQ ${qqqArrow}${fmtPct(qqqQ.changePercent)}`
-      : `████ SPY --  QQQ --`;
+      ? `▌ SPY ${spyArrow}${fmtPct(spyQ.changePercent)}  QQQ ${qqqArrow}${fmtPct(qqqQ.changePercent)}`
+      : `▌ SPY --  QQQ --`;
 
     // ── Line 2: DIA + IWM ─────────────────────────────────────────────
     const diaArrow = arrow(diaQ?.changePercent ?? null);
     const iwmArrow = arrow(iwmQ?.changePercent ?? null);
     const line2 = diaQ && iwmQ
-      ? `     DIA ${diaArrow}${fmtPct(diaQ.changePercent)}  IWM ${iwmArrow}${fmtPct(iwmQ.changePercent)}`
-      : `     DIA --  IWM --`;
+      ? `▌ DIA ${diaArrow}${fmtPct(diaQ.changePercent)}  IWM ${iwmArrow}${fmtPct(iwmQ.changePercent)}`
+      : `▌ DIA --  IWM --`;
 
     // ── Line 3: VIX + braille sparkline ───────────────────────────────
     const vixPart = vixQ ? vixLabel(vixQ.last, vixQ.changePercent) : "VIX --";
     const sparkline = spyBars.length > 2
       ? "  " + brailleSparkline(spyBars.map((b) => b.close), SPARKLINE_WIDTH)
       : "";
-    const line3 = `     ${vixPart}${sparkline}`;
+    const line3 = `▌ ${vixPart}${sparkline}`;
 
-    // Color driven by SPY direction; VIX level overrides for danger
+    // Section identity color: blue for market structure
+    // VIX danger overrides to red/orange for attention
     const mainColor = vixQ && vixQ.last > 25
       ? vixColor(vixQ.last)
-      : spyQ ? changeColor(spyQ.changePercent) : C.gray;
+      : C.blue;
 
     const text = `${line1}\n${line2}\n${line3}`;
 
@@ -109,6 +110,7 @@ export const indicesWidget: Widget = {
         textEl(origin.firstId, origin.y, text, mainColor, {
           height: origin.height,
           fontSize: FONT_SIZE,
+          bgColor: SectionBg.indices,
         }),
       ],
     };

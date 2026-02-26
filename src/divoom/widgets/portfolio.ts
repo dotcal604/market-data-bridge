@@ -12,7 +12,7 @@
  */
 
 import type { Widget, WidgetContext, WidgetOutput, SlotCost } from "./types.js";
-import { textEl, PANEL_PORTFOLIO_H } from "./helpers.js";
+import { textEl, PANEL_PORTFOLIO_H, SectionBg } from "./helpers.js";
 import { C, changeColor, fmtDollar } from "../screens.js";
 import { registerWidget } from "./registry.js";
 
@@ -67,8 +67,8 @@ export const portfolioWidget: Widget = {
     // ██ block prefix acts as a PnL status bar — green block = green day
     // Line 1: Daily P&L with color bar
     // Line 2: Net liquidation + exposure (gray, context info)
-    const line1 = `██ Day ${sign}${fmtCompact(dayPnl)}`;
-    const line2 = `   Net ${fmtCompact(netLiq)}  Exp ${exposure}%`;
+    const line1 = `▌ Day ${sign}${fmtCompact(dayPnl)}`;
+    const line2 = `▌ Net ${fmtCompact(netLiq)}  Exp ${exposure}%`;
     const text = `${line1}\n${line2}`;
     const color = dayPnl !== 0 ? changeColor(dayPnl) : C.white;
 
@@ -77,6 +77,7 @@ export const portfolioWidget: Widget = {
         textEl(origin.firstId, origin.y, text, color, {
           height: origin.height,
           fontSize: FONT_SIZE,
+          bgColor: SectionBg.portfolio,
         }),
       ],
     };

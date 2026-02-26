@@ -14,7 +14,7 @@
  */
 
 import type { Widget, WidgetContext, WidgetOutput, SlotCost } from "./types.js";
-import { textEl, PANEL_NEWS_H } from "./helpers.js";
+import { textEl, PANEL_NEWS_H, SectionBg } from "./helpers.js";
 import { C, trim } from "../screens.js";
 import { getNews } from "../../providers/yahoo.js";
 import { registerWidget } from "./registry.js";
@@ -39,12 +39,12 @@ export const newsWidget: Widget = {
     ctx: WidgetContext,
     origin: { y: number; firstId: number; height: number },
   ): Promise<WidgetOutput> {
-    let lines: string[] = ["> No news available", "", ""];
+    let lines: string[] = ["▌ No news available", "", ""];
 
     try {
       const news = await getNews("SPY");
       if (news.length > 0) {
-        lines = news.slice(0, 3).map((n) => `> ${trim(n.title, MAX_CHARS)}`);
+        lines = news.slice(0, 3).map((n) => `▌ ${trim(n.title, MAX_CHARS)}`);
         // Pad to 3 lines so panel height is consistent
         while (lines.length < 3) lines.push("");
       }
@@ -56,9 +56,10 @@ export const newsWidget: Widget = {
 
     return {
       elements: [
-        textEl(origin.firstId, origin.y, text, C.gray, {
+        textEl(origin.firstId, origin.y, text, C.orange, {
           height: origin.height,
           fontSize: FONT_SIZE,
+          bgColor: SectionBg.news,
         }),
       ],
     };

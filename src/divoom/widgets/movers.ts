@@ -14,7 +14,7 @@
  */
 
 import type { Widget, WidgetContext, WidgetOutput, SlotCost } from "./types.js";
-import { textEl, PANEL_MOVERS_H } from "./helpers.js";
+import { textEl, PANEL_MOVERS_H, SectionBg } from "./helpers.js";
 import { C, fmtPrice, fmtPct, trim } from "../screens.js";
 import { runScreener } from "../../providers/yahoo.js";
 import { registerWidget } from "./registry.js";
@@ -23,10 +23,10 @@ const FONT_SIZE = 36;
 
 function sessionLabel(session: string): string {
   switch (session) {
-    case "pre-market": return "── PRE-MARKET ──────────────";
-    case "after-hours": return "── AFTER HOURS ─────────────";
-    case "closed": return "── PRIOR SESSION ────────────";
-    default: return "── TOP MOVERS ───────────────";
+    case "pre-market": return "▌── PRE-MARKET ─────────────";
+    case "after-hours": return "▌── AFTER HOURS ────────────";
+    case "closed": return "▌── PRIOR SESSION ───────────";
+    default: return "▌── TOP MOVERS ──────────────";
   }
 }
 
@@ -39,7 +39,7 @@ function moverLine(
   const s = trim(sym, 6).padEnd(6);
   const p = pct !== null ? fmtPct(pct).padStart(7) : "     --";
   const px = price !== null ? `  $${fmtPrice(price)}` : "";
-  return `${dir} ${s}${p}${px}`;
+  return `▌ ${dir} ${s}${p}${px}`;
 }
 
 export const moversWidget: Widget = {
@@ -88,9 +88,10 @@ export const moversWidget: Widget = {
 
     return {
       elements: [
-        textEl(origin.firstId, origin.y, text, C.white, {
+        textEl(origin.firstId, origin.y, text, C.magenta, {
           height: origin.height,
           fontSize: FONT_SIZE,
+          bgColor: SectionBg.movers,
         }),
       ],
     };

@@ -68,6 +68,7 @@ export function textEl(
     align?: 0 | 1 | 2;
     width?: number;
     startX?: number;
+    bgColor?: string;
   } = {},
 ): DisplayElement {
   const align = opts.align ?? 0;
@@ -82,10 +83,24 @@ export function textEl(
     FontSize: opts.fontSize ?? DATA_SIZE,
     FontID: FONT_ID,
     FontColor: color,
-    BgColor: BG_TRANSPARENT,
+    BgColor: opts.bgColor ?? BG_TRANSPARENT,
     TextMessage: text,
   };
 }
+
+// ─── Section Background Colors ─────────────────────────────
+// Dark accent tints for section backgrounds.
+// Device renders these as solid fills behind text if BgColor is supported.
+// If device ignores BgColor, these are harmless (transparent fallback).
+
+export const SectionBg = {
+  header:    "#001818",  // dark cyan
+  indices:   "#080818",  // dark blue
+  movers:    "#180818",  // dark magenta
+  portfolio: "#081808",  // dark green
+  news:      "#181008",  // dark amber
+  footer:    "#00000000", // transparent — metadata stays clean
+} as const;
 
 // ─── Block Sparkline ────────────────────────────────────────
 

@@ -8,7 +8,7 @@
  */
 
 import type { Widget, WidgetContext, WidgetOutput, SlotCost } from "./types.js";
-import { textEl, HEADER_SIZE, PANEL_HEADER_H } from "./helpers.js";
+import { textEl, HEADER_SIZE, PANEL_HEADER_H, SectionBg } from "./helpers.js";
 import { C, sessionLabel } from "../screens.js";
 import { registerWidget } from "./registry.js";
 
@@ -58,6 +58,7 @@ export const headerWidget: Widget = {
           align: 0, // left (Align:1 = right on device firmware)
           fontSize: HEADER_SIZE,
           height: origin.height,
+          bgColor: SectionBg.header,
         }),
       ],
     };
