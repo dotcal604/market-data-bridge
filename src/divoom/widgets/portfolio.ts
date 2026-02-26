@@ -1,19 +1,24 @@
 /**
  * Widget: Portfolio — Account summary (IBKR-dependent)
  *
- * When IBKR connected, renders as 1 Text element:
- *   "Day +$342  Net $24.1K  Exp 87%"
+ * When IBKR connected, renders as 1 Text element (2 lines):
+ *   "▌ Day +$342  Net $24.1K"
+ *   "▌ ████████░░ 80% deployed"
+ *
+ * Line 1: Daily P&L + net liquidation (colored by P&L sign)
+ * Line 2: 10-segment visual exposure meter (█ = 10% each, ░ = empty)
  *
  * When IBKR disconnected, self-opts-out via getHeight() === 0.
- * This is intentional: showing stale portfolio data is worse than showing
- * nothing. The layout engine skips zero-height widgets silently.
+ * Showing stale portfolio data is worse than nothing — the layout
+ * engine skips zero-height widgets and redistributes the space.
  *
+ * Color: green/red by P&L direction · BgColor: dark blue tint.
  * Budget: 1 Text slot (connected) · 0 slots (disconnected).
  */
 
 import type { Widget, WidgetContext, WidgetOutput, SlotCost } from "./types.js";
 import { textEl, PANEL_PORTFOLIO_H, SectionBg } from "./helpers.js";
-import { C, changeColor, fmtDollar } from "../screens.js";
+import { C, changeColor } from "../screens.js";
 import { registerWidget } from "./registry.js";
 
 const FONT_SIZE = 48;
@@ -25,6 +30,17 @@ function fmtCompact(n: number): string {
   if (abs >= 10_000) return `$${Math.round(abs / 1_000)}K`;
   if (abs >= 1_000) return `$${(abs / 1_000).toFixed(1)}K`;
   return `$${Math.round(abs)}`;
+}
+
+/**
+ * Visual exposure meter: 10-segment bar using block characters.
+ * Each segment = 10% exposure. Filled = █, empty = ░.
+ * Example: exposureBar(73) → "███████░░░ 73%"
+ */
+function exposureBar(pct: number): string {
+  const clamped = Math.max(0, Math.min(100, pct));
+  const filled = Math.round(clamped / 10);
+  return "█".repeat(filled) + "░".repeat(10 - filled) + ` ${clamped}%`;
 }
 
 export const portfolioWidget: Widget = {
@@ -64,11 +80,10 @@ export const portfolioWidget: Widget = {
     }
 
     const sign = dayPnl >= 0 ? "+" : "-";
-    // ██ block prefix acts as a PnL status bar — green block = green day
-    // Line 1: Daily P&L with color bar
-    // Line 2: Net liquidation + exposure (gray, context info)
-    const line1 = `▌ Day ${sign}${fmtCompact(dayPnl)}`;
-    const line2 = `▌ Net ${fmtCompact(netLiq)}  Exp ${exposure}%`;
+    // Line 1: Daily P&L + net liquidation (primary info)
+    // Line 2: Visual exposure meter — instant read of capital deployed
+    const line1 = `▌ Day ${sign}${fmtCompact(dayPnl)}  Net ${fmtCompact(netLiq)}`;
+    const line2 = `▌ ${exposureBar(exposure)} deployed`;
     const text = `${line1}\n${line2}`;
     const color = dayPnl !== 0 ? changeColor(dayPnl) : C.white;
 

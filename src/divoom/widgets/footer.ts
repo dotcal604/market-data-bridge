@@ -1,14 +1,16 @@
 /**
- * Widget: Footer — Data source attribution + market close time
+ * Widget: Footer — Session countdown + data source
  *
- * Fills the bottom of the canvas with a 1-line status footer:
+ * 1-line status footer with live countdown to next session milestone:
  *
- *   Regular:    "Yahoo Finance · Market Bridge"
- *   After-hours: "AH ends 20:00 ET · Bridge v1"
- *   Closed:     "Opens Thu 09:30 ET · Yahoo Fin."  (day computed dynamically)
+ *   Regular:     "Closes 16:00 · 2h 38m · Yahoo"
+ *   After-hours: "AH ends 20:00 · 1h 12m · Yahoo"
+ *   Pre-market:  "Opens 09:30 · 45m · IBKR+Yahoo"
+ *   Closed:      "Opens Mon 09:30 · 12h 08m · Yahoo"
  *
+ * Countdown recalculated every 10s cycle — always accurate.
+ * Handles weekend transitions (Fri→Mon = 3 days).
  * Small font, gray color — purely informational context.
- * Uses the 6th text slot freed when indices collapsed from 2T to 1T.
  *
  * Budget: 1 Text slot.
  */
@@ -21,9 +23,14 @@ import { registerWidget } from "./registry.js";
 const FONT_SIZE = 30;
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+/** Get current ET Date. */
+function etNow(): Date {
+  return new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+}
+
 /** Next trading day abbreviation based on current ET day/time. */
 function nextOpenDay(): string {
-  const et = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+  const et = etNow();
   const day = et.getDay(); // 0=Sun .. 6=Sat
   const hour = et.getHours();
 
@@ -38,14 +45,50 @@ function nextOpenDay(): string {
   return DAY_NAMES[day];
 }
 
+/**
+ * Countdown string from now (ET) to a target hour:minute today or next trading day.
+ * Returns "2h 38m" or "45m" or "< 1m".
+ */
+function countdown(targetHour: number, targetMin: number, nextDay = false): string {
+  const et = etNow();
+  const now = et.getHours() * 60 + et.getMinutes();
+  let target = targetHour * 60 + targetMin;
+
+  if (nextDay) {
+    // Calculate to next trading day
+    const day = et.getDay();
+    let daysUntil = 1;
+    if (day === 5) daysUntil = 3;       // Friday → Monday
+    else if (day === 6) daysUntil = 2;   // Saturday → Monday
+    else if (day === 0) daysUntil = 1;   // Sunday → Monday
+    target += daysUntil * 24 * 60 - now; // remaining minutes today + days
+    const hours = Math.floor(target / 60);
+    const mins = target % 60;
+    if (hours > 0) return `${hours}h ${mins}m`;
+    return mins > 0 ? `${mins}m` : "< 1m";
+  }
+
+  const diff = target - now;
+  if (diff <= 0) return "< 1m";
+  const hours = Math.floor(diff / 60);
+  const mins = diff % 60;
+  if (hours > 0) return `${hours}h ${mins}m`;
+  return `${mins}m`;
+}
+
 function footerText(session: string, ibkrConnected: boolean): string {
-  const src = ibkrConnected ? "IBKR + Yahoo" : "Yahoo Finance";
+  const src = ibkrConnected ? "IBKR+Yahoo" : "Yahoo";
   switch (session) {
-    case "pre-market":   return `Pre-mkt ends 09:30 ET · ${src}`;
-    case "regular":      return `${src} · Market Bridge`;
-    case "after-hours":  return `AH ends 20:00 ET · ${src}`;
-    case "closed":       return `Opens ${nextOpenDay()} 09:30 ET · ${src}`;
-    default:             return `${src} · Market Bridge`;
+    case "pre-market":
+      return `Opens 09:30 · ${countdown(9, 30)} · ${src}`;
+    case "regular":
+      return `Closes 16:00 · ${countdown(16, 0)} · ${src}`;
+    case "after-hours":
+      return `AH ends 20:00 · ${countdown(20, 0)} · ${src}`;
+    case "closed":
+      return `Opens ${nextOpenDay()} 09:30 · ${countdown(9, 30, true)} · ${src}`;
+    default:
+      return `${src} · Market Bridge`;
   }
 }
 

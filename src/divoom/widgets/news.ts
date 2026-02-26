@@ -3,13 +3,14 @@
  *
  * Renders as ONE multi-line Text element:
  *
- *   "> Fed signals rate cut timeline"
- *   "> NVDA beats on strong AI demand"
- *   "> Dollar rises vs yen on data"
+ *   "▌ Fed signals rate cut timeline"
+ *   "▌ NVDA beats on strong AI demand"
+ *   "▌ Dollar rises vs yen on data"
  *
- * Each headline trimmed to ~32 chars to fit at fontSize=40 across 768px.
- * Gray color — news is context, not a signal.
+ * Each headline trimmed to ~32 chars to fit at fontSize=36 across 800px.
+ * ▌ prefix adds a colored left rail at zero slot cost.
  *
+ * Color: orange · BgColor: dark orange tint.
  * Budget: 1 Text slot.
  */
 

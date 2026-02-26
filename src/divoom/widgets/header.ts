@@ -4,7 +4,9 @@
  * Shows current market session, connection mode, and Eastern Time.
  * Format: "OPEN · LIVE · 14:22 ET"
  *
- * Uses 1 Text slot for maximum readability on the top line.
+ * Color: session-aware (cyan/yellow/orange/gray).
+ * BgColor: dark session-tinted background.
+ * Budget: 1 Text slot.
  */
 
 import type { Widget, WidgetContext, WidgetOutput, SlotCost } from "./types.js";

@@ -1,15 +1,21 @@
 /**
- * Widget: Movers — Top gainer & loser as multi-line panel
+ * Widget: Movers — Top 2 gainers & 2 losers
  *
- * Renders as ONE multi-line Text element:
+ * Renders as ONE multi-line Text element (up to 5 lines):
  *
- *   "── MOVERS ──────────────────"
- *   "▲ AVGO  +8.2%  $247"
- *   "▼ NVDA  -3.1%  $612"
+ *   "▌── TOP MOVERS ──────────────"
+ *   "▌ ▲ AVGO    +8.2%  $247"
+ *   "▌ ▲ MSFT    +3.1%  $421"
+ *   "▌ ▼ NVDA    -3.1%  $612"
+ *   "▌ ▼ TSLA    -2.4%  $189"
  *
- * Session-aware: "MOVERS" during regular hours, "AFTER HOURS" label otherwise.
- * Color: white (symbols carry directional meaning via ▲▼ arrows).
+ * Graceful degradation: if screener returns <2 results, empty
+ * lines are filtered out (5 → 4 → 3 lines).
  *
+ * Session-aware header: "TOP MOVERS" (regular), "AFTER HOURS",
+ * "PRE-MARKET", "PRIOR SESSION" (closed).
+ *
+ * Color: magenta · BgColor: dark magenta tint.
  * Budget: 1 Text slot.
  */
 
@@ -73,18 +79,26 @@ export const moversWidget: Widget = {
       // screeners failed — fallback text below
     }
 
-    const g = gainers[0];
-    const l = losers[0];
+    const [g1, g2] = gainers;
+    const [l1, l2] = losers;
 
     const header = sessionLabel(ctx.session);
-    const gLine = g?.last != null
-      ? moverLine("▲", g.symbol, g.last, g.changePercent ?? null)
-      : "▲ --";
-    const lLine = l?.last != null
-      ? moverLine("▼", l.symbol, l.last, l.changePercent ?? null)
-      : "▼ --";
+    const gLine1 = g1?.last != null
+      ? moverLine("▲", g1.symbol, g1.last, g1.changePercent ?? null)
+      : "▌ ▲ --";
+    const gLine2 = g2?.last != null
+      ? moverLine("▲", g2.symbol, g2.last, g2.changePercent ?? null)
+      : "";
+    const lLine1 = l1?.last != null
+      ? moverLine("▼", l1.symbol, l1.last, l1.changePercent ?? null)
+      : "▌ ▼ --";
+    const lLine2 = l2?.last != null
+      ? moverLine("▼", l2.symbol, l2.last, l2.changePercent ?? null)
+      : "";
 
-    const text = `${header}\n${gLine}\n${lLine}`;
+    const text = [header, gLine1, gLine2, lLine1, lLine2]
+      .filter(Boolean)
+      .join("\n");
 
     return {
       elements: [

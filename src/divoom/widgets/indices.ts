@@ -3,14 +3,15 @@
  *
  * Renders as ONE multi-line Text element (panel-style):
  *
- *   "████ SPY ▲+1.24%   QQQ ▲+1.73%"
- *   "     DIA ▲+0.57%   IWM ▲+0.45%"
- *   "     VIX 18 ▼3.5%  ⡀⡄⡀⣄⡄⡀⣤⣴⣤⣠"
+ *   "▌ SPY ▲+1.24%   QQQ ▲+1.73%"
+ *   "▌ DIA ▲+0.57%   IWM ▲+0.45%"
+ *   "▌ VIX 18 ▼3.5%  ⡀⡄⡀⣄⡄⡀⣤⣴⣤⣠"
  *
- * Uses \n to separate rows within a single Text element.
- * Height = PANEL_INDICES_H (280px) to accommodate 3 lines at large font.
+ * ▌ prefix renders a cyan left rail at zero slot cost.
+ * VIX row includes a 10-point Braille sparkline for trend context.
  *
- * Budget: 1 Text slot (was 2 — freeing a slot for footer widget).
+ * Color: cyan · BgColor: dark cyan tint.
+ * Budget: 1 Text slot.
  */
 
 import type { Widget, WidgetContext, WidgetOutput, SlotCost } from "./types.js";
