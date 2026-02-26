@@ -71,7 +71,7 @@ export const footerWidget: Widget = {
     return {
       elements: [
         textEl(origin.firstId, origin.y, text, C.gray, {
-          align: 1, // centered
+          align: 0, // left (Align:1 = right on device firmware)
           fontSize: FONT_SIZE,
           height: origin.height,
         }),

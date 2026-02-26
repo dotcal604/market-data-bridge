@@ -55,7 +55,7 @@ export const headerWidget: Widget = {
     return {
       elements: [
         textEl(origin.firstId, origin.y, text, color, {
-          align: 1,
+          align: 0, // left (Align:1 = right on device firmware)
           fontSize: HEADER_SIZE,
           height: origin.height,
         }),

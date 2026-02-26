@@ -31,7 +31,7 @@ export interface DisplayElement {
   StartY: number;
   Width: number;
   Height: number;
-  Align: 0 | 1 | 2; // 0=left, 1=center, 2=right
+  Align: 0 | 1 | 2; // 0=left, 1=right, 2=center (Divoom firmware)
   FontSize: number;
   FontID: number;
   FontColor: string;
