@@ -4,6 +4,7 @@ import { DisplayPreview } from "@/components/divoom/display-preview";
 import { StatusCard } from "@/components/divoom/status-card";
 import { ChartThumbnails } from "@/components/divoom/chart-thumbnails";
 import { BrightnessControl } from "@/components/divoom/brightness-control";
+import { BackgroundControl } from "@/components/divoom/background-control";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, Loader2 } from "lucide-react";
 import {
@@ -59,6 +60,7 @@ export default function DivoomPage() {
             onBrightnessChange={(v) => brightnessMutation.mutate(v)}
             disabled={!status?.connected}
           />
+          <BackgroundControl />
           <ChartThumbnails refreshKey={dataUpdatedAt} />
         </div>
       </div>

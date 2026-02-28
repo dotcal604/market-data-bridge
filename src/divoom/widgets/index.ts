@@ -21,11 +21,14 @@ export type {
   Widget,
   WidgetContext,
   WidgetOutput,
+  BackgroundOutput,
   SlotCost,
   LayoutConfig,
   RenderMode,
+  CompositeConfig,
+  WidgetBgOverride,
 } from "./types.js";
-export { DEVICE_BUDGET, ID_BLOCK_SIZE } from "./types.js";
+export { DEVICE_BUDGET, ID_BLOCK_SIZE, DEFAULT_COMPOSITE_CONFIG } from "./types.js";
 
 // Helpers
 export {

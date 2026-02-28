@@ -51,7 +51,7 @@ export const headerWidget: Widget = {
         timeZone: "America/New_York",
       }) + " ET";
 
-    const text = `${label} \u00b7 ${mode} \u00b7 ${etTime}`;
+    const text = `| ${label} \u00b7 ${mode} \u00b7 ${etTime}`;
     const color = sessionColor(ctx.session);
 
     return {

@@ -1,140 +1,71 @@
 /**
- * Widget: Indicators — RSI / EMA / ATR gauges & text
+ * Widget: Indicators — RSI + VIX gauge pair
  *
- * When chartBaseUrl is available:
- *   Renders a section header + 2 gauge images (RSI + VIX).
- *   Cost: 1 Text + 2 Image slots.
+ * Pure Image widget — two side-by-side gauge images.
+ * Each gauge is self-labeled ("RSI", "VIX") via the chart renderer,
+ * so no Text header is needed. This keeps the Text budget untouched.
  *
- * When chartBaseUrl is unavailable:
- *   Renders a section header + 3 indicator text rows.
- *   Cost: 4 Text + 0 Image slots.
+ * Cost: 0 Text + 2 Image + 0 NetData
  *
- * Indicator values are placeholders until real indicator fetchers are wired in.
+ * Self-disables (height → 0) when chartBaseUrl is not configured.
+ * Gauges are 200×120px each, centered in the 768px content area
+ * with a visual gap between them for breathing room.
  */
 
 import type { Widget, WidgetContext, WidgetOutput, SlotCost } from "./types.js";
-import {
-  textEl,
-  imageEl,
-  SECTION_HEADER_SIZE,
-  SECTION_HEADER_H,
-  DATA_SIZE,
-  DATA_H,
-  SECTION_GAP,
-  GAUGE_W,
-  GAUGE_H,
-  CANVAS_W,
-  PAD_X,
-} from "./helpers.js";
-import { C } from "../screens.js";
+import { imageEl, GAUGE_W, GAUGE_H, SECTION_GAP, CANVAS_W } from "./helpers.js";
 import { registerWidget } from "./registry.js";
 
-// Placeholder indicator values (will be replaced by real fetchers)
-const PLACEHOLDER_RSI = 55.2;
-const PLACEHOLDER_EMA_BULL = true;
-const PLACEHOLDER_ATR = 3.42;
-
-const INDICATOR_ROW_H = DATA_H - 2; // 32
-
-function rsiColor(rsi: number): string {
-  if (rsi > 70) return C.red;
-  if (rsi < 30) return C.green;
-  return C.yellow;
-}
+// Layout: two 200px gauges centered in 800px canvas with a gap between them
+//   |--- pad ---|  [RSI 200px]  |-- gap --|  [VIX 200px]  |--- pad ---|
+const GAUGE_GAP = 40;
+const PAIR_W = GAUGE_W * 2 + GAUGE_GAP; // 200 + 200 + 40 = 440
+const LEFT_X = Math.floor((CANVAS_W - PAIR_W) / 2); // (800 - 440) / 2 = 180
+const RIGHT_X = LEFT_X + GAUGE_W + GAUGE_GAP;        // 180 + 200 + 40 = 420
 
 export const indicatorsWidget: Widget = {
   id: "indicators",
   name: "Technical Indicators",
-  renderMode: "text",
+  renderMode: "image",
 
-  slotCost(ctx: WidgetContext): SlotCost {
-    if (ctx.chartBaseUrl) {
-      return { text: 1, image: 2, netdata: 0 };
-    }
-    return { text: 4, image: 0, netdata: 0 };
+  slotCost(_ctx: WidgetContext): SlotCost {
+    // Pure image — no text budget impact
+    return { text: 0, image: 2, netdata: 0 };
   },
 
   getHeight(ctx: WidgetContext): number {
-    if (ctx.chartBaseUrl) {
-      // header + gauges + gap
-      return SECTION_HEADER_H + GAUGE_H + SECTION_GAP;
-    }
-    // header + 3 indicator rows + gap
-    return SECTION_HEADER_H + 3 * INDICATOR_ROW_H + SECTION_GAP;
+    if (ctx.chartBaseUrl === undefined) return 0; // self-disable without charts
+    return GAUGE_H + SECTION_GAP; // 120 + 12 = 132px (fixed)
   },
 
   async render(
     ctx: WidgetContext,
     origin: { y: number; firstId: number; height: number },
   ): Promise<WidgetOutput> {
-    const elements = [];
-    let id = origin.firstId;
-    let y = origin.y;
-
-    // Section header
-    elements.push(
-      textEl(id++, y, "\u25b8 INDICATORS", C.cyan, {
-        fontSize: SECTION_HEADER_SIZE,
-        height: SECTION_HEADER_H,
-      }),
-    );
-    y += SECTION_HEADER_H;
-
-    if (ctx.chartBaseUrl) {
-      // Chart mode: 2 gauge images side-by-side
-      const url = ctx.chartBaseUrl;
-
-      elements.push(
-        imageEl(id++, y, `${url}/api/divoom/charts/rsi-gauge`, {
-          width: GAUGE_W,
-          height: GAUGE_H,
-          startX: PAD_X,
-          align: 0,
-        }),
-      );
-
-      elements.push(
-        imageEl(id++, y, `${url}/api/divoom/charts/vix-gauge`, {
-          width: GAUGE_W,
-          height: GAUGE_H,
-          startX: CANVAS_W - PAD_X - GAUGE_W,
-          align: 0,
-        }),
-      );
-    } else {
-      // Text-only mode: 3 indicator rows
-      const rsi = PLACEHOLDER_RSI;
-      const emaBull = PLACEHOLDER_EMA_BULL;
-      const atr = PLACEHOLDER_ATR;
-
-      elements.push(
-        textEl(id++, y, `RSI(14): ${rsi.toFixed(1)}`, rsiColor(rsi), {
-          fontSize: DATA_SIZE,
-          height: INDICATOR_ROW_H,
-        }),
-      );
-      y += INDICATOR_ROW_H;
-
-      elements.push(
-        textEl(
-          id++,
-          y,
-          `EMA 9/21: ${emaBull ? "Bull" : "Bear"}`,
-          emaBull ? C.green : C.red,
-          { fontSize: DATA_SIZE, height: INDICATOR_ROW_H },
-        ),
-      );
-      y += INDICATOR_ROW_H;
-
-      elements.push(
-        textEl(id++, y, `ATR(14): $${atr.toFixed(2)}`, C.white, {
-          fontSize: DATA_SIZE,
-          height: INDICATOR_ROW_H,
-        }),
-      );
+    if (ctx.chartBaseUrl === undefined) {
+      return { elements: [] };
     }
 
-    return { elements };
+    const url = ctx.chartBaseUrl;
+
+    return {
+      elements: [
+        // RSI gauge — left
+        imageEl(origin.firstId, origin.y, `${url}/api/divoom/charts/rsi-gauge`, {
+          width: GAUGE_W,
+          height: GAUGE_H,
+          startX: LEFT_X,
+          align: 0,
+        }),
+        // VIX gauge — right
+        imageEl(origin.firstId + 1, origin.y, `${url}/api/divoom/charts/vix-gauge`, {
+          width: GAUGE_W,
+          height: GAUGE_H,
+          startX: RIGHT_X,
+          align: 0,
+        }),
+      ],
+    };
   },
 };
 

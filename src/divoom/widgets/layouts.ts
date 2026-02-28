@@ -1,21 +1,30 @@
 /**
  * Widget System — Per-Session Layout Configs
  *
- * TimesFrame (DeviceType "Frame") only renders Text elements — Image elements
- * are silently ignored. All layouts use only text-capable widgets:
+ * Mixed Text + Image layouts. Image widgets self-disable (getHeight → 0)
+ * when chartBaseUrl is not configured.
  *
- *   header    → 1 Text (session badge)           80px
- *   indices   → 1 Text (3-line panel)           280px
- *   movers    → 1 Text (3-line panel)           280px  (session-labelled: AFTER HOURS, PRE-MARKET, PRIOR SESSION)
- *   portfolio → 1 Text (connected) or 0         200px  opts out when IBKR disconnected
- *   news      → 1 Text (3 headlines)            280px
- *   footer    → 1 Text (source attribution)     120px
+ *   header         → 1 Text (session badge)            64px min (fixed)
+ *   indices        → 1 Text (3-line panel)            160px min (flex)
+ *   spy-sparkline  → 1 Image (chart, self-disables)   112px    (fixed)
+ *   sectors        → 1 Image (heatmap, self-disables)  142px   (fixed)
+ *   movers         → 1 Text (3-line panel)            160px min (flex)
+ *   portfolio      → 1 Text (connected) or 0          130px min (flex)
+ *   news           → 1 Text (3 headlines)             160px min (flex)
+ *   indicators     → 2 Image (RSI+VIX gauges, self-d) 132px   (fixed)
+ *   volume-bars    → 1 Image (chart, self-disables)   112px    (fixed)
+ *   footer         → 1 Text (source attribution)       64px min (fixed)
  *
- * All session layouts use the same 6-widget set — movers uses session-aware labels.
- * Canvas math (IBKR connected): 8 top-pad + 80 + 280 + 280 + 200 + 280 + 120 = 1248px (97%)
- * Canvas math (IBKR disconnected): portfolio opts out → 1048px raw, flex engine fills to 1280px
+ * Budget with charts + IBKR: 6T + 5I  (well within 6/10/6)
+ * Budget with charts, no IBKR: 5T + 5I (portfolio opts out)
+ * Budget without charts:       6T + 0I  (all Image widgets opt out)
  *
- * Budget: 6 Text (connected) · 5 Text (disconnected) · 0 Image · 0 NetData ✓
+ * Minimum total: 1236px (IBKR + charts) → 36px flex slack across 4 flex widgets
+ * Without portfolio: 1106px → 166px flex slack (comfortable)
+ * Without charts:     868px → image widgets height=0, generous flex
+ *
+ * Flex engine distributes remaining canvas (1280px) among non-fixed widgets.
+ * Image widgets are fixed-size (charts have natural pixel dimensions).
  */
 
 import type { LayoutConfig } from "./types.js";
@@ -25,9 +34,13 @@ export const REGULAR_LAYOUT: LayoutConfig = {
   widgets: [
     "header",
     "indices",
+    "spy-sparkline", // Image — self-disables when chartBaseUrl undefined
+    "sectors",       // Image — heatmap, self-disables without chartBaseUrl
     "movers",
     "portfolio",
     "news",
+    "indicators",    // 2× Image — RSI + VIX gauges, self-disables without chartBaseUrl
+    "volume-bars",   // Image — volume chart, self-disables without chartBaseUrl
     "footer",
   ],
 };
@@ -37,9 +50,13 @@ export const PRE_MARKET_LAYOUT: LayoutConfig = {
   widgets: [
     "header",
     "indices",
+    "spy-sparkline",
+    "sectors",
     "movers",
     "portfolio",
     "news",
+    "indicators",
+    "volume-bars",
     "footer",
   ],
 };
@@ -49,9 +66,13 @@ export const AFTER_HOURS_LAYOUT: LayoutConfig = {
   widgets: [
     "header",
     "indices",
+    "spy-sparkline",
+    "sectors",
     "movers",
     "portfolio",
     "news",
+    "indicators",
+    "volume-bars",
     "footer",
   ],
 };
@@ -61,9 +82,13 @@ export const CLOSED_LAYOUT: LayoutConfig = {
   widgets: [
     "header",
     "indices",
+    "spy-sparkline",
+    "sectors",
     "movers",
     "portfolio",
     "news",
+    "indicators",
+    "volume-bars",
     "footer",
   ],
 };

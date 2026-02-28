@@ -563,47 +563,140 @@ export async function renderAllocation(
 
 // ─── 8. Data Table Image (@napi-rs/canvas) ──────────────────
 
+/** Simple row — one pre-formatted string, one color */
 export interface DataTableRow {
   text: string;    // full row string (pre-formatted, e.g. "SPY   $595.23  +1.23%")
   color: string;   // hex color for this row
 }
 
+/** Rich cell — one column in a multi-column row */
+export interface DataTableCell {
+  text: string;
+  color: string;
+  /** Pixel width of this cell column (default: flex to fill remaining width) */
+  width?: number;
+  /** Text alignment within cell: "left" | "right" | "center" (default: "left") */
+  align?: "left" | "right" | "center";
+  /** Override font: "bold", "normal" (default: inherits row context) */
+  fontWeight?: "bold" | "normal";
+}
+
+/** Rich row — multiple cells with per-cell color and alignment */
+export interface DataTableRichRow {
+  cells: DataTableCell[];
+  /** Optional row background color for zebra striping / section distinction */
+  bgColor?: string;
+}
+
+/** A row is either simple (string + color) or rich (array of cells) */
+export type DataTableRowInput = DataTableRow | DataTableRichRow;
+
+function isRichRow(row: DataTableRowInput): row is DataTableRichRow {
+  return "cells" in row;
+}
+
 /**
  * Render a compact HUD-style data table as a PNG image.
+ *
+ * Supports two row formats:
+ *   - Simple: { text, color } — single monospace string, one color
+ *   - Rich: { cells: [{ text, color, width?, align? }] } — multi-column, per-cell color
+ *
+ * Rich mode enables information-dense layouts where each datum (symbol, price,
+ * change %) gets its own color — green for gains, red for losses, cyan for labels.
+ *
  * Used by Image-mode widgets (indices, movers, portfolio) to stay
- * within the device's 6-Text budget.
+ * within the device's 6-Text budget while gaining full typographic control.
  */
 export async function renderDataTable(
   title: string | null,
-  rows: DataTableRow[],
+  rows: DataTableRowInput[],
   options: {
     width?: number;
     rowHeight?: number;
     titleHeight?: number;
+    fontSize?: number;
+    titleColor?: string;
+    padX?: number;
+    bgColor?: string;
   } = {},
 ): Promise<Buffer> {
-  const { width = 768, rowHeight = 34, titleHeight = 30 } = options;
+  const {
+    width = 768,
+    rowHeight = 34,
+    titleHeight = 30,
+    fontSize = 20,
+    titleColor = COLORS.cyan,
+    padX = 16,
+    bgColor,
+  } = options;
   const height = (title ? titleHeight : 0) + rows.length * rowHeight;
 
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext("2d");
-  fillBackground(ctx, width, height);
+
+  // Background: custom or default dark
+  if (bgColor) {
+    ctx.fillStyle = bgColor;
+    ctx.fillRect(0, 0, width, height);
+  } else {
+    fillBackground(ctx, width, height);
+  }
 
   let y = 0;
 
+  // ── Title ──
   if (title) {
-    ctx.font = "bold 20px sans-serif";
-    ctx.fillStyle = COLORS.cyan;
+    ctx.font = `bold ${fontSize}px sans-serif`;
+    ctx.fillStyle = titleColor;
     ctx.textBaseline = "middle";
-    ctx.fillText(title, 16, titleHeight / 2);
+    ctx.fillText(title, padX, titleHeight / 2);
     y += titleHeight;
   }
 
-  ctx.font = "20px monospace";
+  // ── Rows ──
   ctx.textBaseline = "middle";
+
   for (const row of rows) {
-    ctx.fillStyle = row.color;
-    ctx.fillText(row.text, 16, y + rowHeight / 2);
+    const rowCenterY = y + rowHeight / 2;
+
+    if (isRichRow(row)) {
+      // Optional row background
+      if (row.bgColor) {
+        ctx.fillStyle = row.bgColor;
+        ctx.fillRect(0, y, width, rowHeight);
+      }
+
+      // Render each cell with its own color, font, and alignment
+      let cellX = padX;
+      for (const cell of row.cells) {
+        ctx.fillStyle = cell.color;
+        ctx.font = cell.fontWeight === "bold"
+          ? `bold ${fontSize}px monospace`
+          : `${fontSize}px monospace`;
+
+        const cellW = cell.width ?? (width - cellX - padX);
+        const align = cell.align ?? "left";
+
+        if (align === "right") {
+          const textW = ctx.measureText(cell.text).width;
+          ctx.fillText(cell.text, cellX + cellW - textW, rowCenterY);
+        } else if (align === "center") {
+          const textW = ctx.measureText(cell.text).width;
+          ctx.fillText(cell.text, cellX + (cellW - textW) / 2, rowCenterY);
+        } else {
+          ctx.fillText(cell.text, cellX, rowCenterY);
+        }
+
+        cellX += cellW;
+      }
+    } else {
+      // Simple row — backward compatible
+      ctx.font = `${fontSize}px monospace`;
+      ctx.fillStyle = row.color;
+      ctx.fillText(row.text, padX, rowCenterY);
+    }
+
     y += rowHeight;
   }
 
@@ -623,21 +716,33 @@ export async function renderNewsPanel(
     width?: number;
     rowHeight?: number;
     titleHeight?: number;
+    titleColor?: string;
+    bgColor?: string;
+    fontSize?: number;
   } = {},
 ): Promise<Buffer> {
-  const { width = 768, rowHeight = 30, titleHeight = 30 } = options;
+  const {
+    width = 768, rowHeight = 30, titleHeight = 30,
+    titleColor = COLORS.cyan, bgColor, fontSize = 16,
+  } = options;
   const height = titleHeight + headlines.length * rowHeight;
 
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext("2d");
-  fillBackground(ctx, width, height);
 
-  ctx.font = "bold 20px sans-serif";
-  ctx.fillStyle = COLORS.cyan;
+  if (bgColor) {
+    ctx.fillStyle = bgColor;
+    ctx.fillRect(0, 0, width, height);
+  } else {
+    fillBackground(ctx, width, height);
+  }
+
+  ctx.font = `bold ${fontSize + 4}px sans-serif`;
+  ctx.fillStyle = titleColor;
   ctx.textBaseline = "middle";
   ctx.fillText(title, 16, titleHeight / 2);
 
-  ctx.font = "16px sans-serif";
+  ctx.font = `${fontSize}px sans-serif`;
   let y = titleHeight;
   for (const headline of headlines) {
     ctx.fillStyle = headline.includes("No news") ? COLORS.gray : COLORS.white;

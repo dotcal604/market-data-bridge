@@ -80,15 +80,15 @@ function footerText(session: string, ibkrConnected: boolean): string {
   const src = ibkrConnected ? "IBKR+Yahoo" : "Yahoo";
   switch (session) {
     case "pre-market":
-      return `Opens 09:30 · ${countdown(9, 30)} · ${src}`;
+      return `| Opens 09:30 · ${countdown(9, 30)} · ${src}`;
     case "regular":
-      return `Closes 16:00 · ${countdown(16, 0)} · ${src}`;
+      return `| Closes 16:00 · ${countdown(16, 0)} · ${src}`;
     case "after-hours":
-      return `AH ends 20:00 · ${countdown(20, 0)} · ${src}`;
+      return `| AH ends 20:00 · ${countdown(20, 0)} · ${src}`;
     case "closed":
-      return `Opens ${nextOpenDay()} 09:30 · ${countdown(9, 30, true)} · ${src}`;
+      return `| Opens ${nextOpenDay()} 09:30 · ${countdown(9, 30, true)} · ${src}`;
     default:
-      return `${src} · Market Bridge`;
+      return `| ${src} · Market Bridge`;
   }
 }
 

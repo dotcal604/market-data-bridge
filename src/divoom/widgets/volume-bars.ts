@@ -33,7 +33,7 @@ export const volumeBarsWidget: Widget = {
       return { elements: [] };
     }
 
-    const url = `${ctx.chartBaseUrl}/api/divoom/charts/volume-bars`;
+    const url = `${ctx.chartBaseUrl}/api/divoom/charts/volume-bars?format=jpeg`;
 
     return {
       elements: [

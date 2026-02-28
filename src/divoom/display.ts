@@ -107,10 +107,13 @@ export class TimesFrameDisplay {
     }));
     log.info({ elementCount: elements.length, elements: summary }, "Sending DispList to device");
 
-    const response = await this.sendCommand("Device/EnterCustomControlMode", {
-      BackgroudImageAddr: backgroundUrl,
-      DispList: elements,
-    });
+    // Omit BackgroudImageAddr entirely when empty — sending "" doesn't clear
+    // a cached background on the device firmware; omitting the key does.
+    const payload: Record<string, unknown> = { DispList: elements };
+    if (backgroundUrl) {
+      payload.BackgroudImageAddr = backgroundUrl;
+    }
+    const response = await this.sendCommand("Device/EnterCustomControlMode", payload);
 
     // Log device response (may contain error_code)
     if (response) {

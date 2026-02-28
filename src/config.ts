@@ -67,6 +67,17 @@ export const config = {
     backgroundUrl: process.env.DIVOOM_BACKGROUND_URL ?? "",
     chartBaseUrl: process.env.DIVOOM_CHART_BASE_URL ?? "",
     useWidgetEngine: process.env.DIVOOM_USE_WIDGET_ENGINE === "true",
+    // Background compositing — BackgroudImageAddr layer with charts behind text
+    compositeEnabled: process.env.DIVOOM_COMPOSITE_ENABLED === "true",
+    compositeBrightness: parseFloat(process.env.DIVOOM_COMPOSITE_BRIGHTNESS ?? "0.3"),
+    compositeBgColor: process.env.DIVOOM_COMPOSITE_BG_COLOR ?? "#000000",
+    compositeJpegQuality: parseInt(process.env.DIVOOM_COMPOSITE_JPEG_QUALITY ?? "85", 10),
+    compositeSparklineTicker: process.env.DIVOOM_COMPOSITE_SPARKLINE_TICKER ?? "SPY",
+    compositeSparklineTimeframe: process.env.DIVOOM_COMPOSITE_SPARKLINE_TIMEFRAME ?? "1d",
+    compositeSparklineBars: parseInt(process.env.DIVOOM_COMPOSITE_SPARKLINE_BARS ?? "78", 10),
+    compositeAccentUp: process.env.DIVOOM_COMPOSITE_ACCENT_UP ?? "#00FF00",
+    compositeAccentDown: process.env.DIVOOM_COMPOSITE_ACCENT_DOWN ?? "#FF0000",
+    compositeAccentNeutral: process.env.DIVOOM_COMPOSITE_ACCENT_NEUTRAL ?? "#00FFFF",
   },
   ops: {
     webhookUrl: process.env.OPS_WEBHOOK_URL ?? "",

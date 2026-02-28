@@ -27,15 +27,16 @@ export const SECTION_HEADER_H = 30;
 export const DATA_H = 34;
 export const SECTION_GAP = 12;
 
-// Multi-line panel heights (newline-based sections filling the 1280px canvas)
-// Each widget occupies a tall panel rendered as one Text element with \n separators.
-// Layout math: 8 top-pad + 80 header + 280 indices + 200 portfolio + 280 movers + 280 news + 120 footer = 1248px
-export const PANEL_HEADER_H = 80;    // session badge, 1 line
-export const PANEL_INDICES_H = 280;  // 3 lines: SPY/QQQ, DIA/IWM/VIX, sparkline label
-export const PANEL_PORTFOLIO_H = 200; // 2 lines: P&L, account details
-export const PANEL_MOVERS_H = 280;   // 3 lines: header + 2 movers
-export const PANEL_NEWS_H = 280;     // 3 headlines
-export const PANEL_FOOTER_H = 120;   // 1-2 lines: source/status
+// Multi-line panel MINIMUM heights (flex engine distributes remaining canvas space)
+// These are minimums — the flex engine stretches non-fixed widgets proportionally
+// to fill the 1280px canvas. Reduced from original values to accommodate Image widgets.
+// 3 lines at FontSize 36 ≈ 108px of text; minimums include ~50px pad for breathing room.
+export const PANEL_HEADER_H = 64;    // session badge, 1 line (fixed, no flex)
+export const PANEL_INDICES_H = 160;  // 3 lines: SPY/QQQ, DIA/IWM/VIX, sparkline label
+export const PANEL_PORTFOLIO_H = 130; // 2 lines: P&L, account details
+export const PANEL_MOVERS_H = 160;   // 3 lines: header + 2 movers
+export const PANEL_NEWS_H = 160;     // 3 headlines
+export const PANEL_FOOTER_H = 64;    // 1-2 lines: source/status (fixed, no flex)
 
 // Chart image dimensions
 export const CHART_W = CONTENT_W;
@@ -105,19 +106,19 @@ export const SectionBg = {
 // ─── Block Sparkline ────────────────────────────────────────
 
 /**
- * Render a numeric series as a sparkline using Unicode lower-block characters.
+ * Render a numeric series as a sparkline using ASCII characters.
  *
- * Uses U+2581–U+2588 (▁▂▃▄▅▆▇█) — the same Unicode block as the full-block
- * character (█ U+2588) already confirmed to render on FontID 52.
- * Braille U+2800–28FF is NOT supported by this font.
+ * Uses 8 ASCII characters with ascending visual weight: _.:;=+o#
+ * (Unicode block characters ▁▂▃▄▅▆▇█ are NOT supported by the
+ * device's FontID 52 — they render as garbled ⊠ boxes.)
  *
  * @param values  - Array of numbers (e.g. closing prices)
  * @param width   - Number of characters to output (default: 20)
- * @returns A string of block characters representing the sparkline
+ * @returns A string of ASCII characters representing the sparkline
  *
  * @example
  * blockSparkline([100, 102, 98, 105, 103, 101, 107, 110])
- * // → "▃▄▂▆▅▃▇█"
+ * // → ".:;=+:o#"
  */
 export function blockSparkline(values: number[], width = 20): string {
   if (values.length === 0) return "";
@@ -133,8 +134,9 @@ export function blockSparkline(values: number[], width = 20): string {
   const max = Math.max(...resampled);
   const range = max - min || 1;
 
-  // U+2581–U+2588: ▁▂▃▄▅▆▇█ (8 levels, bottom-to-top fill)
-  const BLOCKS = "▁▂▃▄▅▆▇█";
+  // 8 ASCII levels from low to high: _.:;=+o#
+  // (Device FontID 52 does NOT support Unicode block elements)
+  const BLOCKS = "_.:;=+o#";
 
   let result = "";
   for (const val of resampled) {

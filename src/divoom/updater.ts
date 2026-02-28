@@ -49,6 +49,34 @@ let lastDashboardData: DashboardData | null = null;
 let lastEngineResult: EngineResult | null = null;
 let lastRefreshAt: string | null = null;
 
+/** Runtime-tunable background settings (admin panel can change these). */
+export interface BgClearSettings {
+  brightness: number;              // 1-100 (default 90)
+  tint: "neutral" | "blue" | "green";  // default "neutral"
+  color: string | null;            // hex override e.g. "#0D0C01" — bypasses brightness+tint
+}
+const bgClearSettings: BgClearSettings = { brightness: 90, tint: "neutral", color: null };
+
+export function getBgClearSettings(): BgClearSettings {
+  return { ...bgClearSettings };
+}
+
+export function setBgClearSettings(patch: Partial<BgClearSettings>): BgClearSettings {
+  if (patch.brightness !== undefined) {
+    bgClearSettings.brightness = Math.max(1, Math.min(100, patch.brightness));
+  }
+  if (patch.tint !== undefined && ["neutral", "blue", "green"].includes(patch.tint)) {
+    bgClearSettings.tint = patch.tint;
+  }
+  // color: set to hex string to override, or null/"" to clear
+  if (patch.color !== undefined) {
+    bgClearSettings.color = patch.color && /^#[0-9a-fA-F]{6}$/.test(patch.color)
+      ? patch.color : null;
+  }
+  log.info({ bgClear: bgClearSettings }, "Background settings updated");
+  return { ...bgClearSettings };
+}
+
 /**
  * Build chart URLs from the base URL config.
  * Returns undefined if chartBaseUrl is not configured.
@@ -108,21 +136,17 @@ async function refreshWidgetEngine(): Promise<void> {
   const session = currentSession();
   const layout = getLayoutForSession(session);
 
-  // Pre-render charts so Image URLs are populated in cache
-  const chartUrls = buildChartUrls();
-  if (chartUrls) {
-    try {
-      const { chartInput } = await fetchDashboardWithCharts();
-      await renderAllCharts(chartInput);
-    } catch (err) {
-      log.warn({ err }, "Chart pre-render failed — widgets will degrade gracefully");
-    }
-  }
+  // Chart pre-render skipped — Image elements are non-functional on TimesFrame.
+  // When/if firmware adds Image element support, re-enable chart rendering here
+  // and set ctx.chartBaseUrl = config.divoom.chartBaseUrl.
 
+  // chartBaseUrl intentionally set to undefined — Image elements are non-functional
+  // on TimesFrame (device fetches URLs but never renders content). This forces all
+  // dual-mode widgets into Text mode and pure-image widgets to opt out (getHeight → 0).
   const ctx: WidgetContext = {
     session,
     ibkrConnected: isConnected(),
-    chartBaseUrl: config.divoom.chartBaseUrl || undefined,
+    chartBaseUrl: undefined,
     canvas: { width: CANVAS_W, padX: PAD_X, contentWidth: CONTENT_W },
   };
 
@@ -135,7 +159,22 @@ async function refreshWidgetEngine(): Promise<void> {
     return;
   }
 
-  await display.enterCustomMode(result.elements, config.divoom.backgroundUrl);
+  // BackgroudImageAddr controls the background layer behind Text elements.
+  // Custom control mode defaults to opaque black — NOT transparent.
+  // On the transparent IPS panel, non-black pixels keep LCD cells partially
+  // open → translucent glass effect. Runtime-tunable via admin API.
+  // When compositing is enabled, this will point to the composite JPEG endpoint.
+  const chartBase = config.divoom.chartBaseUrl;
+  const { brightness: bgBri, tint: bgTint, color: bgColor } = bgClearSettings;
+  const bgParams = bgColor
+    ? `color=${encodeURIComponent(bgColor)}&t=${Date.now()}`
+    : `brightness=${bgBri}&tint=${bgTint}&t=${Date.now()}`;
+  const bgUrl = config.divoom.backgroundUrl
+    ? `${config.divoom.backgroundUrl}?t=${Date.now()}`
+    : chartBase
+      ? `${chartBase}/api/divoom/charts/bg-clear?${bgParams}`
+      : "";
+  await display.enterCustomMode(result.elements, bgUrl);
 
   log.debug({
     layout: layout.name,
