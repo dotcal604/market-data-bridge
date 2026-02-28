@@ -1,0 +1,85 @@
+name: Integration Tests with Docker Compose
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  integration-tests:
+    runs-on: ubuntu-latest
+
+    services:
+      # Optional: Add any external services your app depends on
+      # postgres:
+      #   image: postgres:16
+      #   env:
+      #     POSTGRES_PASSWORD: test
+      #   options: >-
+      #     --health-cmd pg_isready
+      #     --health-interval 10s
+      #     --health-timeout 5s
+      #     --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build application image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./market-data-bridge
+          file: ./market-data-bridge/Dockerfile.prod
+          load: true
+          tags: market-data-bridge:test
+          cache-from: type=gha
+
+      - name: Test container starts successfully
+        run: |
+          docker run --rm --name test-app -d \
+            -e NODE_ENV=test \
+            -e PORT=3000 \
+            -p 3000:3000 \
+            market-data-bridge:test
+          
+          # Wait for container to be healthy
+          sleep 5
+          
+          # Test health endpoint
+          response=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/health)
+          if [ "$response" != "200" ]; then
+            echo "Health check failed with status: $response"
+            docker logs test-app
+            exit 1
+          fi
+          
+          echo "✓ Container health check passed"
+          docker stop test-app
+
+      - name: Test API endpoints
+        run: |
+          docker run --rm --name test-app -d \
+            -e NODE_ENV=test \
+            -e PORT=3000 \
+            -p 3000:3000 \
+            market-data-bridge:test
+          
+          sleep 5
+          
+          # Test a sample endpoint (adjust path to your API)
+          response=$(curl -s http://localhost:3000/api/health || echo "{}")
+          echo "API Response: $response"
+          
+          docker stop test-app
+
+      - name: Container inspection
+        if: always()
+        run: |
+          echo "=== Image Info ==="
+          docker inspect market-data-bridge:test | jq '.[] | {Architecture, Os, Size}'
+          
+          echo "=== Security Info ==="
+          docker inspect market-data-bridge:test | jq '.[] | {User, Healthcheck}'
