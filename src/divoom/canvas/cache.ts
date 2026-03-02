@@ -14,6 +14,16 @@ import { registerWidgets, renderLayout } from "./engine.js";
 import { allWidgets } from "./widgets.js";
 import { LIGHT_CONFIG, Ph } from "./types.js";
 import type { Slot, CanvasConfig } from "./types.js";
+import {
+  currentSession, sessionLabel, smartQuote, fetchSpyChartData,
+  fetchSectorHeatmapData, fetchIndicatorValues, fmtPrice, fmtPct, fmtDollar,
+} from "../screens.js";
+import { getStatus } from "../../providers/status.js";
+import { isConnected } from "../../ibkr/connection.js";
+import { runScreener } from "../../providers/yahoo.js";
+import { logger } from "../../logging.js";
+
+const log = logger.child({ module: "canvas-cache" });
 
 // ─── State ───────────────────────────────────────────────────
 
@@ -27,94 +37,178 @@ function ensureRegistered(): void {
   registered = true;
 }
 
-// ─── Demo Layout ─────────────────────────────────────────────
-// Static data for now — will be replaced with live market data feed
+// ─── Live Layout ─────────────────────────────────────────────
+// Fetches real market data from IBKR (live) / Yahoo (delayed)
 
-function buildDemoLayout(): Slot[] {
-  return [
-    {
-      widget: "header",
-      params: {
-        session: "REGULAR",
-        time: "10:42 ET",
-        connections: [
-          { label: "IBKR", ok: true },
-          { label: "Yahoo", ok: true },
-        ],
-      },
+async function buildLiveLayout(): Promise<Slot[]> {
+  const session = currentSession();
+  const status = getStatus();
+  const ibkr = isConnected();
+
+  // Parallel fetch: indices, sparkline, sectors, movers, indicators, portfolio
+  const [
+    spyQ, qqqQ, diaQ, iwmQ, vixQ,
+    spyChart,
+    sectorData,
+    indicators,
+    gainers, losers,
+    portfolioData,
+  ] = await Promise.all([
+    smartQuote("SPY").catch(() => null),
+    smartQuote("QQQ").catch(() => null),
+    smartQuote("DIA").catch(() => null),
+    smartQuote("IWM").catch(() => null),
+    smartQuote("^VIX").catch(() => null),
+    fetchSpyChartData().catch(() => ({ prices: [] as number[], ticker: "SPY", timeframe: "1mo" })),
+    fetchSectorHeatmapData().catch(() => []),
+    fetchIndicatorValues().catch(() => ({ rsi: null, vix: null, volumeBars: [] })),
+    session === "regular" ? runScreener("day_gainers", 3).catch(() => []) : Promise.resolve([]),
+    session === "regular" ? runScreener("day_losers", 3).catch(() => []) : Promise.resolve([]),
+    ibkr ? fetchPortfolioData().catch(() => null) : Promise.resolve(null),
+  ]);
+
+  const source = spyQ?.source ?? "DLY";
+
+  // ── Build Slots ──
+
+  const slots: Slot[] = [];
+
+  // Header
+  slots.push({
+    widget: "header",
+    params: {
+      session: sessionLabel(session),
+      time: status.easternTime,
+      connections: [
+        { label: "IBKR", ok: ibkr },
+        { label: source, ok: true },
+      ],
     },
-    {
-      widget: "indices",
-      params: {
-        primary: [
-          { sym: "SPY", val: "580.25", chg: "+0.48%", dir: 1 },
-          { sym: "QQQ", val: "495.12", chg: "+0.72%", dir: 1 },
-        ],
-        secondary: [
-          { sym: "DIA", val: "425.88", chg: "-0.15%", dir: -1 },
-          { sym: "IWM", val: "198.45", chg: "+1.22%", dir: 1 },
-          { sym: "VIX", val: "16.8", chg: "-4.2%", dir: -1 },
-        ],
-      },
+  });
+
+  // Indices
+  const mkIdx = (sym: string, q: typeof spyQ) =>
+    q ? { sym, val: fmtPrice(q.last), chg: fmtPct(q.changePercent), dir: q.changePercent >= 0 ? 1 : -1 }
+      : { sym, val: "--", chg: "--", dir: 0 };
+
+  slots.push({
+    widget: "indices",
+    params: {
+      primary: [mkIdx("SPY", spyQ), mkIdx("QQQ", qqqQ)],
+      secondary: [
+        mkIdx("DIA", diaQ),
+        mkIdx("IWM", iwmQ),
+        vixQ
+          ? { sym: "VIX", val: fmtPrice(vixQ.last), chg: fmtPct(vixQ.changePercent), dir: vixQ.changePercent <= 0 ? 1 : -1 }
+          : { sym: "VIX", val: "--", chg: "--", dir: 0 },
+      ],
     },
-    {
+  });
+
+  // Sparkline (SPY history)
+  if (spyChart.prices.length >= 5) {
+    slots.push({
       widget: "sparkline",
-      params: {
-        label: "SPY 1mo",
-        data: [565, 568, 570, 567, 572, 575, 573, 578, 580, 576, 582, 585, 583, 579, 581, 580, 578, 580, 583, 580, 577, 580],
-        color: "#00CCEE",
-      },
-    },
-    {
-      widget: "sparkline",
-      params: {
-        label: "QQQ 1mo",
-        data: [480, 483, 486, 482, 488, 491, 489, 494, 496, 493, 498, 495, 497, 500, 502, 499, 501, 498, 496, 495, 493, 495],
-        color: "#00DD55",
-      },
-    },
-    { widget: "separator" },
-    {
+      params: { label: `${spyChart.ticker} ${spyChart.timeframe}`, data: spyChart.prices, color: "#00CCEE" },
+    });
+  }
+
+  slots.push({ widget: "separator" });
+
+  // Sectors (treemap)
+  if (sectorData.length > 0) {
+    slots.push({
       widget: "sectors",
       params: {
-        sectors: [
-          { name: "TECH", chg: 1.8, leader: "NVDA" },
-          { name: "HLTH", chg: 0.9, leader: "UNH" },
-          { name: "FINL", chg: 0.3, leader: "JPM" },
-          { name: "INDU", chg: 0.5, leader: "CAT" },
-          { name: "CONS", chg: -0.2, leader: "AMZN" },
-          { name: "ENER", chg: -1.1, leader: "XOM" },
-          { name: "UTIL", chg: 0.1, leader: "NEE" },
-          { name: "REAL", chg: -0.6, leader: "PLD" },
-          { name: "MATL", chg: 0.4, leader: "LIN" },
-          { name: "COMM", chg: 1.2, leader: "GOOGL" },
-          { name: "STPL", chg: -0.3, leader: "PG" },
-        ],
+        sectors: sectorData.map(s => ({ name: s.label.toUpperCase(), chg: s.value })),
       },
-    },
-    { widget: "pnl" },
-    { widget: "separator" },
-    {
+    });
+  }
+
+  // PnL
+  if (portfolioData) {
+    slots.push({
+      widget: "pnl",
+      params: portfolioData,
+    });
+  }
+
+  slots.push({ widget: "separator" });
+
+  // Movers
+  const movers: Array<{ sym: string; chg: string; price: string; dir: number; vol: number }> = [];
+  for (const g of gainers.slice(0, 2)) {
+    movers.push({
+      sym: g.symbol,
+      chg: fmtPct(g.changePercent ?? 0),
+      price: `$${fmtPrice(g.last ?? 0)}`,
+      dir: 1,
+      vol: (g.volume ?? 0) / 1e6,
+    });
+  }
+  for (const l of losers.slice(0, 2)) {
+    movers.push({
+      sym: l.symbol,
+      chg: fmtPct(l.changePercent ?? 0),
+      price: `$${fmtPrice(l.last ?? 0)}`,
+      dir: -1,
+      vol: (l.volume ?? 0) / 1e6,
+    });
+  }
+  if (movers.length > 0) {
+    slots.push({
       widget: "movers",
-      params: {
-        title: "TOP MOVERS",
-        movers: [
-          { sym: "AAOI", chg: "+56.88%", price: "$84.23", dir: 1, vol: 8.2 },
-          { sym: "BWIN", chg: "+25.64%", price: "$23.23", dir: 1, vol: 4.5 },
-          { sym: "RUN",  chg: "-35.11%", price: "$13.25", dir: -1, vol: 6.1 },
-          { sym: "FIGR", chg: "-25.73%", price: "$25.28", dir: -1, vol: 2.3 },
-        ],
-      },
-    },
-    {
+      params: { title: session === "regular" ? "TOP MOVERS" : "PRIOR MOVERS", movers },
+    });
+  }
+
+  // Gauges — RSI + VIX
+  if (indicators.rsi != null) {
+    slots.push({
       widget: "gauge",
-      params: { label: "RSI (14)", value: 58, max: 100, color: "#00CCEE", icon: Ph.gauge },
-    },
-    {
+      params: { label: "RSI (14)", value: Math.round(indicators.rsi), max: 100, color: "#00CCEE", icon: Ph.gauge },
+    });
+  }
+  if (indicators.vix != null) {
+    slots.push({
       widget: "gauge",
-      params: { label: "VIX", value: 17, max: 50, color: "#EEDD00", icon: Ph.warning },
-    },
-  ];
+      params: { label: "VIX", value: Math.round(indicators.vix), max: 50, color: "#EEDD00", icon: Ph.warning },
+    });
+  } else if (vixQ) {
+    slots.push({
+      widget: "gauge",
+      params: { label: "VIX", value: Math.round(vixQ.last), max: 50, color: "#EEDD00", icon: Ph.warning },
+    });
+  }
+
+  return slots;
+}
+
+/** Fetch portfolio P&L data from IBKR (returns canvas pnl widget params). */
+async function fetchPortfolioData(): Promise<Record<string, unknown> | null> {
+  try {
+    const { getPnL, getPositions, getAccountSummary } = await import("../../ibkr/account.js");
+    const [pnl, positions, acct] = await Promise.all([
+      getPnL(), getPositions(), getAccountSummary().catch(() => null),
+    ]);
+
+    const dailyPnl = pnl.dailyPnL ?? 0;
+    const netLiq = acct?.netLiquidation ?? 0;
+    const grossPos = positions.reduce((s, p) => s + Math.abs(p.position * p.avgCost), 0);
+    const deployedPct = netLiq > 0 ? Math.round((grossPos / netLiq) * 100) : 0;
+
+    return {
+      dayPnl: `${dailyPnl >= 0 ? "+" : ""}$${fmtDollar(Math.abs(dailyPnl))}`,
+      dayDir: dailyPnl >= 0 ? 1 : -1,
+      netValue: `$${fmtDollar(netLiq)}`,
+      deployedPct: Math.min(deployedPct, 100),
+      riskLevel: deployedPct > 80 ? "HIGH" : deployedPct > 50 ? "MED" : "LOW",
+      riskPct: Math.min(deployedPct, 100),
+    };
+  } catch (err) {
+    log.warn({ err }, "Failed to fetch portfolio for canvas");
+    return null;
+  }
 }
 
 // ─── Render & Cache ──────────────────────────────────────────
@@ -129,7 +223,7 @@ export async function renderCanvasDashboard(
   ensureRegistered();
 
   const t0 = performance.now();
-  const layout = buildDemoLayout();
+  const layout = await buildLiveLayout();
   const result = await renderLayout(layout, config);
   lastRenderMs = performance.now() - t0;
 
