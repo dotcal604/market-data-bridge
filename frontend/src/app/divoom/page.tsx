@@ -5,13 +5,17 @@ import { StatusCard } from "@/components/divoom/status-card";
 import { ChartThumbnails } from "@/components/divoom/chart-thumbnails";
 import { BrightnessControl } from "@/components/divoom/brightness-control";
 import { BackgroundControl } from "@/components/divoom/background-control";
+import { CompositeControl } from "@/components/divoom/composite-control";
+import { ContentControl } from "@/components/divoom/content-control";
+import { LayoutControl } from "@/components/divoom/layout-control";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Loader2 } from "lucide-react";
+import { RefreshCw, RotateCcw, Loader2 } from "lucide-react";
 import {
   useDivoomStatus,
   useDivoomPreview,
   useDivoomBrightness,
   useDivoomRefresh,
+  useDivoomResetConfig,
 } from "@/lib/hooks/use-divoom";
 
 export default function DivoomPage() {
@@ -19,6 +23,7 @@ export default function DivoomPage() {
   const { data: preview, isLoading: previewLoading, dataUpdatedAt } = useDivoomPreview();
   const brightnessMutation = useDivoomBrightness();
   const refreshMutation = useDivoomRefresh();
+  const resetMutation = useDivoomResetConfig();
 
   return (
     <div className="space-y-6">
@@ -30,19 +35,34 @@ export default function DivoomPage() {
             Divoom TimesFrame market data dashboard
           </p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => refreshMutation.mutate()}
-          disabled={refreshMutation.isPending}
-        >
-          {refreshMutation.isPending ? (
-            <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <RefreshCw className="mr-2 h-3.5 w-3.5" />
-          )}
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => resetMutation.mutate()}
+            disabled={resetMutation.isPending}
+          >
+            {resetMutation.isPending ? (
+              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RotateCcw className="mr-2 h-3.5 w-3.5" />
+            )}
+            Reset Config
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => refreshMutation.mutate()}
+            disabled={refreshMutation.isPending}
+          >
+            {refreshMutation.isPending ? (
+              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="mr-2 h-3.5 w-3.5" />
+            )}
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Main layout: preview left, controls right */}
@@ -62,6 +82,11 @@ export default function DivoomPage() {
           />
           <BackgroundControl />
           <ChartThumbnails refreshKey={dataUpdatedAt} />
+
+          {/* Config parameterization */}
+          <CompositeControl />
+          <ContentControl />
+          <LayoutControl />
         </div>
       </div>
     </div>

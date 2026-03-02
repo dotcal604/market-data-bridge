@@ -1,4 +1,12 @@
-import type { DivoomStatusData, DivoomPreviewData } from "./types";
+import type {
+  DivoomStatusData,
+  DivoomPreviewData,
+  CompositeSettings,
+  ContentSettings,
+  LayoutSettings,
+  WidgetInfo,
+  ConfigDefaults,
+} from "./types";
 
 const API_BASE = "/api/divoom";
 
@@ -35,4 +43,17 @@ export const divoomClient = {
   getBackground: () => fetchJSON<BgClearSettings>(`${API_BASE}/config/background`),
   setBackground: (patch: Partial<BgClearSettings>) =>
     postJSON<BgClearSettings>(`${API_BASE}/config/background`, patch),
+
+  // Config store
+  getComposite: () => fetchJSON<CompositeSettings>(`${API_BASE}/config/composite`),
+  setComposite: (patch: Partial<CompositeSettings>) =>
+    postJSON<CompositeSettings>(`${API_BASE}/config/composite`, patch),
+  getContent: () => fetchJSON<ContentSettings>(`${API_BASE}/config/content`),
+  setContent: (patch: Partial<ContentSettings>) =>
+    postJSON<ContentSettings>(`${API_BASE}/config/content`, patch),
+  getLayout: () => fetchJSON<LayoutSettings>(`${API_BASE}/config/layout`),
+  setLayout: (patch: Partial<LayoutSettings>) =>
+    postJSON<LayoutSettings>(`${API_BASE}/config/layout`, patch),
+  getWidgets: () => fetchJSON<WidgetInfo[]>(`${API_BASE}/config/widgets`),
+  resetConfig: () => postJSON<ConfigDefaults>(`${API_BASE}/config/reset`),
 };

@@ -1,13 +1,13 @@
 /**
  * Widget: Footer — Session countdown + data source
  *
- * 1-line status footer with live countdown to next session milestone:
+ * 1-line status footer with live countdown to next session milestone.
+ * Both data sources always shown as parallel indicators:
  *
- *   Regular:     "Closes 16:00 · 2h 38m · Yahoo"
- *   After-hours: "AH ends 20:00 · 1h 12m · Yahoo"
- *   Pre-market:  "Opens 09:30 · 45m · IBKR+Yahoo"
- *   Closed:      "Opens Mon 09:30 · 12h 08m · Yahoo"
+ *   IBKR up:   "Closes 16:00 · 2h 38m · IBKR · Yahoo"
+ *   IBKR down: "Opens Mon 09:30 · 12h 08m · -IBKR- · Yahoo"
  *
+ * ASCII strikethrough (-IBKR-) = disconnected. Yahoo always available.
  * Countdown recalculated every 10s cycle — always accurate.
  * Handles weekend transitions (Fri→Mon = 3 days).
  * Small font, gray color — purely informational context.
@@ -20,7 +20,7 @@ import { textEl, PANEL_FOOTER_H } from "./helpers.js";
 import { C } from "../screens.js";
 import { registerWidget } from "./registry.js";
 
-const FONT_SIZE = 30;
+const FONT_SIZE = 22;
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 /** Get current ET Date. */
@@ -77,7 +77,11 @@ function countdown(targetHour: number, targetMin: number, nextDay = false): stri
 }
 
 function footerText(session: string, ibkrConnected: boolean): string {
-  const src = ibkrConnected ? "IBKR+Yahoo" : "Yahoo";
+  // Both sources always shown as parallel indicators.
+  // ASCII strikethrough when disconnected: -IBKR- = down.
+  const ibkr = ibkrConnected ? "IBKR" : "-IBKR-";
+  const src = `${ibkr} · Yahoo`;
+
   switch (session) {
     case "pre-market":
       return `| Opens 09:30 · ${countdown(9, 30)} · ${src}`;
@@ -110,10 +114,13 @@ export const footerWidget: Widget = {
     origin: { y: number; firstId: number; height: number },
   ): Promise<WidgetOutput> {
     const text = footerText(ctx.session, ctx.ibkrConnected);
+    // Whole-element color shift: gray when IBKR connected, maroon when down.
+    // Per-character coloring isn't possible — FontColor applies to entire element.
+    const color = ctx.ibkrConnected ? C.gray : "#882222";
 
     return {
       elements: [
-        textEl(origin.firstId, origin.y, text, C.gray, {
+        textEl(origin.firstId, origin.y, text, color, {
           align: 0, // left (Align:1 = right on device firmware)
           fontSize: FONT_SIZE,
           height: origin.height,

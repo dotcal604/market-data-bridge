@@ -35,6 +35,7 @@ import { textEl, imageEl, blockSparkline, PANEL_INDICES_H, SectionBg } from "./h
 import { C, changeColor, fmtPct, fmtPrice, smartQuote } from "../screens.js";
 import { renderDataTable, setCachedChart } from "../charts.js";
 import { getHistoricalBars } from "../../providers/yahoo.js";
+import { getContentSettings } from "../config-store.js";
 import { registerWidget } from "./registry.js";
 
 const INDEX_SYMBOLS = ["SPY", "QQQ", "DIA", "IWM"] as const;
@@ -53,7 +54,7 @@ const TABLE_H = TABLE_TITLE_H + 5 * TABLE_ROW_H; // title + 5 rows (4 indices + 
 
 // ─── Text-mode constants (fallback) ───────────────────────────
 const TEXT_FONT_SIZE = 36;
-const SPARKLINE_WIDTH = 12;
+const SPARKLINE_WIDTH_DEFAULT = 12;
 
 // ─── Shared helpers ───────────────────────────────────────────
 
@@ -155,6 +156,11 @@ export const indicesWidget: Widget = {
     ctx: WidgetContext,
     origin: { y: number; firstId: number; height: number },
   ): Promise<WidgetOutput> {
+    // Read sparkline config — ticker, timeframe, bar count
+    const content = getContentSettings();
+    const slTicker = content.sparklineTicker; // default "SPY"
+    const slTimeframe = content.sparklineTimeframe; // default "1mo"
+
     // Fetch all quotes in parallel (same data either way)
     const [spyQ, qqqQ, diaQ, iwmQ, vixQ, spyBars] = await Promise.all([
       smartQuote(INDEX_SYMBOLS[0]).catch(() => null),
@@ -162,7 +168,7 @@ export const indicesWidget: Widget = {
       smartQuote(INDEX_SYMBOLS[2]).catch(() => null),
       smartQuote(INDEX_SYMBOLS[3]).catch(() => null),
       smartQuote(VIX_SYMBOL).catch(() => null),
-      getHistoricalBars("SPY", "1mo", "1d").catch(() => []),
+      getHistoricalBars(slTicker, slTimeframe, "1d").catch(() => []),
     ]);
 
     // ── Image mode: server-rendered data table ────────────────
@@ -210,8 +216,9 @@ export const indicesWidget: Widget = {
       : `| DIA --  IWM --`;
 
     const vixPart = vixQ ? vixLabel(vixQ.last, vixQ.changePercent) : "VIX --";
+    const slWidth = Math.min(content.sparklineBars, 20) || SPARKLINE_WIDTH_DEFAULT;
     const sparkline = spyBars.length > 2
-      ? "  " + blockSparkline(spyBars.map((b) => b.close), SPARKLINE_WIDTH)
+      ? "  " + blockSparkline(spyBars.map((b) => b.close), slWidth)
       : "";
     const line3 = `| ${vixPart}${sparkline}`;
 

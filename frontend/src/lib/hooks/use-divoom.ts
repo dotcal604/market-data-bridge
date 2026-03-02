@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { divoomClient, type BgClearSettings } from "../api/divoom-client";
+import type { CompositeSettings, ContentSettings, LayoutSettings } from "../api/types";
 
 export function useDivoomStatus(refetchInterval = 10_000) {
   return useQuery({
@@ -53,6 +54,80 @@ export function useDivoomSetBackground() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["divoom", "background"] });
       queryClient.invalidateQueries({ queryKey: ["divoom", "preview"] });
+    },
+  });
+}
+
+// ─── Config Store Hooks ──────────────────────────────
+
+export function useDivoomComposite() {
+  return useQuery({
+    queryKey: ["divoom", "composite"],
+    queryFn: () => divoomClient.getComposite(),
+    refetchInterval: 30_000,
+  });
+}
+
+export function useDivoomSetComposite() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (patch: Partial<CompositeSettings>) => divoomClient.setComposite(patch),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["divoom", "composite"] });
+    },
+  });
+}
+
+export function useDivoomContent() {
+  return useQuery({
+    queryKey: ["divoom", "content"],
+    queryFn: () => divoomClient.getContent(),
+    refetchInterval: 30_000,
+  });
+}
+
+export function useDivoomSetContent() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (patch: Partial<ContentSettings>) => divoomClient.setContent(patch),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["divoom", "content"] });
+    },
+  });
+}
+
+export function useDivoomLayout() {
+  return useQuery({
+    queryKey: ["divoom", "layout"],
+    queryFn: () => divoomClient.getLayout(),
+    refetchInterval: 30_000,
+  });
+}
+
+export function useDivoomSetLayout() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (patch: Partial<LayoutSettings>) => divoomClient.setLayout(patch),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["divoom", "layout"] });
+    },
+  });
+}
+
+export function useDivoomWidgets() {
+  return useQuery({
+    queryKey: ["divoom", "widgets"],
+    queryFn: () => divoomClient.getWidgets(),
+    staleTime: 60_000,
+  });
+}
+
+export function useDivoomResetConfig() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => divoomClient.resetConfig(),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["divoom"] });
     },
   });
 }

@@ -24,6 +24,7 @@ import type {
 } from "./types.js";
 import { DEVICE_BUDGET, ID_BLOCK_SIZE } from "./types.js";
 import { resolveLayout } from "./registry.js";
+import { getLayoutSettings } from "../config-store.js";
 import { logger } from "../../logging.js";
 
 const log = logger.child({ module: "widget-engine" });
@@ -104,6 +105,14 @@ export async function renderLayout(
   layout: LayoutConfig,
   ctx: WidgetContext,
 ): Promise<EngineResult> {
+  // Step 0: When image budget is 0 (DispList Images are non-functional),
+  // suppress chartBaseUrl in the widget context so image widgets self-disable.
+  // The composite background renderer uses chartBaseUrl separately via updater.
+  const effectiveCtx: WidgetContext =
+    DEVICE_BUDGET.image === 0 && ctx.chartBaseUrl
+      ? { ...ctx, chartBaseUrl: undefined }
+      : ctx;
+
   // Step 1: Resolve widget IDs to instances
   const widgets = resolveLayout(layout);
 
@@ -117,11 +126,31 @@ export async function renderLayout(
     log.warn({ missing }, "Unknown widget IDs in layout — skipped");
   }
 
+  // Step 1b: Apply config overrides — filter out explicitly disabled widgets
+  const { widgetOverrides } = getLayoutSettings();
+  const configDisabled: string[] = [];
+  const enabledWidgets = widgets.filter((w) => {
+    const ov = widgetOverrides[w.id];
+    if (ov?.enabled === false) {
+      configDisabled.push(w.id);
+      return false;
+    }
+    return true;
+  });
+
+  if (configDisabled.length > 0) {
+    log.info({ configDisabled: configDisabled.join(",") }, "Widgets disabled by config override");
+  }
+
   // Step 2: Sync pass — getHeight() FIRST to filter self-disabled widgets
   // Image widgets return height=0 when chartBaseUrl is undefined. Running this
   // before budget check prevents phantom Image slot costs (critical when budget.image=0).
-  const CANVAS_H = 1280;
-  const TOP_PAD = 8;
+  const CANVAS_H = effectiveCtx.canvas.height;
+  // When text zone is tight (composite mode, splitY < 1280), drop top padding
+  // so widgets fit without overshooting the text/chart boundary.
+  // Bottom padding reserves a gap before the chart zone so text doesn't touch it.
+  const TOP_PAD = CANVAS_H < 1280 ? 0 : 8;
+  const BOTTOM_PAD = CANVAS_H < 1280 ? 20 : 0;
 
   // Fixed-size widgets that should NOT stretch:
   // - Chrome widgets (header, footer) — framing, not content
@@ -136,17 +165,22 @@ export async function renderLayout(
   }> = [];
   const selfDisabled: string[] = [];
 
-  for (let i = 0; i < widgets.length; i++) {
-    const widget = widgets[i];
-    const minH = widget.getHeight(ctx);
+  for (let i = 0; i < enabledWidgets.length; i++) {
+    const widget = enabledWidgets[i];
+    // Use minHeight override from config if set, otherwise widget's own getHeight
+    const ov = widgetOverrides[widget.id];
+    const minH = ov?.minHeight ?? widget.getHeight(effectiveCtx);
     if (minH <= 0) {
       selfDisabled.push(widget.id);
       continue; // self-disabled — excluded from budget + layout
     }
+    // When a config override sets minHeight, treat it as absolute (no flex stretch).
+    // This lets the admin panel lock a widget to an exact pixel height.
+    const hasHeightOverride = ov?.minHeight != null;
     activeEntries.push({
       widget,
       minHeight: minH,
-      flex: !FIXED_WIDGETS.has(widget.id) && widget.renderMode !== "image",
+      flex: !hasHeightOverride && !FIXED_WIDGETS.has(widget.id) && widget.renderMode !== "image",
       index: i,
     });
   }
@@ -159,7 +193,7 @@ export async function renderLayout(
   let degraded = false;
   let widgetCosts = activeEntries.map((e) => ({
     ...e,
-    cost: e.widget.slotCost(ctx),
+    cost: e.widget.slotCost(effectiveCtx),
     useImage: false,
   }));
   let totalCost = widgetCosts.reduce(
@@ -213,7 +247,7 @@ export async function renderLayout(
 
   // Step 4: Flex Y allocation — distribute remaining canvas space among flex widgets
   const totalMin = widgetCosts.reduce((s, e) => s + e.minHeight, 0);
-  const slack = Math.max(0, CANVAS_H - TOP_PAD - totalMin);
+  const slack = Math.max(0, CANVAS_H - TOP_PAD - BOTTOM_PAD - totalMin);
   const flexEntries = widgetCosts.filter((e) => e.flex);
   const flexTotal = flexEntries.reduce((s, e) => s + e.minHeight, 0);
 
@@ -250,8 +284,8 @@ export async function renderLayout(
     try {
       const origin = { y, firstId, height };
       const output = useImage && widget.renderAsImage
-        ? await widget.renderAsImage(ctx, origin)
-        : await widget.render(ctx, origin);
+        ? await widget.renderAsImage(effectiveCtx, origin)
+        : await widget.render(effectiveCtx, origin);
       return { id: widget.id, elements: output.elements };
     } catch (err) {
       log.error({ err, widget: widget.id }, "Widget render failed — skipping");

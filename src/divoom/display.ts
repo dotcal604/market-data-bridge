@@ -107,8 +107,10 @@ export class TimesFrameDisplay {
     }));
     log.info({ elementCount: elements.length, elements: summary }, "Sending DispList to device");
 
-    // Omit BackgroudImageAddr entirely when empty — sending "" doesn't clear
-    // a cached background on the device firmware; omitting the key does.
+    // Device firmware caches the last background JPEG in its framebuffer.
+    // Neither omitting the key NOR sending "" clears it — you must send a
+    // replacement image. The updater always provides bg-black as the default
+    // (pure black = transparent on IPS panel = "clear glass").
     const payload: Record<string, unknown> = { DispList: elements };
     if (backgroundUrl) {
       payload.BackgroudImageAddr = backgroundUrl;

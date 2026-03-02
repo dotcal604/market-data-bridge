@@ -29,6 +29,7 @@ import { textEl, imageEl, PANEL_NEWS_H, SectionBg } from "./helpers.js";
 import { C, trim } from "../screens.js";
 import { renderNewsPanel, setCachedChart } from "../charts.js";
 import { getNews } from "../../providers/yahoo.js";
+import { getContentSettings } from "../config-store.js";
 import { registerWidget } from "./registry.js";
 
 // ─── Image-mode constants ─────────────────────────────────────
@@ -39,8 +40,8 @@ const IMAGE_H = IMAGE_TITLE_H + 3 * IMAGE_ROW_H; // 28 + 3×32 = 124px
 const IMAGE_MAX_CHARS = 55; // ~55 chars at 18px fits 768px comfortably
 
 // ─── Text-mode constants (fallback) ───────────────────────────
-const TEXT_FONT_SIZE = 36;
-const TEXT_MAX_CHARS = 32; // per headline at fontSize=36 (~21.6px/char, 768px width)
+const TEXT_FONT_SIZE = 22;
+const TEXT_MAX_CHARS = 46; // per headline at fontSize=22 (~16px/char, 768px width)
 
 // ─── Widget ───────────────────────────────────────────────────
 
@@ -73,7 +74,8 @@ export const newsWidget: Widget = {
     let headlines: string[] = [];
 
     try {
-      const news = await getNews("SPY");
+      const ticker = getContentSettings().sparklineTicker;
+      const news = await getNews(ticker);
       if (news.length > 0) {
         headlines = news.slice(0, 3).map((n) => n.title);
       }

@@ -13,6 +13,7 @@ import type { ChartInputData, HeatmapCell, OHLC } from "./charts.js";
 import { getQuote, getNews, runScreener, getHistoricalBars, getTrendingSymbols } from "../providers/yahoo.js";
 import { getStatus } from "../providers/status.js";
 import { isConnected } from "../ibkr/connection.js";
+import { getContentSettings } from "./config-store.js";
 import { logger } from "../logging.js";
 
 const log = logger.child({ module: "divoom-screens" });
@@ -451,9 +452,12 @@ async function fetchIndicators(): Promise<DashboardSection> {
 
 // ─── Chart Data Collectors ───────────────────────────────────
 
-async function fetchSpyChartData(): Promise<{ prices: number[]; candles: OHLC[] }> {
+export async function fetchSpyChartData(): Promise<{ prices: number[]; candles: OHLC[]; ticker: string; timeframe: string }> {
+  const content = getContentSettings();
+  const ticker = content.sparklineTicker;     // default "SPY"
+  const timeframe = content.sparklineTimeframe; // default "1mo"
   try {
-    const bars = await getHistoricalBars("SPY", "1mo", "1d");
+    const bars = await getHistoricalBars(ticker, timeframe, "1d");
     const prices = bars.map((b: any) => b.close).filter((v: any): v is number => v != null);
     const candles: OHLC[] = bars
       .filter((b: any) => b.open != null && b.high != null && b.low != null && b.close != null)
@@ -463,14 +467,14 @@ async function fetchSpyChartData(): Promise<{ prices: number[]; candles: OHLC[] 
         low: b.low as number,
         close: b.close as number,
       }));
-    return { prices, candles };
+    return { prices, candles, ticker, timeframe };
   } catch (err) {
-    log.warn({ err }, "Failed to fetch SPY chart data");
-    return { prices: [], candles: [] };
+    log.warn({ err, ticker, timeframe }, "Failed to fetch chart data");
+    return { prices: [], candles: [], ticker, timeframe };
   }
 }
 
-async function fetchSectorHeatmapData(): Promise<HeatmapCell[]> {
+export async function fetchSectorHeatmapData(): Promise<HeatmapCell[]> {
   const SECTORS = [
     { symbol: "XLK", label: "Tech" },
     { symbol: "XLF", label: "Fin" },
@@ -510,7 +514,7 @@ async function fetchPnlChartData(): Promise<{ values: number[]; labels: string[]
   }
 }
 
-async function fetchIndicatorValues(): Promise<{
+export async function fetchIndicatorValues(): Promise<{
   rsi: number | null;
   vix: number | null;
   volumeBars: Array<{ label: string; volume: number; change: number }>;

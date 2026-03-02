@@ -6,12 +6,18 @@
  */
 
 import type { DisplayElement } from "../display.js";
+import { getContentSettings } from "../config-store.js";
 
 // ─── Canvas Constants (from layout.ts) ──────────────────────
 
 export const CANVAS_W = 800;
 export const PAD_X = 16;
 export const CONTENT_W = CANVAS_W - PAD_X * 2; // 768
+
+// Split-canvas: text elements confined to left half
+export const TEXT_ZONE_W = 400;        // left half for text elements
+export const TEXT_PAD_X = 10;          // tighter padding in narrow zone
+export const TEXT_CONTENT_W = TEXT_ZONE_W - TEXT_PAD_X * 2; // 380
 
 export const FONT_ID = 52;
 export const BG_TRANSPARENT = "#00000000";
@@ -34,9 +40,9 @@ export const SECTION_GAP = 12;
 export const PANEL_HEADER_H = 64;    // session badge, 1 line (fixed, no flex)
 export const PANEL_INDICES_H = 160;  // 3 lines: SPY/QQQ, DIA/IWM/VIX, sparkline label
 export const PANEL_PORTFOLIO_H = 130; // 2 lines: P&L, account details
-export const PANEL_MOVERS_H = 160;   // 3 lines: header + 2 movers
-export const PANEL_NEWS_H = 160;     // 3 headlines
-export const PANEL_FOOTER_H = 64;    // 1-2 lines: source/status (fixed, no flex)
+export const PANEL_MOVERS_H = 190;   // 5 lines: header + 4 movers @ fontSize 28
+export const PANEL_NEWS_H = 90;      // 3 headlines @ fontSize 22
+export const PANEL_FOOTER_H = 36;    // 1 line: source/status (fixed, small font)
 
 // Chart image dimensions
 export const CHART_W = CONTENT_W;
@@ -70,9 +76,13 @@ export function textEl(
     width?: number;
     startX?: number;
     bgColor?: string;
+    /** Override FontID (default: reads from config store, fallback FONT_ID=52) */
+    fontId?: number;
   } = {},
 ): DisplayElement {
   const align = opts.align ?? 0;
+  // Read FontID: explicit opt → config store → hardcoded default
+  const resolvedFontId = opts.fontId ?? getContentSettings().fontId ?? FONT_ID;
   return {
     ID: id,
     Type: "Text",
@@ -82,7 +92,7 @@ export function textEl(
     Height: opts.height ?? DATA_H,
     Align: align,
     FontSize: opts.fontSize ?? DATA_SIZE,
-    FontID: FONT_ID,
+    FontID: resolvedFontId,
     FontColor: color,
     BgColor: opts.bgColor ?? BG_TRANSPARENT,
     TextMessage: text,
@@ -90,35 +100,35 @@ export function textEl(
 }
 
 // ─── Section Background Colors ─────────────────────────────
-// Dark accent tints for section backgrounds.
-// Device renders these as solid fills behind text if BgColor is supported.
-// If device ignores BgColor, these are harmless (transparent fallback).
+// All transparent — opaque BgColor blocks the IPS glass and compositing layer.
+// BackgroudImageAddr (composite JPEG) handles visual depth behind text.
 
 export const SectionBg = {
-  header:    "#001818",  // dark cyan
-  indices:   "#080818",  // dark blue
-  movers:    "#180818",  // dark magenta
-  portfolio: "#081808",  // dark green
-  news:      "#181008",  // dark amber
-  footer:    "#00000000", // transparent — metadata stays clean
+  header:    "#00000000",
+  indices:   "#00000000",
+  movers:    "#00000000",
+  portfolio: "#00000000",
+  news:      "#00000000",
+  footer:    "#00000000",
 } as const;
 
 // ─── Block Sparkline ────────────────────────────────────────
 
 /**
- * Render a numeric series as a sparkline using ASCII characters.
+ * Render a numeric series as a sparkline using Unicode block elements.
  *
- * Uses 8 ASCII characters with ascending visual weight: _.:;=+o#
- * (Unicode block characters ▁▂▃▄▅▆▇█ are NOT supported by the
- * device's FontID 52 — they render as garbled ⊠ boxes.)
+ * Uses 8 Unicode block characters with ascending height: ▁▂▃▄▅▆▇█
+ * (U+2581–U+2588). Confirmed rendering on device FontID 52.
+ *
+ * Braille characters (U+2800–28FF) are NOT supported — garbled output.
  *
  * @param values  - Array of numbers (e.g. closing prices)
  * @param width   - Number of characters to output (default: 20)
- * @returns A string of ASCII characters representing the sparkline
+ * @returns A string of block characters representing the sparkline
  *
  * @example
  * blockSparkline([100, 102, 98, 105, 103, 101, 107, 110])
- * // → ".:;=+:o#"
+ * // → "▂▃▁▅▄▃▆█"
  */
 export function blockSparkline(values: number[], width = 20): string {
   if (values.length === 0) return "";
@@ -134,9 +144,8 @@ export function blockSparkline(values: number[], width = 20): string {
   const max = Math.max(...resampled);
   const range = max - min || 1;
 
-  // 8 ASCII levels from low to high: _.:;=+o#
-  // (Device FontID 52 does NOT support Unicode block elements)
-  const BLOCKS = "_.:;=+o#";
+  // 8 Unicode block levels from low to high: ▁▂▃▄▅▆▇█
+  const BLOCKS = "▁▂▃▄▅▆▇█";
 
   let result = "";
   for (const val of resampled) {
@@ -148,7 +157,7 @@ export function blockSparkline(values: number[], width = 20): string {
   return result;
 }
 
-/** @deprecated Use blockSparkline — braille U+2800–28FF not in FontID 52 */
+/** @deprecated Use blockSparkline — braille U+2800–28FF not supported */
 export const brailleSparkline = blockSparkline;
 
 /**

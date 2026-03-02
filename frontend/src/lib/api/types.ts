@@ -548,3 +548,67 @@ export interface DivoomPreviewElements {
 }
 
 export type DivoomPreviewData = DivoomPreviewSections | DivoomPreviewElements;
+
+// ─── Divoom Config Store Types ──────────────────────────
+
+export interface SectionConfig {
+  enabled: boolean;
+  height: number;
+}
+
+export interface CompositeSettings {
+  splitY: number;
+  jpegQuality: number;
+  cacheTtlMs: number;
+  sections: {
+    sparkline: SectionConfig;
+    heatmap: SectionConfig;
+    volume: SectionConfig;
+    gauges: SectionConfig;
+  };
+  palette: {
+    green: string;
+    red: string;
+    cyan: string;
+    yellow: string;
+    orange: string;
+    magenta: string;
+    white: string;
+    dimGray: string;
+    muted: string;
+  };
+}
+
+export interface ContentSettings {
+  sparklineTicker: string;
+  sparklineTimeframe: string;
+  sparklineBars: number;
+  accentUp: string;
+  accentDown: string;
+  accentNeutral: string;
+  /** Device FontID for text elements (default 52). Experiment with other values. */
+  fontId: number;
+}
+
+export interface WidgetOverride {
+  enabled?: boolean;
+  minHeight?: number;
+}
+
+export interface LayoutSettings {
+  widgetOrder: Record<string, string[]>;
+  widgetOverrides: Record<string, WidgetOverride>;
+}
+
+export interface WidgetInfo {
+  id: string;
+  name: string;
+  renderMode: string;
+  minHeight?: number;
+}
+
+export interface ConfigDefaults {
+  composite: CompositeSettings;
+  content: ContentSettings;
+  layout: LayoutSettings;
+}

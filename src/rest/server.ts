@@ -21,6 +21,15 @@ import { getCachedChart, getPlaceholderPng } from "../divoom/charts.js";
 import sharp from "sharp";
 import { getDivoomState, getDivoomDisplay, forceRefresh, getBgClearSettings, setBgClearSettings } from "../divoom/updater.js";
 import { renderHudBackground } from "../divoom/background.js";
+import { getCachedComposite, clearCompositeCache } from "../divoom/composite.js";
+import { getCachedCanvasJpeg, renderCanvasDashboard } from "../divoom/canvas/cache.js";
+import {
+  getCompositeSettings, setCompositeSettings,
+  getContentSettings, setContentSettings,
+  getLayoutSettings, setLayoutSettings,
+  resetConfig, getDefaults,
+} from "../divoom/config-store.js";
+import { getRegistry } from "../divoom/widgets/registry.js";
 import { renderLayout, CANVAS_W, PAD_X, CONTENT_W } from "../divoom/widgets/index.js";
 import type { WidgetContext } from "../divoom/widgets/index.js";
 import { getLayoutForSession } from "../divoom/widgets/layouts.js";
@@ -275,6 +284,25 @@ export function createApp(): express.Express {
     }
   });
 
+  // ── Composite background endpoint (unauthenticated — device fetches directly) ──
+  // Top/bottom: upper tint (translucent glass behind text) + lower live charts.
+  app.get("/api/divoom/charts/composite", async (_req: Request, res: Response) => {
+    try {
+      const bgSettings = getBgClearSettings();
+      const buf = await getCachedComposite({
+        quality: 85,
+        tintBrightness: bgSettings.brightness,
+        tintColor: bgSettings.color ?? undefined,
+      });
+      res.set("Content-Type", "image/jpeg");
+      res.set("Cache-Control", "no-cache, no-store");
+      res.send(buf);
+    } catch (e) {
+      logRest.error({ err: e }, "Composite background generation failed");
+      res.status(500).json({ error: "Composite background generation failed" });
+    }
+  });
+
   // ── Divoom chart image endpoint (unauthenticated — device fetches directly) ──
   //
   // Image format strategy for TimesFrame:
@@ -295,6 +323,23 @@ export function createApp(): express.Express {
         res.send(bgBuf);
       } catch (e) {
         res.status(500).json({ error: "HUD background generation failed" });
+      }
+      return;
+    }
+
+    // Canvas-rendered dashboard — full 800×1280 JPEG with all widgets
+    // rendered pixel-perfect via @napi-rs/canvas. Device fetches this as
+    // BackgroudImageAddr; updater pushes minimal DispList on top.
+    if (chartType === "canvas") {
+      try {
+        let jpeg = getCachedCanvasJpeg();
+        if (!jpeg) jpeg = await renderCanvasDashboard();
+        res.set("Content-Type", "image/jpeg");
+        res.set("Cache-Control", "no-cache, no-store");
+        res.send(jpeg);
+      } catch (e) {
+        logRest.error({ err: e }, "Canvas dashboard render failed");
+        res.status(500).json({ error: "Canvas dashboard render failed" });
       }
       return;
     }
@@ -522,6 +567,60 @@ export function createApp(): express.Express {
     res.json({ data: updated });
   });
 
+  // ─── Divoom Config Store ───
+
+  app.get("/api/divoom/config/composite", apiKeyAuth, (_req, res) => {
+    res.json({ data: getCompositeSettings() });
+  });
+
+  app.post("/api/divoom/config/composite", apiKeyAuth, (req, res) => {
+    const updated = setCompositeSettings(req.body);
+    clearCompositeCache();
+    res.json({ data: updated });
+  });
+
+  app.get("/api/divoom/config/content", apiKeyAuth, (_req, res) => {
+    res.json({ data: getContentSettings() });
+  });
+
+  app.post("/api/divoom/config/content", apiKeyAuth, (req, res) => {
+    const updated = setContentSettings(req.body);
+    res.json({ data: updated });
+  });
+
+  app.get("/api/divoom/config/layout", apiKeyAuth, (_req, res) => {
+    res.json({ data: getLayoutSettings() });
+  });
+
+  app.post("/api/divoom/config/layout", apiKeyAuth, (req, res) => {
+    const updated = setLayoutSettings(req.body);
+    res.json({ data: updated });
+  });
+
+  app.get("/api/divoom/config/widgets", apiKeyAuth, (_req, res) => {
+    const registry = getRegistry();
+    // Build a dummy context for getHeight() estimation
+    const dummyCtx = {
+      session: "regular",
+      ibkrConnected: true,
+      chartBaseUrl: undefined,
+      canvas: { width: 800, height: 1280, contentWidth: 768, padX: 16 },
+    };
+    const widgets = Array.from(registry.entries()).map(([id, w]) => ({
+      id,
+      name: w.name,
+      renderMode: w.renderMode,
+      minHeight: w.getHeight(dummyCtx),
+    }));
+    res.json({ data: widgets });
+  });
+
+  app.post("/api/divoom/config/reset", apiKeyAuth, (_req, res) => {
+    resetConfig();
+    clearCompositeCache();
+    res.json({ data: getDefaults() });
+  });
+
   // Debug: inspect widget engine output without sending to device
   app.get("/api/divoom/debug/elements", apiKeyAuth, async (_req: Request, res: Response) => {
     try {
@@ -531,7 +630,7 @@ export function createApp(): express.Express {
         session,
         ibkrConnected: isConnected(),
         chartBaseUrl: config.divoom.chartBaseUrl || undefined,
-        canvas: { width: CANVAS_W, padX: PAD_X, contentWidth: CONTENT_W },
+        canvas: { width: CANVAS_W, height: 1280, padX: PAD_X, contentWidth: CONTENT_W },
       };
       const result = await renderLayout(layout, ctx);
       res.json({

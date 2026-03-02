@@ -105,9 +105,10 @@ export interface WidgetContext {
   chartBaseUrl: string | undefined;
   /** Canvas constants */
   canvas: {
-    width: number;      // 800
+    width: number;       // 800
+    height: number;      // effective text zone height (splitY when composite active, 1280 otherwise)
     contentWidth: number; // 768
-    padX: number;       // 16
+    padX: number;        // 16
   };
   /** Background compositing settings (undefined = compositing disabled) */
   composite?: CompositeConfig;

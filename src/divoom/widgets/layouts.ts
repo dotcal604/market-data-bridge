@@ -28,6 +28,7 @@
  */
 
 import type { LayoutConfig } from "./types.js";
+import { getLayoutSettings } from "../config-store.js";
 
 export const REGULAR_LAYOUT: LayoutConfig = {
   name: "regular",
@@ -95,6 +96,18 @@ export const CLOSED_LAYOUT: LayoutConfig = {
 
 /** Get the layout config for a given market session. */
 export function getLayoutForSession(session: string): LayoutConfig {
+  // Check for runtime widget order override from config store
+  const layoutCfg = getLayoutSettings();
+  const orderOverride = layoutCfg.widgetOrder[session];
+
+  if (orderOverride && orderOverride.length > 0) {
+    return {
+      name: `${session} (custom)`,
+      widgets: orderOverride,
+    };
+  }
+
+  // Fall back to hardcoded layouts
   switch (session) {
     case "pre-market":
       return PRE_MARKET_LAYOUT;

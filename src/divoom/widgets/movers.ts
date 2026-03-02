@@ -49,7 +49,7 @@ const TABLE_TITLE_H = 28;
 const TABLE_H = TABLE_TITLE_H + 4 * TABLE_ROW_H; // title + 4 rows (2 gainers + 2 losers)
 
 // ─── Text-mode constants (fallback) ───────────────────────────
-const TEXT_FONT_SIZE = 36;
+const TEXT_FONT_SIZE = 28;
 
 // ─── Shared types ─────────────────────────────────────────────
 interface MoverData {
