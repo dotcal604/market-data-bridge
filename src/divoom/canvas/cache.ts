@@ -15,12 +15,12 @@ import { allWidgets } from "./widgets.js";
 import { LIGHT_CONFIG, Ph } from "./types.js";
 import type { Slot, CanvasConfig } from "./types.js";
 import {
-  currentSession, sessionLabel, smartQuote, fetchSpyChartData,
+  currentSession, sessionLabel, smartQuote,
   fetchSectorHeatmapData, fetchIndicatorValues, fmtPrice, fmtPct, fmtDollar,
 } from "../screens.js";
 import { getStatus } from "../../providers/status.js";
 import { isConnected } from "../../ibkr/connection.js";
-import { runScreener } from "../../providers/yahoo.js";
+import { runScreener, getHistoricalBars } from "../../providers/yahoo.js";
 import { logger } from "../../logging.js";
 
 const log = logger.child({ module: "canvas-cache" });
@@ -45,10 +45,10 @@ async function buildLiveLayout(): Promise<Slot[]> {
   const status = getStatus();
   const ibkr = isConnected();
 
-  // Parallel fetch: indices, sparkline, sectors, movers, indicators, portfolio
+  // Parallel fetch: indices, sparklines (SPY+QQQ), sectors, movers, indicators, portfolio
   const [
     spyQ, qqqQ, diaQ, iwmQ, vixQ,
-    spyChart,
+    spyBars, qqqBars,
     sectorData,
     indicators,
     gainers, losers,
@@ -59,26 +59,39 @@ async function buildLiveLayout(): Promise<Slot[]> {
     smartQuote("DIA").catch(() => null),
     smartQuote("IWM").catch(() => null),
     smartQuote("^VIX").catch(() => null),
-    fetchSpyChartData().catch(() => ({ prices: [] as number[], ticker: "SPY", timeframe: "1mo" })),
+    getHistoricalBars("SPY", "1mo", "1d").catch(() => []),
+    getHistoricalBars("QQQ", "1mo", "1d").catch(() => []),
     fetchSectorHeatmapData().catch(() => []),
     fetchIndicatorValues().catch(() => ({ rsi: null, vix: null, volumeBars: [] })),
-    session === "regular" ? runScreener("day_gainers", 3).catch(() => []) : Promise.resolve([]),
-    session === "regular" ? runScreener("day_losers", 3).catch(() => []) : Promise.resolve([]),
+    runScreener("day_gainers", 3).catch(() => []),
+    runScreener("day_losers", 3).catch(() => []),
     ibkr ? fetchPortfolioData().catch(() => null) : Promise.resolve(null),
   ]);
 
+  // Extract close prices for sparklines
+  const spyPrices = spyBars.map((b: any) => b.close).filter((v: any): v is number => v != null);
+  const qqqPrices = qqqBars.map((b: any) => b.close).filter((v: any): v is number => v != null);
+
   const source = spyQ?.source ?? "DLY";
 
+  // Short time: "3:05 PM ET" instead of full locale string
+  const shortTime = new Date().toLocaleString("en-US", {
+    hour: "numeric", minute: "2-digit", hour12: true,
+    timeZone: "America/New_York",
+  }) + " ET";
+
   // ── Build Slots ──
+  // Grid: 10 rows × 4 cols. Slot h overrides pack content tightly.
+  // Layout: header(1) + indices(1) + sparkline+sectors(3) + pnl(1) + movers(3) + gauges(1) = 10
 
   const slots: Slot[] = [];
 
-  // Header
+  // Header — 1 row
   slots.push({
     widget: "header",
     params: {
       session: sessionLabel(session),
-      time: status.easternTime,
+      time: shortTime,
       connections: [
         { label: "IBKR", ok: ibkr },
         { label: source, ok: true },
@@ -86,13 +99,14 @@ async function buildLiveLayout(): Promise<Slot[]> {
     },
   });
 
-  // Indices
+  // Indices — 1 row (override from default h:2)
   const mkIdx = (sym: string, q: typeof spyQ) =>
     q ? { sym, val: fmtPrice(q.last), chg: fmtPct(q.changePercent), dir: q.changePercent >= 0 ? 1 : -1 }
       : { sym, val: "--", chg: "--", dir: 0 };
 
   slots.push({
     widget: "indices",
+    h: 1,
     params: {
       primary: [mkIdx("SPY", spyQ), mkIdx("QQQ", qqqQ)],
       secondary: [
@@ -105,37 +119,50 @@ async function buildLiveLayout(): Promise<Slot[]> {
     },
   });
 
-  // Sparkline (SPY history)
-  if (spyChart.prices.length >= 5) {
+  // Sparklines — SPY + QQQ side by side (w:2 h:3 each)
+  if (spyPrices.length >= 5) {
     slots.push({
       widget: "sparkline",
-      params: { label: `${spyChart.ticker} ${spyChart.timeframe}`, data: spyChart.prices, color: "#00CCEE" },
+      h: 3,
+      params: { label: "SPY 1mo", data: spyPrices, color: "#00CCEE" },
+    });
+  }
+  if (qqqPrices.length >= 5) {
+    slots.push({
+      widget: "sparkline",
+      h: 3,
+      params: { label: "QQQ 1mo", data: qqqPrices, color: "#BB66FF" },
     });
   }
 
-  slots.push({ widget: "separator" });
-
-  // Sectors (treemap)
+  // Sectors (w:2 h:2) + PnL (w:2 h:2) — side by side
   if (sectorData.length > 0) {
     slots.push({
       widget: "sectors",
+      h: 2,
       params: {
         sectors: sectorData.map(s => ({ name: s.label.toUpperCase(), chg: s.value })),
       },
     });
   }
-
-  // PnL
   if (portfolioData) {
     slots.push({
       widget: "pnl",
       params: portfolioData,
     });
+  } else {
+    // Placeholder PnL when IBKR disconnected — keeps layout full
+    slots.push({
+      widget: "pnl",
+      params: {
+        dayPnl: "—", dayDir: 0,
+        netValue: "—",
+        deployedPct: 0, riskLevel: "—", riskPct: 0,
+      },
+    });
   }
 
-  slots.push({ widget: "separator" });
-
-  // Movers
+  // Movers — 2 rows (tight pack; 4 items ≈ 220px fits in 2 cells)
   const movers: Array<{ sym: string; chg: string; price: string; dir: number; vol: number }> = [];
   for (const g of gainers.slice(0, 2)) {
     movers.push({
@@ -158,11 +185,18 @@ async function buildLiveLayout(): Promise<Slot[]> {
   if (movers.length > 0) {
     slots.push({
       widget: "movers",
-      params: { title: session === "regular" ? "TOP MOVERS" : "PRIOR MOVERS", movers },
+      h: 2,
+      params: {
+        title: session === "regular" ? "TOP MOVERS"
+          : session === "after-hours" ? "AFTER HOURS"
+          : session === "pre-market" ? "PRE-MARKET"
+          : "PRIOR SESSION",
+        movers,
+      },
     });
   }
 
-  // Gauges — RSI + VIX
+  // Gauges — RSI + VIX, side by side (1 row)
   if (indicators.rsi != null) {
     slots.push({
       widget: "gauge",
@@ -189,12 +223,14 @@ async function fetchPortfolioData(): Promise<Record<string, unknown> | null> {
   try {
     const { getPnL, getPositions, getAccountSummary } = await import("../../ibkr/account.js");
     const [pnl, positions, acct] = await Promise.all([
-      getPnL(), getPositions(), getAccountSummary().catch(() => null),
+      getPnL().catch(() => null),
+      getPositions().catch(() => []),
+      getAccountSummary().catch(() => null),
     ]);
 
-    const dailyPnl = pnl.dailyPnL ?? 0;
+    const dailyPnl = pnl?.dailyPnL ?? 0;
     const netLiq = acct?.netLiquidation ?? 0;
-    const grossPos = positions.reduce((s, p) => s + Math.abs(p.position * p.avgCost), 0);
+    const grossPos = (positions as any[]).reduce((s, p) => s + Math.abs(p.position * p.avgCost), 0);
     const deployedPct = netLiq > 0 ? Math.round((grossPos / netLiq) * 100) : 0;
 
     return {
@@ -224,7 +260,38 @@ export async function renderCanvasDashboard(
 
   const t0 = performance.now();
   const layout = await buildLiveLayout();
-  const result = await renderLayout(layout, config);
+
+  // Adaptive grid: compute rows from actual slot content
+  const cols = config.columns;
+  let rowCursor = 0;
+  let colCursor = 0;
+  for (const slot of layout) {
+    const def = allWidgets.find(w => w.id === slot.widget);
+    const sw = Math.min(slot.w ?? def?.gridSize.w ?? cols, cols);
+    const sh = slot.h ?? def?.gridSize.h ?? 1;
+    if (colCursor + sw > cols) { colCursor = 0; rowCursor += 1; }
+    // Side-by-side widgets share the same row band
+    colCursor += sw;
+    if (colCursor >= cols) {
+      rowCursor += sh;
+      colCursor = 0;
+    } else {
+      // Still in same row — height contributes when row completes
+      // (handled implicitly: next full-width widget advances past it)
+      rowCursor += 0; // peer will fill adjacent cols
+    }
+  }
+  // If last row wasn't closed, add its height
+  if (colCursor > 0) {
+    const lastSlot = layout[layout.length - 1];
+    const lastDef = allWidgets.find(w => w.id === lastSlot?.widget);
+    rowCursor += lastSlot?.h ?? lastDef?.gridSize.h ?? 1;
+  }
+  const adaptiveRows = Math.max(rowCursor, 6); // floor at 6 to avoid huge cells
+  log.info({ adaptiveRows, rowCursor, slotCount: layout.length, slots: layout.map(s => `${s.widget}(w:${s.w ?? '?'},h:${s.h ?? '?'})`) }, "canvas adaptive grid");
+  const effectiveConfig = { ...config, rows: adaptiveRows };
+
+  const result = await renderLayout(layout, effectiveConfig);
   lastRenderMs = performance.now() - t0;
 
   cachedJpeg = result.jpeg;

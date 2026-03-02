@@ -153,8 +153,8 @@ export const sparklineWidget: CanvasWidget = {
     // Price labels floating on chart
     const maxP = Math.max(...data);
     const minP = Math.min(...data);
-    d.textRight(`$${maxP}`, chartY + 14, palette.green, 13);
-    d.textRight(`$${minP}`, chartY + chartH - 4, palette.red, 13);
+    d.textRight(`$${maxP.toFixed(2)}`, chartY + 14, palette.green, 13);
+    d.textRight(`$${minP.toFixed(2)}`, chartY + chartH - 4, palette.red, 13);
   },
 };
 
