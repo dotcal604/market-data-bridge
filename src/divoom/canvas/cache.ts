@@ -5,14 +5,14 @@
  * The REST route `/api/divoom/charts/canvas` serves the cached buffer.
  * The device fetches this JPEG via BackgroudImageAddr.
  *
- * On the transparent IPS panel: black pixels = see-through glass,
- * colored pixels = visible/opaque. DARK_PALETTE uses black bg
- * so the panel stays transparent between rendered elements.
+ * On the transparent IPS panel: black pixels = LCD blocking = opaque,
+ * colored/white pixels = LCD open = glowing. LIGHT_CONFIG uses white bg
+ * for the bright glass aesthetic validated on device.
  */
 
 import { registerWidgets, renderLayout } from "./engine.js";
 import { allWidgets } from "./widgets.js";
-import { DEFAULT_CONFIG, DARK_PALETTE, Ph } from "./types.js";
+import { LIGHT_CONFIG, Ph } from "./types.js";
 import type { Slot, CanvasConfig } from "./types.js";
 
 // ─── State ───────────────────────────────────────────────────
@@ -124,7 +124,7 @@ function buildDemoLayout(): Slot[] {
  * Called once per updater cycle (~10s).
  */
 export async function renderCanvasDashboard(
-  config: CanvasConfig = DEFAULT_CONFIG,
+  config: CanvasConfig = LIGHT_CONFIG,
 ): Promise<Buffer> {
   ensureRegistered();
 
