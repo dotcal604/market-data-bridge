@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>TimesFrame Glass Panel — Interactive Blueprint</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #0d0d0d;
+    color: #ccc;
+    font-family: 'JetBrains Mono', monospace;
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ─── Canvas Side ─── */
+  .canvas-side {
+    flex-shrink: 0;
+    width: 440px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    border-right: 1px solid #1a1a1a;
+  }
+  .canvas-side h1 {
+    font-size: 12px;
+    color: #00CCEE;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+  .canvas-wrap {
+    position: relative;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #preview {
+    border: 1px solid #222;
+    border-radius: 6px;
+    max-height: calc(100vh - 120px);
+    cursor: crosshair;
+  }
+  .canvas-info {
+    font-size: 10px;
+    color: #555;
+    display: flex;
+    gap: 16px;
+  }
+  .canvas-info span { color: #777; }
+
+  /* ─── Controls Side ─── */
+  .controls {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .section {
+    border: 1px solid #1a1a1a;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .section-header {
+    background: #111;
+    padding: 8px 12px;
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: #00CCEE;
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .section-header:hover { background: #151515; }
+  .section-header .toggle { color: #555; font-size: 10px; }
+  .section-body {
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .section.collapsed .section-body { display: none; }
+
+  /* Control rows */
+  .ctrl-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .ctrl-row label {
+    width: 110px;
+    flex-shrink: 0;
+    font-size: 11px;
+    color: #888;
+  }
+  .ctrl-row input[type="range"] {
+    flex: 1;
+    accent-color: #00CCEE;
+    height: 4px;
+  }
+  .ctrl-row input[type="color"] {
+    width: 28px;
+    height: 22px;
+    border: 1px solid #333;
+    border-radius: 4px;
+    background: none;
+    cursor: pointer;
+    padding: 0;
+  }
+  .ctrl-row input[type="number"],
+  .ctrl-row input[type="text"],
+  .ctrl-row select {
+    background: #111;
+    border: 1px solid #222;
+    color: #ccc;
+    padding: 3px 6px;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 11px;
+    width: 70px;
+  }
+  .ctrl-row select { width: 120px; }
+  .ctrl-row .val {
+    width: 36px;
+    text-align: right;
+    font-size: 10px;
+    color: #555;
+    flex-shrink: 0;
+  }
+  .ctrl-row input[type="checkbox"] {
+    accent-color: #00CCEE;
+  }
+
+  /* Zone toggle rows */
+  .zone-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+    border-bottom: 1px solid #111;
+  }
+  .zone-toggle:last-child { border-bottom: none; }
+  .zone-toggle label {
+    flex: 1;
+    font-size: 11px;
+    color: #aaa;
+    cursor: pointer;
+  }
+  .zone-toggle .zone-color {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* Action buttons */
+  .actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .btn {
+    background: #111;
+    border: 1px solid #333;
+    color: #ccc;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn:hover { background: #1a1a1a; border-color: #00CCEE; color: #00CCEE; }
+  .btn-primary { border-color: #00CCEE; color: #00CCEE; }
+  .btn-danger { border-color: #EE3322; color: #EE3322; }
+  .btn-danger:hover { border-color: #FF4433; color: #FF4433; }
+
+  .export-area {
+    background: #0a0a0a;
+    border: 1px solid #222;
+    border-radius: 4px;
+    padding: 8px;
+    font-size: 10px;
+    color: #666;
+    max-height: 200px;
+    overflow-y: auto;
+    white-space: pre;
+    display: none;
+  }
+  .export-area.show { display: block; }
+
+  .mouse-pos {
+    font-size: 10px;
+    color: #444;
+    position: fixed;
+    bottom: 8px;
+    left: 8px;
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══ Left: Live Canvas ═══ -->
+<div class="canvas-side">
+  <h1>TimesFrame Glass Panel</h1>
+  <div class="canvas-wrap">
+    <canvas id="preview" width="800" height="1280"></canvas>
+  </div>
+  <div class="canvas-info">
+    <span>800 × 1280</span>
+    <span id="sizeInfo">—</span>
+    <span id="mouseInfo">—</span>
+  </div>
+</div>
+
+<!-- ═══ Right: Controls ═══ -->
+<div class="controls">
+
+  <!-- Palette -->
+  <div class="section" id="sec-palette">
+    <div class="section-header" onclick="toggleSection('sec-palette')">
+      Color Palette <span class="toggle">▼</span>
+    </div>
+    <div class="section-body">
+      <div class="ctrl-row"><label>Green (up)</label><input type="color" data-key="green" value="#00DD55"></div>
+      <div class="ctrl-row"><label>Red (down)</label><input type="color" data-key="red" value="#EE3322"></div>
+      <div class="ctrl-row"><label>Cyan (accent)</label><input type="color" data-key="cyan" value="#00CCEE"></div>
+      <div class="ctrl-row"><label>Orange (session)</label><input type="color" data-key="orange" value="#FF9922"></div>
+      <div class="ctrl-row"><label>Magenta (movers)</label><input type="color" data-key="magenta" value="#FF44FF"></div>
+      <div class="ctrl-row"><label>White (values)</label><input type="color" data-key="white" value="#FFFFFF"></div>
+      <div class="ctrl-row"><label>Gray (labels)</label><input type="color" data-key="gray" value="#777777"></div>
+      <div class="ctrl-row"><label>Dim separator</label><input type="color" data-key="dimGray" value="#333333"></div>
+      <div class="ctrl-row"><label>Soft white</label><input type="color" data-key="softWhite" value="#CCCCCC"></div>
+    </div>
+  </div>
+
+  <!-- Layout -->
+  <div class="section" id="sec-layout">
+    <div class="section-header" onclick="toggleSection('sec-layout')">
+      Layout Geometry <span class="toggle">▼</span>
+    </div>
+    <div class="section-body">
+      <div class="ctrl-row"><label>Padding</label><input type="range" data-key="pad" min="8" max="48" value="24"><span class="val" data-val="pad">24</span></div>
+      <div class="ctrl-row"><label>Header font</label><input type="range" data-key="headerSize" min="16" max="36" value="26"><span class="val" data-val="headerSize">26</span></div>
+      <div class="ctrl-row"><label>Index large</label><input type="range" data-key="indexLargeSize" min="16" max="32" value="24"><span class="val" data-val="indexLargeSize">24</span></div>
+      <div class="ctrl-row"><label>Index small</label><input type="range" data-key="indexSmallSize" min="12" max="24" value="18"><span class="val" data-val="indexSmallSize">18</span></div>
+      <div class="ctrl-row"><label>Sparkline H</label><input type="range" data-key="sparklineH" min="80" max="300" value="160"><span class="val" data-val="sparklineH">160</span></div>
+      <div class="ctrl-row"><label>Chart line W</label><input type="range" data-key="chartLineWidth" min="1" max="5" value="2.5" step="0.5"><span class="val" data-val="chartLineWidth">2.5</span></div>
+      <div class="ctrl-row"><label>Chart glow</label><input type="range" data-key="chartGlow" min="0" max="0.3" value="0.08" step="0.01"><span class="val" data-val="chartGlow">0.08</span></div>
+      <div class="ctrl-row"><label>Position font</label><input type="range" data-key="positionSize" min="14" max="28" value="22"><span class="val" data-val="positionSize">22</span></div>
+      <div class="ctrl-row"><label>PnL font</label><input type="range" data-key="pnlSize" min="16" max="32" value="24"><span class="val" data-val="pnlSize">24</span></div>
+      <div class="ctrl-row"><label>Mover font</label><input type="range" data-key="moverSize" min="14" max="26" value="20"><span class="val" data-val="moverSize">20</span></div>
+      <div class="ctrl-row"><label>News font</label><input type="range" data-key="newsSize" min="12" max="22" value="16"><span class="val" data-val="newsSize">16</span></div>
+      <div class="ctrl-row"><label>Footer font</label><input type="range" data-key="footerSize" min="10" max="20" value="16"><span class="val" data-val="footerSize">16</span></div>
+      <div class="ctrl-row"><label>Sep thickness</label><input type="range" data-key="sepWidth" min="0" max="2" value="0.5" step="0.25"><span class="val" data-val="sepWidth">0.5</span></div>
+      <div class="ctrl-row"><label>Section gap</label><input type="range" data-key="sectionGap" min="4" max="32" value="16"><span class="val" data-val="sectionGap">16</span></div>
+    </div>
+  </div>
+
+  <!-- Zone Toggles -->
+  <div class="section" id="sec-zones">
+    <div class="section-header" onclick="toggleSection('sec-zones')">
+      Zone Visibility <span class="toggle">▼</span>
+    </div>
+    <div class="section-body">
+      <div class="zone-toggle"><input type="checkbox" data-zone="header" checked><div class="zone-color" style="background:#00CCEE"></div><label>Header</label></div>
+      <div class="zone-toggle"><input type="checkbox" data-zone="indices" checked><div class="zone-color" style="background:#00DD55"></div><label>Indices</label></div>
+      <div class="zone-toggle"><input type="checkbox" data-zone="sparkline" checked><div class="zone-color" style="background:#00CCEE"></div><label>Sparkline Chart</label></div>
+      <div class="zone-toggle"><input type="checkbox" data-zone="positions" checked><div class="zone-color" style="background:#FFFFFF"></div><label>Positions</label></div>
+      <div class="zone-toggle"><input type="checkbox" data-zone="pnl" checked><div class="zone-color" style="background:#00DD55"></div><label>P&L Summary</label></div>
+      <div class="zone-toggle"><input type="checkbox" data-zone="movers" checked><div class="zone-color" style="background:#FF44FF"></div><label>Movers</label></div>
+      <div class="zone-toggle"><input type="checkbox" data-zone="news" checked><div class="zone-color" style="background:#FF9922"></div><label>News</label></div>
+      <div class="zone-toggle"><input type="checkbox" data-zone="footer" checked><div class="zone-color" style="background:#777"></div><label>Footer</label></div>
+    </div>
+  </div>
+
+  <!-- Content -->
+  <div class="section collapsed" id="sec-content">
+    <div class="section-header" onclick="toggleSection('sec-content')">
+      Mock Content <span class="toggle">▶</span>
+    </div>
+    <div class="section-body">
+      <div class="ctrl-row"><label>Session</label>
+        <select data-key="session">
+          <option value="CLOSED">CLOSED</option>
+          <option value="PRE-MARKET">PRE-MARKET</option>
+          <option value="REGULAR">REGULAR</option>
+          <option value="AFTER-HOURS">AFTER-HOURS</option>
+        </select>
+      </div>
+      <div class="ctrl-row"><label>SPY price</label><input type="text" data-key="spyPrice" value="580.25" style="width:80px"></div>
+      <div class="ctrl-row"><label>SPY change</label><input type="text" data-key="spyChg" value="-0.48%" style="width:80px"></div>
+      <div class="ctrl-row"><label>Day P&L</label><input type="text" data-key="dayPnl" value="+$342" style="width:80px"></div>
+      <div class="ctrl-row"><label>Net value</label><input type="text" data-key="netValue" value="$24.1K" style="width:80px"></div>
+      <div class="ctrl-row"><label>Deployed %</label><input type="text" data-key="deployed" value="73%" style="width:80px"></div>
+      <div class="ctrl-row"><label># Movers</label><input type="range" data-key="moverCount" min="2" max="8" value="4"><span class="val" data-val="moverCount">4</span></div>
+      <div class="ctrl-row"><label># Headlines</label><input type="range" data-key="newsCount" min="1" max="6" value="3"><span class="val" data-val="newsCount">3</span></div>
+    </div>
+  </div>
+
+  <!-- Actions -->
+  <div class="section" id="sec-actions">
+    <div class="section-header" onclick="toggleSection('sec-actions')">
+      Actions <span class="toggle">▼</span>
+    </div>
+    <div class="section-body">
+      <div class="actions">
+        <button class="btn btn-primary" onclick="exportConfig()">Export Config JSON</button>
+        <button class="btn" onclick="downloadPNG()">Download PNG</button>
+        <button class="btn btn-danger" onclick="resetDefaults()">Reset Defaults</button>
+      </div>
+      <pre class="export-area" id="exportArea"></pre>
+    </div>
+  </div>
+
+</div>
+
+<div class="mouse-pos" id="mousePos"></div>
+
+<script>
+// ─── State ────────────────────────────────────────────────
+const state = {
+  // Palette
+  green: "#00DD55", red: "#EE3322", cyan: "#00CCEE",
+  orange: "#FF9922", magenta: "#FF44FF", white: "#FFFFFF",
+  gray: "#777777", dimGray: "#333333", softWhite: "#CCCCCC",
+  // Layout
+  pad: 24, headerSize: 26, indexLargeSize: 24, indexSmallSize: 18,
+  sparklineH: 160, chartLineWidth: 2.5, chartGlow: 0.08,
+  positionSize: 22, pnlSize: 24, moverSize: 20, newsSize: 16,
+  footerSize: 16, sepWidth: 0.5, sectionGap: 16,
+  // Zones
+  header: true, indices: true, sparkline: true, positions: true,
+  pnl: true, movers: true, news: true, footer: true,
+  // Content
+  session: "CLOSED", spyPrice: "580.25", spyChg: "-0.48%",
+  dayPnl: "+$342", netValue: "$24.1K", deployed: "73%",
+  moverCount: 4, newsCount: 3,
+};
+
+const defaults = { ...state };
+
+// ─── Phosphor Light Unicode Codepoints ────────────────────
+// NOTE: These render in browser ONLY if Phosphor font is loaded.
+// We fall back to text labels in the browser preview.
+const ICO = {
+  cellSignal: "⦿",   broadcast: "◉",   clock: "◷",
+  timer: "⏱",         chartLineUp: "📈", shield: "◇",
+  currencyDollar: "$", gauge: "⊘",       fire: "🔥",
+  newspaper: "📰",    plugConnected: "⚡", trendUp: "↗",
+  trendDown: "↘",     warning: "⚠",
+};
+
+// ─── Canvas Rendering ─────────────────────────────────────
+const canvas = document.getElementById("preview");
+const ctx = canvas.getContext("2d");
+const W = 800, H = 1280;
+
+function fitCanvas() {
+  const maxH = window.innerHeight - 100;
+  const scale = Math.min(400 / W, maxH / H);
+  canvas.style.width = Math.floor(W * scale) + "px";
+  canvas.style.height = Math.floor(H * scale) + "px";
+}
+
+function drawText(text, x, y, color, size, bold = false) {
+  ctx.font = `${bold ? "700" : "400"} ${size}px 'JetBrains Mono', monospace`;
+  ctx.fillStyle = color;
+  ctx.fillText(text, x, y);
+}
+
+function drawSegments(segs, x, y, size, bold = false) {
+  let curX = x;
+  for (const [text, color, isBold] of segs) {
+    ctx.font = `${(isBold ?? bold) ? "700" : "400"} ${size}px 'JetBrains Mono', monospace`;
+    ctx.fillStyle = color;
+    ctx.fillText(text, curX, y);
+    curX += ctx.measureText(text).width;
+  }
+}
+
+function drawSep(y) {
+  if (state.sepWidth <= 0) return;
+  ctx.strokeStyle = state.dimGray;
+  ctx.lineWidth = state.sepWidth;
+  ctx.beginPath();
+  ctx.moveTo(state.pad, y);
+  ctx.lineTo(W - state.pad, y);
+  ctx.stroke();
+}
+
+function drawSparkline(data, x, y, w, h, color) {
+  if (data.length < 2) return;
+  const min = Math.min(...data), max = Math.max(...data);
+  const range = max - min || 1;
+  const stepX = w / (data.length - 1);
+
+  ctx.strokeStyle = color;
+  ctx.lineWidth = state.chartLineWidth;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  for (let i = 0; i < data.length; i++) {
+    const px = x + i * stepX;
+    const py = y + h - ((data[i] - min) / range) * h;
+    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+  }
+  ctx.stroke();
+
+  // Glow fill
+  if (state.chartGlow > 0) {
+    ctx.globalAlpha = state.chartGlow;
+    ctx.fillStyle = color;
+    ctx.lineTo(x + w, y + h);
+    ctx.lineTo(x, y + h);
+    ctx.closePath();
+    ctx.fill();
+    ctx.globalAlpha = 1.0;
+  }
+}
+
+function render() {
+  const P = state.pad;
+  const G = state.sectionGap;
+
+  // Clear to black
+  ctx.fillStyle = "#000000";
+  ctx.fillRect(0, 0, W, H);
+  ctx.textBaseline = "alphabetic";
+
+  let cur = P + 8;
+
+  // ── Header ──
+  if (state.header) {
+    const sessionColor = state.session === "REGULAR" ? state.green :
+                         state.session === "CLOSED" ? state.orange :
+                         state.session === "PRE-MARKET" ? state.cyan : state.magenta;
+    drawSegments([
+      [ICO.cellSignal + " ", state.green],
+      [" " + state.session + " ", sessionColor, true],
+      [" " + ICO.broadcast, state.green],
+      [" LIVE  ", state.green],
+      [ICO.clock + " 02:45 ET", state.gray],
+    ], P, cur + state.headerSize, state.headerSize, true);
+    cur += state.headerSize + 26;
+    drawSep(cur); cur += G;
+  }
+
+  // ── Indices ──
+  if (state.indices) {
+    const indices = [
+      { sym: "SPY", val: state.spyPrice, chg: state.spyChg, dir: state.spyChg.startsWith("+") ? 1 : -1 },
+      { sym: "QQQ", val: "495.12", chg: "-0.32%", dir: -1 },
+      { sym: "DIA", val: "425.88", chg: "-1.05%", dir: -1 },
+      { sym: "IWM", val: "198.45", chg: "-1.72%", dir: -1 },
+      { sym: "VIX", val: "20.1", chg: "+6.6%", dir: 1 },
+    ];
+
+    // Row 1: SPY + QQQ
+    for (let i = 0; i < 2; i++) {
+      const idx = indices[i];
+      const col = idx.dir >= 0 ? state.green : state.red;
+      const arrow = idx.dir >= 0 ? ICO.trendUp : ICO.trendDown;
+      drawSegments([
+        [idx.sym, state.cyan],
+        [` ${idx.val} `, state.white],
+        [`${arrow} ${idx.chg}`, col],
+      ], P + i * 380, cur + state.indexLargeSize, state.indexLargeSize);
+    }
+    cur += state.indexLargeSize + 12;
+
+    // Row 2: DIA + IWM + VIX
+    for (let i = 2; i < 5; i++) {
+      const idx = indices[i];
+      const col = idx.dir >= 0 ? state.green : state.red;
+      const arrow = idx.dir >= 0 ? ICO.trendUp : ICO.trendDown;
+      drawSegments([
+        [idx.sym, state.cyan],
+        [` ${idx.val} `, state.softWhite],
+        [`${arrow} ${idx.chg}`, col],
+      ], P + (i - 2) * 260, cur + state.indexSmallSize, state.indexSmallSize);
+    }
+    cur += state.indexSmallSize + 14;
+    drawSep(cur); cur += G;
+  }
+
+  // ── Sparkline ──
+  if (state.sparkline) {
+    const mockPrices = [82,84,81,85,88,86,90,92,89,87,91,94,96,93,95,98,97,99,101,100,103,105];
+    drawSegments([
+      [ICO.chartLineUp + " ", state.cyan],
+      ["SPY 1mo", state.gray],
+    ], P, cur + 14, 14);
+
+    const chartY = cur + 24;
+    drawSparkline(mockPrices, P, chartY, W - P * 2, state.sparklineH, state.cyan);
+
+    const maxP = Math.max(...mockPrices), minP = Math.min(...mockPrices);
+    drawText(`$${maxP}`, W - P - 56, chartY + 14, state.green, 13);
+    drawText(`$${minP}`, W - P - 56, chartY + state.sparklineH - 4, state.red, 13);
+    cur += state.sparklineH + 36;
+    drawSep(cur); cur += G;
+  }
+
+  // ── Positions ──
+  if (state.positions) {
+    drawSegments([
+      [ICO.shield + " ", state.gray],
+      ["POSITIONS", state.gray],
+    ], P, cur + 16, 14);
+    cur += 28;
+
+    const positions = [
+      { sym: "PLTR", qty: "45sh", pnl: "+$142", dir: 1, stop: "stp $82.5" },
+      { sym: "NVDA", qty: "20sh", pnl: "-$38", dir: -1, stop: "stp $410" },
+      { sym: "AAPL", qty: "15sh", pnl: "+$21", dir: 1, stop: "none" },
+    ];
+    for (const pos of positions) {
+      const col = pos.dir >= 0 ? state.green : state.red;
+      const arrow = pos.dir >= 0 ? ICO.trendUp : ICO.trendDown;
+      const stopCol = pos.stop === "none" ? state.orange : state.gray;
+      drawSegments([
+        [pos.sym, state.white],
+        [` ${pos.qty} `, state.gray],
+        [`${arrow} ${pos.pnl}`, col],
+        [`  ${pos.stop}`, stopCol],
+      ], P + 8, cur + state.positionSize, state.positionSize);
+      cur += state.positionSize + 8;
+    }
+    cur += 12;
+    drawSep(cur); cur += G;
+  }
+
+  // ── P&L Summary ──
+  if (state.pnl) {
+    const pnlCol = state.dayPnl.startsWith("+") ? state.green : state.red;
+    drawSegments([
+      [ICO.currencyDollar + " Day ", state.gray, true],
+      [state.dayPnl, pnlCol, true],
+      ["   Net ", state.gray, true],
+      [state.netValue, state.white, true],
+      ["   " + ICO.gauge + " ", state.cyan, true],
+      [state.deployed, state.cyan, true],
+      [" deployed", state.gray, true],
+    ], P, cur + state.pnlSize, state.pnlSize, true);
+    cur += state.pnlSize + 24;
+    drawSep(cur); cur += G;
+  }
+
+  // ── Movers ──
+  if (state.movers) {
+    const moverLabel = state.session === "AFTER-HOURS" ? "AFTER HOURS" :
+                       state.session === "PRE-MARKET" ? "PRE-MARKET" :
+                       state.session === "CLOSED" ? "PRIOR SESSION" : "TOP MOVERS";
+    drawSegments([
+      [ICO.fire + " ", state.magenta],
+      [moverLabel, state.magenta],
+    ], P, cur + 16, 14);
+    cur += 28;
+
+    const allMovers = [
+      { sym: "AAOI", chg: "+56.88%", price: "$84.23", dir: 1 },
+      { sym: "BWIN", chg: "+25.64%", price: "$23.23", dir: 1 },
+      { sym: "RUN", chg: "-35.11%", price: "$13.25", dir: -1 },
+      { sym: "FIGR", chg: "-25.73%", price: "$25.28", dir: -1 },
+      { sym: "TSLA", chg: "+12.34%", price: "$342.50", dir: 1 },
+      { sym: "SMCI", chg: "-18.22%", price: "$44.10", dir: -1 },
+      { sym: "SOFI", chg: "+8.91%", price: "$15.67", dir: 1 },
+      { sym: "LCID", chg: "-9.45%", price: "$2.34", dir: -1 },
+    ];
+    const movers = allMovers.slice(0, state.moverCount);
+    for (const m of movers) {
+      const col = m.dir >= 0 ? state.green : state.red;
+      const arrow = m.dir >= 0 ? ICO.trendUp : ICO.trendDown;
+      drawSegments([
+        [`${arrow} ${m.sym}`, col],
+        [`  ${m.chg}`, col],
+        [`  ${m.price}`, state.gray],
+      ], P + 8, cur + state.moverSize, state.moverSize);
+      cur += state.moverSize + 8;
+    }
+    cur += 8;
+    drawSep(cur); cur += G;
+  }
+
+  // ── News ──
+  if (state.news) {
+    drawSegments([
+      [ICO.newspaper + " ", state.orange],
+      ["NEWS", state.orange],
+    ], P, cur + 16, 14);
+    cur += 28;
+
+    const allHeadlines = [
+      "Trump Administration Shuns Anthropic...",
+      "NVDA earnings beat expectations, guide...",
+      "Fed signals patience on rate cuts amid...",
+      "Apple announces new AI chip for iPhone...",
+      "Tesla cuts prices again in key markets...",
+      "Bitcoin surges past $100K on ETF flows...",
+    ];
+    const headlines = allHeadlines.slice(0, state.newsCount);
+    for (const hl of headlines) {
+      drawText(hl, P + 8, cur + state.newsSize, state.orange, state.newsSize);
+      cur += state.newsSize + 8;
+    }
+    cur += 8;
+  }
+
+  // ── Footer (pinned to bottom) ──
+  if (state.footer) {
+    drawSep(H - 38);
+    drawSegments([
+      [ICO.timer + " Opens Mon 09:30  ", state.gray],
+      ["54h 50m", state.white],
+      ["  " + ICO.plugConnected + " ", state.green],
+      ["IBKR", state.green],
+      ["  Yahoo", state.gray],
+    ], P, H - 14, state.footerSize);
+  }
+
+  // ── Pixel usage indicator ──
+  const pixelData = ctx.getImageData(0, 0, W, H).data;
+  let litPixels = 0;
+  for (let i = 0; i < pixelData.length; i += 4) {
+    if (pixelData[i] > 0 || pixelData[i+1] > 0 || pixelData[i+2] > 0) litPixels++;
+  }
+  const total = W * H;
+  const pct = ((litPixels / total) * 100).toFixed(1);
+  document.getElementById("sizeInfo").textContent =
+    `${litPixels.toLocaleString()} lit / ${total.toLocaleString()} total (${pct}% opaque)`;
+}
+
+// ─── Control Binding ──────────────────────────────────────
+function bindControls() {
+  // Color inputs
+  document.querySelectorAll('input[type="color"]').forEach(input => {
+    input.addEventListener("input", () => {
+      state[input.dataset.key] = input.value;
+      render();
+    });
+  });
+
+  // Range inputs
+  document.querySelectorAll('input[type="range"]').forEach(input => {
+    input.addEventListener("input", () => {
+      const val = parseFloat(input.value);
+      state[input.dataset.key] = val;
+      const valSpan = document.querySelector(`.val[data-val="${input.dataset.key}"]`);
+      if (valSpan) valSpan.textContent = val;
+      render();
+    });
+  });
+
+  // Zone checkboxes
+  document.querySelectorAll('input[data-zone]').forEach(input => {
+    input.addEventListener("change", () => {
+      state[input.dataset.zone] = input.checked;
+      render();
+    });
+  });
+
+  // Text/select inputs
+  document.querySelectorAll('input[type="text"], select').forEach(input => {
+    input.addEventListener("input", () => {
+      state[input.dataset.key] = input.value;
+      render();
+    });
+  });
+}
+
+// ─── Section Toggle ───────────────────────────────────────
+function toggleSection(id) {
+  const sec = document.getElementById(id);
+  sec.classList.toggle("collapsed");
+  const toggle = sec.querySelector(".toggle");
+  toggle.textContent = sec.classList.contains("collapsed") ? "▶" : "▼";
+}
+
+// ─── Actions ──────────────────────────────────────────────
+function exportConfig() {
+  const area = document.getElementById("exportArea");
+  area.classList.toggle("show");
+  if (area.classList.contains("show")) {
+    // Only export non-default values
+    const diff = {};
+    for (const [k, v] of Object.entries(state)) {
+      if (v !== defaults[k]) diff[k] = v;
+    }
+    area.textContent = JSON.stringify(
+      Object.keys(diff).length > 0 ? diff : state,
+      null, 2
+    );
+  }
+}
+
+function downloadPNG() {
+  const link = document.createElement("a");
+  link.download = "timesframe-panel.png";
+  link.href = canvas.toDataURL("image/png");
+  link.click();
+}
+
+function resetDefaults() {
+  Object.assign(state, defaults);
+  // Reset all control elements
+  document.querySelectorAll('input[type="color"]').forEach(el => { el.value = state[el.dataset.key]; });
+  document.querySelectorAll('input[type="range"]').forEach(el => {
+    el.value = state[el.dataset.key];
+    const valSpan = document.querySelector(`.val[data-val="${el.dataset.key}"]`);
+    if (valSpan) valSpan.textContent = state[el.dataset.key];
+  });
+  document.querySelectorAll('input[data-zone]').forEach(el => { el.checked = state[el.dataset.zone]; });
+  document.querySelectorAll('input[type="text"]').forEach(el => { el.value = state[el.dataset.key]; });
+  document.querySelectorAll('select').forEach(el => { el.value = state[el.dataset.key]; });
+  render();
+}
+
+// ─── Mouse position tracking ─────────────────────────────
+canvas.addEventListener("mousemove", (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = W / rect.width, scaleY = H / rect.height;
+  const x = Math.round((e.clientX - rect.left) * scaleX);
+  const y = Math.round((e.clientY - rect.top) * scaleY);
+  document.getElementById("mouseInfo").textContent = `${x}, ${y}`;
+});
+
+// ─── Init ─────────────────────────────────────────────────
+fitCanvas();
+window.addEventListener("resize", fitCanvas);
+bindControls();
+render();
+</script>
+
+</body>
+</html>

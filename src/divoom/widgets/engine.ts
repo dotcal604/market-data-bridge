@@ -3,11 +3,16 @@
  *
  * Orchestrates the full render pipeline:
  *   1. Resolve layout → Widget[]
- *   2. Budget check: sum slotCost() — fallback or refuse if over
- *   3. Sync pass: getHeight() per widget → Y allocation
- *   4. Async pass: render() all widgets in parallel
- *   5. Collect DisplayElement[]
- *   6. Final assertion: element counts ≤ 6T / 10I / 6N
+ *   2. Sync pass: getHeight() — filter out self-disabled widgets (height ≤ 0)
+ *   3. Budget check: sum slotCost() only for ACTIVE widgets — fallback or refuse
+ *   4. Flex Y allocation — distribute remaining canvas space
+ *   5. Async pass: render() all widgets in parallel
+ *   6. Collect DisplayElement[]
+ *   7. Final assertion: element counts ≤ 6T / 0I / 6N
+ *
+ * NOTE: getHeight() runs BEFORE budget check so that self-disabling widgets
+ * (e.g. Image widgets when chartBaseUrl is undefined) don't pollute the budget
+ * with phantom slot costs. This is critical when DEVICE_BUDGET.image = 0.
  */
 
 import type { DisplayElement } from "../display.js";
@@ -19,6 +24,7 @@ import type {
 } from "./types.js";
 import { DEVICE_BUDGET, ID_BLOCK_SIZE } from "./types.js";
 import { resolveLayout } from "./registry.js";
+import { getLayoutSettings } from "../config-store.js";
 import { logger } from "../../logging.js";
 
 const log = logger.child({ module: "widget-engine" });
@@ -99,6 +105,14 @@ export async function renderLayout(
   layout: LayoutConfig,
   ctx: WidgetContext,
 ): Promise<EngineResult> {
+  // Step 0: When image budget is 0 (DispList Images are non-functional),
+  // suppress chartBaseUrl in the widget context so image widgets self-disable.
+  // The composite background renderer uses chartBaseUrl separately via updater.
+  const effectiveCtx: WidgetContext =
+    DEVICE_BUDGET.image === 0 && ctx.chartBaseUrl
+      ? { ...ctx, chartBaseUrl: undefined }
+      : ctx;
+
   // Step 1: Resolve widget IDs to instances
   const widgets = resolveLayout(layout);
 
@@ -112,10 +126,80 @@ export async function renderLayout(
     log.warn({ missing }, "Unknown widget IDs in layout — skipped");
   }
 
-  // Step 2: Budget check — sum slotCost() across all widgets
+  // Step 1b: Apply config overrides — filter out explicitly disabled widgets
+  const { widgetOverrides } = getLayoutSettings();
+  const configDisabled: string[] = [];
+  const enabledWidgets = widgets.filter((w) => {
+    const ov = widgetOverrides[w.id];
+    if (ov?.enabled === false) {
+      configDisabled.push(w.id);
+      return false;
+    }
+    return true;
+  });
+
+  if (configDisabled.length > 0) {
+    log.info({ configDisabled: configDisabled.join(",") }, "Widgets disabled by config override");
+  }
+
+  // Step 2: Sync pass — getHeight() FIRST to filter self-disabled widgets
+  // Image widgets return height=0 when chartBaseUrl is undefined. Running this
+  // before budget check prevents phantom Image slot costs (critical when budget.image=0).
+  const CANVAS_H = effectiveCtx.canvas.height;
+  // When text zone is tight (composite mode, splitY < 1280), drop top padding
+  // so widgets fit without overshooting the text/chart boundary.
+  // Bottom padding reserves a gap before the chart zone so text doesn't touch it.
+  const TOP_PAD = CANVAS_H < 1280 ? 0 : 8;
+  const BOTTOM_PAD = CANVAS_H < 1280 ? 20 : 0;
+
+  // Fixed-size widgets that should NOT stretch:
+  // - Chrome widgets (header, footer) — framing, not content
+  // - Image-mode widgets — charts have natural pixel dimensions
+  const FIXED_WIDGETS = new Set(["header", "footer"]);
+
+  const activeEntries: Array<{
+    widget: Widget;
+    minHeight: number;
+    flex: boolean;
+    index: number; // original position for ID block assignment
+  }> = [];
+  const selfDisabled: string[] = [];
+
+  for (let i = 0; i < enabledWidgets.length; i++) {
+    const widget = enabledWidgets[i];
+    // Use minHeight override from config if set, otherwise widget's own getHeight
+    const ov = widgetOverrides[widget.id];
+    const minH = ov?.minHeight ?? widget.getHeight(effectiveCtx);
+    if (minH <= 0) {
+      selfDisabled.push(widget.id);
+      continue; // self-disabled — excluded from budget + layout
+    }
+    // When a config override sets minHeight, treat it as absolute (no flex stretch).
+    // This lets the admin panel lock a widget to an exact pixel height.
+    const hasHeightOverride = ov?.minHeight != null;
+    activeEntries.push({
+      widget,
+      minHeight: minH,
+      flex: !hasHeightOverride && !FIXED_WIDGETS.has(widget.id) && widget.renderMode !== "image",
+      index: i,
+    });
+  }
+
+  if (selfDisabled.length > 0) {
+    log.debug({ selfDisabled: selfDisabled.join(",") }, "Widgets self-disabled (height=0)");
+  }
+
+  // Step 3: Budget check — sum slotCost() only for ACTIVE widgets (height > 0)
   let degraded = false;
-  let widgetCosts = widgets.map((w) => ({ widget: w, cost: w.slotCost(ctx), useImage: false }));
-  let totalCost = widgetCosts.reduce((acc, wc) => addCosts(acc, wc.cost), { text: 0, image: 0, netdata: 0 });
+  let widgetCosts = activeEntries.map((e) => ({
+    ...e,
+    cost: e.widget.slotCost(effectiveCtx),
+    useImage: false,
+  }));
+  let totalCost = widgetCosts.reduce(
+    (acc, wc) => addCosts(acc, wc.cost),
+    { text: 0, image: 0, netdata: 0 },
+  );
 
   if (isOverBudget(totalCost)) {
     log.warn(
@@ -128,7 +212,6 @@ export async function renderLayout(
     for (let i = widgetCosts.length - 1; i >= 0 && isOverBudget(totalCost); i--) {
       const wc = widgetCosts[i];
       if (wc.widget.renderAsImage && !wc.useImage) {
-        // Swap: remove text/netdata cost, add 1 image
         const savedText = wc.cost.text;
         const savedNetdata = wc.cost.netdata;
         totalCost.text -= savedText;
@@ -153,7 +236,6 @@ export async function renderLayout(
         "Layout STILL over budget after fallback — dropping tail widgets",
       );
 
-      // Drop from end until we fit
       while (widgetCosts.length > 0 && isOverBudget(totalCost)) {
         const dropped = widgetCosts.pop()!;
         totalCost.text -= dropped.cost.text;
@@ -163,54 +245,19 @@ export async function renderLayout(
     }
   }
 
-  // Step 3: Sync pass — getHeight() per widget → Y allocation
-  // Two sub-passes:
-  //   a) Collect minimum heights and identify flex (expandable) widgets
-  //   b) Distribute remaining canvas space among flex widgets so they fill 1280px
-  const CANVAS_H = 1280;
-  const TOP_PAD = 8;
-  const activeWidgets = widgetCosts;
-
-  // Fixed-size widgets that should NOT stretch (chrome, not content)
-  const FIXED_WIDGETS = new Set(["header", "footer"]);
-
-  // Sub-pass (a): collect minimum heights
-  const heightEntries: Array<{
-    widget: Widget;
-    minHeight: number;
-    flex: boolean;
-    useImage: boolean;
-    index: number;
-  }> = [];
-
-  for (let i = 0; i < activeWidgets.length; i++) {
-    const { widget, useImage } = activeWidgets[i];
-    const minH = widget.getHeight(ctx);
-    if (minH <= 0) continue; // opts out
-
-    heightEntries.push({
-      widget,
-      minHeight: minH,
-      flex: !FIXED_WIDGETS.has(widget.id),
-      useImage,
-      index: i,
-    });
-  }
-
-  // Sub-pass (b): distribute remaining space proportionally among flex widgets
-  const totalMin = heightEntries.reduce((s, e) => s + e.minHeight, 0);
-  const slack = Math.max(0, CANVAS_H - TOP_PAD - totalMin);
-  const flexEntries = heightEntries.filter((e) => e.flex);
+  // Step 4: Flex Y allocation — distribute remaining canvas space among flex widgets
+  const totalMin = widgetCosts.reduce((s, e) => s + e.minHeight, 0);
+  const slack = Math.max(0, CANVAS_H - TOP_PAD - BOTTOM_PAD - totalMin);
+  const flexEntries = widgetCosts.filter((e) => e.flex);
   const flexTotal = flexEntries.reduce((s, e) => s + e.minHeight, 0);
 
-  // Each flex widget gets extra px proportional to its share of flex height
   const allocatedHeights = new Map<Widget, number>();
   let distributed = 0;
   for (let i = 0; i < flexEntries.length; i++) {
     const entry = flexEntries[i];
     const share = flexTotal > 0 ? entry.minHeight / flexTotal : 1 / flexEntries.length;
     const extra = i === flexEntries.length - 1
-      ? slack - distributed                     // last flex widget gets remainder (avoid rounding drift)
+      ? slack - distributed
       : Math.floor(slack * share);
     allocatedHeights.set(entry.widget, entry.minHeight + extra);
     distributed += extra;
@@ -220,7 +267,7 @@ export async function renderLayout(
   const origins: Array<{ widget: Widget; y: number; height: number; firstId: number; useImage: boolean }> = [];
   let currentY = TOP_PAD;
 
-  for (const entry of heightEntries) {
+  for (const entry of widgetCosts) {
     const height = allocatedHeights.get(entry.widget) ?? entry.minHeight;
     origins.push({
       widget: entry.widget,
@@ -237,8 +284,8 @@ export async function renderLayout(
     try {
       const origin = { y, firstId, height };
       const output = useImage && widget.renderAsImage
-        ? await widget.renderAsImage(ctx, origin)
-        : await widget.render(ctx, origin);
+        ? await widget.renderAsImage(effectiveCtx, origin)
+        : await widget.render(effectiveCtx, origin);
       return { id: widget.id, elements: output.elements };
     } catch (err) {
       log.error({ err, widget: widget.id }, "Widget render failed — skipping");

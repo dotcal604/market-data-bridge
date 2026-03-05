@@ -45,6 +45,11 @@ export function resolveLayout(layout: LayoutConfig): Widget[] {
   return resolved;
 }
 
+/** Get the full registry map (read-only snapshot for admin endpoints). */
+export function getRegistry(): ReadonlyMap<string, Widget> {
+  return widgets;
+}
+
 /** Clear all registrations (for testing). */
 export function clearRegistry(): void {
   widgets.clear();

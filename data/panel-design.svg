@@ -1,0 +1,177 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1280" viewBox="0 0 800 1280">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&amp;display=swap');
+      text { font-family: 'JetBrains Mono', monospace; }
+    </style>
+  </defs>
+
+  <!-- Canvas: pure black = transparent glass -->
+  <rect id="canvas" width="800" height="1280" fill="#000000"/>
+
+  <!-- ═══ HEADER ZONE ═══ -->
+  <g id="zone-header">
+    <text x="24" y="60" fill="#00DD55" font-size="26" font-weight="700">||</text>
+    <text x="64" y="60" fill="#FF9922" font-size="26" font-weight="700">CLOSED</text>
+    <text x="216" y="60" fill="#00DD55" font-size="26" font-weight="700">)) LIVE</text>
+    <text x="400" y="60" fill="#777777" font-size="26">02:45 ET</text>
+    <line x1="24" y1="76" x2="776" y2="76" stroke="#333333" stroke-width="0.5"/>
+  </g>
+
+  <!-- ═══ INDICES ZONE ═══ -->
+  <g id="zone-indices">
+    <!-- Row 1: SPY + QQQ (large) -->
+    <g id="index-spy">
+      <text x="24" y="116" fill="#00CCEE" font-size="24">SPY</text>
+      <text x="90" y="116" fill="#FFFFFF" font-size="24">580.25</text>
+      <text x="232" y="116" fill="#EE3322" font-size="24">-0.48%</text>
+    </g>
+    <g id="index-qqq">
+      <text x="404" y="116" fill="#00CCEE" font-size="24">QQQ</text>
+      <text x="470" y="116" fill="#FFFFFF" font-size="24">495.12</text>
+      <text x="612" y="116" fill="#EE3322" font-size="24">-0.32%</text>
+    </g>
+    <!-- Row 2: DIA + IWM + VIX (smaller) -->
+    <g id="index-dia">
+      <text x="24" y="148" fill="#00CCEE" font-size="18">DIA</text>
+      <text x="78" y="148" fill="#CCCCCC" font-size="18">425.88</text>
+      <text x="180" y="148" fill="#EE3322" font-size="18">-1.05%</text>
+    </g>
+    <g id="index-iwm">
+      <text x="284" y="148" fill="#00CCEE" font-size="18">IWM</text>
+      <text x="338" y="148" fill="#CCCCCC" font-size="18">198.45</text>
+      <text x="440" y="148" fill="#EE3322" font-size="18">-1.72%</text>
+    </g>
+    <g id="index-vix">
+      <text x="544" y="148" fill="#00CCEE" font-size="18">VIX</text>
+      <text x="598" y="148" fill="#CCCCCC" font-size="18">20.1</text>
+      <text x="670" y="148" fill="#00DD55" font-size="18">+6.6%</text>
+    </g>
+    <line x1="24" y1="164" x2="776" y2="164" stroke="#333333" stroke-width="0.5"/>
+  </g>
+
+  <!-- ═══ SPARKLINE ZONE ═══ -->
+  <g id="zone-sparkline">
+    <text x="24" y="194" fill="#777777" font-size="14">SPY 1mo</text>
+    <!-- Sparkline path -->
+    <polyline
+      id="sparkline-spy"
+      fill="none"
+      stroke="#00CCEE"
+      stroke-width="2.5"
+      stroke-linejoin="round"
+      stroke-linecap="round"
+      points="24,340 60,326 96,347 132,319 168,298 204,312 240,284 276,270 312,291 348,305 384,277 420,256 456,242 492,263 528,249 564,228 600,235 636,221 672,207 708,214 744,193 776,179"
+    />
+    <!-- Glow fill under sparkline -->
+    <polygon
+      fill="#00CCEE"
+      opacity="0.08"
+      points="24,340 60,326 96,347 132,319 168,298 204,312 240,284 276,270 312,291 348,305 384,277 420,256 456,242 492,263 528,249 564,228 600,235 636,221 672,207 708,214 744,193 776,179 776,360 24,360"
+    />
+    <!-- Price labels -->
+    <text x="720" y="198" fill="#00DD55" font-size="13">$105</text>
+    <text x="720" y="352" fill="#EE3322" font-size="13">$81</text>
+    <line x1="24" y1="376" x2="776" y2="376" stroke="#333333" stroke-width="0.5"/>
+  </g>
+
+  <!-- ═══ POSITIONS ZONE ═══ -->
+  <g id="zone-positions">
+    <text x="24" y="408" fill="#777777" font-size="14">POSITIONS</text>
+    <g id="position-pltr">
+      <text x="32" y="444" fill="#FFFFFF" font-size="22">PLTR</text>
+      <text x="132" y="444" fill="#777777" font-size="22">45sh</text>
+      <text x="252" y="444" fill="#00DD55" font-size="22">+$142</text>
+      <text x="412" y="444" fill="#777777" font-size="22">stp $82.5</text>
+    </g>
+    <g id="position-nvda">
+      <text x="32" y="474" fill="#FFFFFF" font-size="22">NVDA</text>
+      <text x="132" y="474" fill="#777777" font-size="22">20sh</text>
+      <text x="252" y="474" fill="#EE3322" font-size="22">-$38</text>
+      <text x="412" y="474" fill="#777777" font-size="22">stp $410</text>
+    </g>
+    <g id="position-aapl">
+      <text x="32" y="504" fill="#FFFFFF" font-size="22">AAPL</text>
+      <text x="132" y="504" fill="#777777" font-size="22">15sh</text>
+      <text x="252" y="504" fill="#00DD55" font-size="22">+$21</text>
+      <text x="412" y="504" fill="#FF9922" font-size="22">none</text>
+    </g>
+    <line x1="24" y1="528" x2="776" y2="528" stroke="#333333" stroke-width="0.5"/>
+  </g>
+
+  <!-- ═══ P&L SUMMARY ZONE ═══ -->
+  <g id="zone-pnl">
+    <text x="24" y="572" fill="#777777" font-size="24" font-weight="700">Day </text>
+    <text x="94" y="572" fill="#00DD55" font-size="24" font-weight="700">+$342</text>
+    <text x="250" y="572" fill="#777777" font-size="24" font-weight="700">Net </text>
+    <text x="316" y="572" fill="#FFFFFF" font-size="24" font-weight="700">$24.1K</text>
+    <text x="520" y="572" fill="#00CCEE" font-size="24" font-weight="700">73%</text>
+    <text x="594" y="572" fill="#777777" font-size="24" font-weight="700">deployed</text>
+    <line x1="24" y1="592" x2="776" y2="592" stroke="#333333" stroke-width="0.5"/>
+  </g>
+
+  <!-- ═══ MOVERS ZONE ═══ -->
+  <g id="zone-movers">
+    <text x="24" y="624" fill="#FF44FF" font-size="14">TOP MOVERS</text>
+    <g id="mover-1">
+      <text x="32" y="660" fill="#FFFFFF" font-size="20">AAOI</text>
+      <text x="132" y="660" fill="#00DD55" font-size="20">+56.88%</text>
+      <text x="320" y="660" fill="#777777" font-size="20">$84.23</text>
+    </g>
+    <g id="mover-2">
+      <text x="32" y="688" fill="#FFFFFF" font-size="20">BWIN</text>
+      <text x="132" y="688" fill="#00DD55" font-size="20">+25.64%</text>
+      <text x="320" y="688" fill="#777777" font-size="20">$23.23</text>
+    </g>
+    <g id="mover-3">
+      <text x="32" y="716" fill="#EE3322" font-size="20">RUN</text>
+      <text x="132" y="716" fill="#EE3322" font-size="20">-35.11%</text>
+      <text x="320" y="716" fill="#777777" font-size="20">$13.25</text>
+    </g>
+    <g id="mover-4">
+      <text x="32" y="744" fill="#EE3322" font-size="20">FIGR</text>
+      <text x="132" y="744" fill="#EE3322" font-size="20">-25.73%</text>
+      <text x="320" y="744" fill="#777777" font-size="20">$25.28</text>
+    </g>
+    <line x1="24" y1="764" x2="776" y2="764" stroke="#333333" stroke-width="0.5"/>
+  </g>
+
+  <!-- ═══ NEWS ZONE ═══ -->
+  <g id="zone-news">
+    <text x="24" y="796" fill="#FF9922" font-size="14">NEWS</text>
+    <text x="32" y="824" fill="#FF9922" font-size="16">Trump Administration Shuns Anthropic...</text>
+    <text x="32" y="848" fill="#FF9922" font-size="16">NVDA earnings beat expectations, guide...</text>
+    <text x="32" y="872" fill="#FF9922" font-size="16">Fed signals patience on rate cuts amid...</text>
+  </g>
+
+  <!-- ═══ FOOTER ZONE (pinned to bottom) ═══ -->
+  <g id="zone-footer">
+    <line x1="24" y1="1242" x2="776" y2="1242" stroke="#333333" stroke-width="0.5"/>
+    <text x="24" y="1266" fill="#777777" font-size="16">Opens Mon 09:30</text>
+    <text x="270" y="1266" fill="#FFFFFF" font-size="16">54h 50m</text>
+    <text x="430" y="1266" fill="#00DD55" font-size="16">IBKR</text>
+    <text x="520" y="1266" fill="#777777" font-size="16">Yahoo</text>
+  </g>
+
+  <!-- ═══ COLOR PALETTE REFERENCE ═══ -->
+  <g id="color-palette" transform="translate(24, 900)" opacity="0.6">
+    <text x="0" y="16" fill="#777777" font-size="11">COLOR PALETTE</text>
+    <rect x="0" y="24" width="20" height="20" fill="#00DD55" rx="2"/><text x="26" y="40" fill="#777777" font-size="11">green #00DD55</text>
+    <rect x="0" y="50" width="20" height="20" fill="#EE3322" rx="2"/><text x="26" y="66" fill="#777777" font-size="11">red #EE3322</text>
+    <rect x="0" y="76" width="20" height="20" fill="#00CCEE" rx="2"/><text x="26" y="92" fill="#777777" font-size="11">cyan #00CCEE</text>
+    <rect x="0" y="102" width="20" height="20" fill="#FF9922" rx="2"/><text x="26" y="118" fill="#777777" font-size="11">orange #FF9922</text>
+    <rect x="0" y="128" width="20" height="20" fill="#FF44FF" rx="2"/><text x="26" y="144" fill="#777777" font-size="11">magenta #FF44FF</text>
+    <rect x="250" y="24" width="20" height="20" fill="#FFFFFF" rx="2"/><text x="276" y="40" fill="#777777" font-size="11">white #FFFFFF</text>
+    <rect x="250" y="50" width="20" height="20" fill="#CCCCCC" rx="2"/><text x="276" y="66" fill="#777777" font-size="11">softWhite #CCCCCC</text>
+    <rect x="250" y="76" width="20" height="20" fill="#777777" rx="2"/><text x="276" y="92" fill="#777777" font-size="11">gray #777777</text>
+    <rect x="250" y="102" width="20" height="20" fill="#333333" rx="2"/><text x="276" y="118" fill="#777777" font-size="11">dimGray #333333</text>
+    <rect x="250" y="128" width="20" height="20" fill="#EEDD00" rx="2"/><text x="276" y="144" fill="#777777" font-size="11">yellow #EEDD00</text>
+  </g>
+
+  <!-- ═══ SPEC ANNOTATIONS ═══ -->
+  <g id="annotations" opacity="0.3">
+    <text x="24" y="1160" fill="#777777" font-size="11">SPECS: 800x1280px | JetBrains Mono 14-26px | Phosphor Icons Light | JPEG q92 via BackgroudImageAddr</text>
+    <text x="24" y="1176" fill="#777777" font-size="11">GLASS RULE: black pixels = transparent | colored pixels = opaque/visible | minimize lit area</text>
+    <text x="24" y="1192" fill="#777777" font-size="11">PADDING: 24px | SEPARATORS: 0.5px #333 | GLOW FILL: 8% opacity under sparkline</text>
+  </g>
+</svg>

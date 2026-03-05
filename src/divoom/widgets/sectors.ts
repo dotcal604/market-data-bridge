@@ -32,11 +32,9 @@ export const sectorsWidget: Widget = {
   },
 
   getHeight(ctx: WidgetContext): number {
-    // Chart mode: header baked into image, so just image + gap
-    // Text mode: section header + gap
-    return ctx.chartBaseUrl
-      ? SECTION_HEADER_H + HEATMAP_H + SECTION_GAP
-      : SECTION_HEADER_H + SECTION_GAP;
+    if (ctx.chartBaseUrl === undefined) return 0; // self-disable without charts
+    // Chart mode: heatmap image has its own title baked in — no extra header needed
+    return HEATMAP_H + SECTION_GAP; // 130 + 12 = 142px (was 172px — saves 30px)
   },
 
   async render(
@@ -44,7 +42,6 @@ export const sectorsWidget: Widget = {
     origin: { y: number; firstId: number; height: number },
   ): Promise<WidgetOutput> {
     if (ctx.chartBaseUrl) {
-      // Single image element — the heatmap chart has its own title
       return {
         elements: [
           imageEl(

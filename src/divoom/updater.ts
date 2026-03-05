@@ -22,11 +22,14 @@ import { renderAllCharts } from "./charts.js";
 import { isConnected } from "../ibkr/connection.js";
 import { config } from "../config.js";
 import { logger } from "../logging.js";
+import { loadConfig } from "./config-store.js";
 
 // Widget engine (feature-flagged via DIVOOM_USE_WIDGET_ENGINE)
 import { renderLayout, CANVAS_W, PAD_X, CONTENT_W } from "./widgets/index.js";
 import type { WidgetContext, EngineResult } from "./widgets/index.js";
 import { getLayoutForSession } from "./widgets/layouts.js";
+// Canvas engine — full-frame JPEG background rendering
+import { renderCanvasDashboard, getCachedCanvasJpeg, getLastRenderMs } from "./canvas/cache.js";
 // Side-effect import: registers all widgets in the registry
 import "./widgets/header.js";
 import "./widgets/indices.js";
@@ -48,6 +51,34 @@ let lastIbkrConnected = false;
 let lastDashboardData: DashboardData | null = null;
 let lastEngineResult: EngineResult | null = null;
 let lastRefreshAt: string | null = null;
+
+/** Runtime-tunable background settings (admin panel can change these). */
+export interface BgClearSettings {
+  brightness: number;              // 1-100 (default 90)
+  tint: "neutral" | "blue" | "green";  // default "neutral"
+  color: string | null;            // hex override e.g. "#0D0C01" — bypasses brightness+tint
+}
+const bgClearSettings: BgClearSettings = { brightness: 90, tint: "neutral", color: null };
+
+export function getBgClearSettings(): BgClearSettings {
+  return { ...bgClearSettings };
+}
+
+export function setBgClearSettings(patch: Partial<BgClearSettings>): BgClearSettings {
+  if (patch.brightness !== undefined) {
+    bgClearSettings.brightness = Math.max(1, Math.min(100, patch.brightness));
+  }
+  if (patch.tint !== undefined && ["neutral", "blue", "green"].includes(patch.tint)) {
+    bgClearSettings.tint = patch.tint;
+  }
+  // color: set to hex string to override, or null/"" to clear
+  if (patch.color !== undefined) {
+    bgClearSettings.color = patch.color && /^#[0-9a-fA-F]{6}$/.test(patch.color)
+      ? patch.color : null;
+  }
+  log.info({ bgClear: bgClearSettings }, "Background settings updated");
+  return { ...bgClearSettings };
+}
 
 /**
  * Build chart URLs from the base URL config.
@@ -93,8 +124,14 @@ async function refreshLegacy(): Promise<void> {
 
   const elements = buildElements(dashboard, chartUrls);
 
-  // Re-enter custom mode each cycle for dynamic colors
-  await display.enterCustomMode(elements, config.divoom.backgroundUrl);
+  // Re-enter custom mode each cycle for dynamic colors.
+  // Fall back to bg-black when no explicit backgroundUrl is set —
+  // empty string means no BackgroudImageAddr in payload, which leaves
+  // the device showing whatever background was previously cached.
+  const chartBase = config.divoom.chartBaseUrl?.replace(/\/+$/, "");
+  const bgUrl = config.divoom.backgroundUrl
+    || (chartBase ? `${chartBase}/api/divoom/charts/bg-black?t=${Date.now()}` : "");
+  await display.enterCustomMode(elements, bgUrl);
 
   log.debug({ elementCount: elements.length, charts: !!chartUrls }, "Legacy refresh done");
 }
@@ -108,22 +145,23 @@ async function refreshWidgetEngine(): Promise<void> {
   const session = currentSession();
   const layout = getLayoutForSession(session);
 
-  // Pre-render charts so Image URLs are populated in cache
-  const chartUrls = buildChartUrls();
-  if (chartUrls) {
-    try {
-      const { chartInput } = await fetchDashboardWithCharts();
-      await renderAllCharts(chartInput);
-    } catch (err) {
-      log.warn({ err }, "Chart pre-render failed — widgets will degrade gracefully");
-    }
-  }
+  // Chart pre-render skipped — Image elements are non-functional on TimesFrame.
+  // When/if firmware adds Image element support, re-enable chart rendering here
+  // and set ctx.chartBaseUrl = config.divoom.chartBaseUrl.
+
+  // chartBaseUrl intentionally set to undefined — Image elements are non-functional
+  // on TimesFrame (device fetches URLs but never renders content). This forces all
+  // dual-mode widgets into Text mode and pure-image widgets to opt out (getHeight → 0).
+
+  const chartBase = config.divoom.chartBaseUrl?.replace(/\/+$/, "");
+  // Full canvas height — bg-black = transparent glass, no chart zone to avoid
+  const textZoneHeight = 1280;
 
   const ctx: WidgetContext = {
     session,
     ibkrConnected: isConnected(),
-    chartBaseUrl: config.divoom.chartBaseUrl || undefined,
-    canvas: { width: CANVAS_W, padX: PAD_X, contentWidth: CONTENT_W },
+    chartBaseUrl: undefined,
+    canvas: { width: CANVAS_W, height: textZoneHeight, padX: PAD_X, contentWidth: CONTENT_W },
   };
 
   const result = await renderLayout(layout, ctx);
@@ -135,7 +173,14 @@ async function refreshWidgetEngine(): Promise<void> {
     return;
   }
 
-  await display.enterCustomMode(result.elements, config.divoom.backgroundUrl);
+  // BackgroudImageAddr: solid black = fully transparent glass on the IPS panel.
+  // Composite charts disabled — colored pixels show as opaque smudges on glass.
+  const bgUrl = config.divoom.backgroundUrl
+    ? `${config.divoom.backgroundUrl}?t=${Date.now()}`
+    : chartBase
+      ? `${chartBase}/api/divoom/charts/bg-black?t=${Date.now()}`
+      : "";
+  await display.enterCustomMode(result.elements, bgUrl);
 
   log.debug({
     layout: layout.name,
@@ -147,8 +192,44 @@ async function refreshWidgetEngine(): Promise<void> {
 }
 
 /**
+ * Refresh via the canvas engine — renders the full dashboard as an
+ * 800×1280 JPEG background image. Pushes a minimal DispList (single
+ * invisible text element) so the device processes BackgroudImageAddr.
+ * All visuals are pixel-rendered: sparklines, treemaps, gauges, text.
+ */
+async function refreshCanvasEngine(): Promise<void> {
+  if (!display) return;
+
+  const chartBase = config.divoom.chartBaseUrl?.replace(/\/+$/, "");
+  if (!chartBase) {
+    log.warn("Canvas engine requires chartBaseUrl — falling back to widget engine");
+    await refreshWidgetEngine();
+    return;
+  }
+
+  // Render full dashboard to JPEG (cached for REST route)
+  await renderCanvasDashboard();
+  lastRefreshAt = new Date().toISOString();
+
+  // Minimal DispList — device requires at least one element to process
+  // BackgroudImageAddr. Single invisible 1×1 text element at origin.
+  const minimalElements = [{
+    ID: 1, Type: "Text" as const,
+    StartX: 0, StartY: 0, Width: 1, Height: 1,
+    Align: 0 as const, FontSize: 1, FontID: 52,
+    FontColor: "#000000", BgColor: "#000000",
+    TextMessage: " ",
+  }];
+
+  const bgUrl = `${chartBase}/api/divoom/charts/canvas?t=${Date.now()}`;
+  await display.enterCustomMode(minimalElements, bgUrl);
+
+  log.debug({ renderMs: getLastRenderMs() }, "Canvas engine refresh done");
+}
+
+/**
  * Refresh the dashboard: detect state changes, then delegate to the
- * appropriate rendering path (widget engine or legacy monolith).
+ * appropriate rendering path (canvas engine, widget engine, or legacy).
  */
 async function refreshDashboard(): Promise<void> {
   if (!display) return;
@@ -167,7 +248,9 @@ async function refreshDashboard(): Promise<void> {
       lastIbkrConnected = ibkr;
     }
 
-    if (config.divoom.useWidgetEngine) {
+    if (config.divoom.useCanvasEngine) {
+      await refreshCanvasEngine();
+    } else if (config.divoom.useWidgetEngine) {
       await refreshWidgetEngine();
     } else {
       await refreshLegacy();
@@ -191,6 +274,9 @@ export async function startDivoomUpdater(): Promise<void> {
     return;
   }
 
+  // Load persisted config (palette, sections, layout overrides, etc.)
+  await loadConfig();
+
   display = new TimesFrameDisplay(config.divoom.deviceIp, config.divoom.devicePort);
 
   const connected = await display.testConnection();
@@ -206,7 +292,7 @@ export async function startDivoomUpdater(): Promise<void> {
     refreshIntervalMs: config.divoom.refreshIntervalMs,
     brightness: config.divoom.brightness,
     chartBaseUrl: config.divoom.chartBaseUrl || "(charts disabled)",
-    engine: config.divoom.useWidgetEngine ? "widget" : "legacy",
+    engine: config.divoom.useCanvasEngine ? "canvas" : config.divoom.useWidgetEngine ? "widget" : "legacy",
   }, "TimesFrame updater starting");
 
   // Set initial brightness

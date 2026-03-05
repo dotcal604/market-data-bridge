@@ -31,7 +31,7 @@ export interface DisplayElement {
   StartY: number;
   Width: number;
   Height: number;
-  Align: 0 | 1 | 2; // 0=left, 1=center, 2=right
+  Align: 0 | 1 | 2; // 0=left, 1=right, 2=center (Divoom firmware)
   FontSize: number;
   FontID: number;
   FontColor: string;
@@ -107,10 +107,15 @@ export class TimesFrameDisplay {
     }));
     log.info({ elementCount: elements.length, elements: summary }, "Sending DispList to device");
 
-    const response = await this.sendCommand("Device/EnterCustomControlMode", {
-      BackgroudImageAddr: backgroundUrl,
-      DispList: elements,
-    });
+    // Device firmware caches the last background JPEG in its framebuffer.
+    // Neither omitting the key NOR sending "" clears it — you must send a
+    // replacement image. The updater always provides bg-black as the default
+    // (pure black = transparent on IPS panel = "clear glass").
+    const payload: Record<string, unknown> = { DispList: elements };
+    if (backgroundUrl) {
+      payload.BackgroudImageAddr = backgroundUrl;
+    }
+    const response = await this.sendCommand("Device/EnterCustomControlMode", payload);
 
     // Log device response (may contain error_code)
     if (response) {

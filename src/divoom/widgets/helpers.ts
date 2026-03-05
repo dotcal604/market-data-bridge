@@ -6,12 +6,18 @@
  */
 
 import type { DisplayElement } from "../display.js";
+import { getContentSettings } from "../config-store.js";
 
 // ─── Canvas Constants (from layout.ts) ──────────────────────
 
 export const CANVAS_W = 800;
 export const PAD_X = 16;
 export const CONTENT_W = CANVAS_W - PAD_X * 2; // 768
+
+// Split-canvas: text elements confined to left half
+export const TEXT_ZONE_W = 400;        // left half for text elements
+export const TEXT_PAD_X = 10;          // tighter padding in narrow zone
+export const TEXT_CONTENT_W = TEXT_ZONE_W - TEXT_PAD_X * 2; // 380
 
 export const FONT_ID = 52;
 export const BG_TRANSPARENT = "#00000000";
@@ -27,15 +33,16 @@ export const SECTION_HEADER_H = 30;
 export const DATA_H = 34;
 export const SECTION_GAP = 12;
 
-// Multi-line panel heights (newline-based sections filling the 1280px canvas)
-// Each widget occupies a tall panel rendered as one Text element with \n separators.
-// Layout math: 8 top-pad + 80 header + 280 indices + 200 portfolio + 280 movers + 280 news + 120 footer = 1248px
-export const PANEL_HEADER_H = 80;    // session badge, 1 line
-export const PANEL_INDICES_H = 280;  // 3 lines: SPY/QQQ, DIA/IWM/VIX, sparkline label
-export const PANEL_PORTFOLIO_H = 200; // 2 lines: P&L, account details
-export const PANEL_MOVERS_H = 280;   // 3 lines: header + 2 movers
-export const PANEL_NEWS_H = 280;     // 3 headlines
-export const PANEL_FOOTER_H = 120;   // 1-2 lines: source/status
+// Multi-line panel MINIMUM heights (flex engine distributes remaining canvas space)
+// These are minimums — the flex engine stretches non-fixed widgets proportionally
+// to fill the 1280px canvas. Reduced from original values to accommodate Image widgets.
+// 3 lines at FontSize 36 ≈ 108px of text; minimums include ~50px pad for breathing room.
+export const PANEL_HEADER_H = 64;    // session badge, 1 line (fixed, no flex)
+export const PANEL_INDICES_H = 160;  // 3 lines: SPY/QQQ, DIA/IWM/VIX, sparkline label
+export const PANEL_PORTFOLIO_H = 130; // 2 lines: P&L, account details
+export const PANEL_MOVERS_H = 190;   // 5 lines: header + 4 movers @ fontSize 28
+export const PANEL_NEWS_H = 90;      // 3 headlines @ fontSize 22
+export const PANEL_FOOTER_H = 36;    // 1 line: source/status (fixed, small font)
 
 // Chart image dimensions
 export const CHART_W = CONTENT_W;
@@ -68,9 +75,14 @@ export function textEl(
     align?: 0 | 1 | 2;
     width?: number;
     startX?: number;
+    bgColor?: string;
+    /** Override FontID (default: reads from config store, fallback FONT_ID=52) */
+    fontId?: number;
   } = {},
 ): DisplayElement {
   const align = opts.align ?? 0;
+  // Read FontID: explicit opt → config store → hardcoded default
+  const resolvedFontId = opts.fontId ?? getContentSettings().fontId ?? FONT_ID;
   return {
     ID: id,
     Type: "Text",
@@ -80,31 +92,45 @@ export function textEl(
     Height: opts.height ?? DATA_H,
     Align: align,
     FontSize: opts.fontSize ?? DATA_SIZE,
-    FontID: FONT_ID,
+    FontID: resolvedFontId,
     FontColor: color,
-    BgColor: BG_TRANSPARENT,
+    BgColor: opts.bgColor ?? BG_TRANSPARENT,
     TextMessage: text,
   };
 }
 
-// ─── Braille Sparkline ──────────────────────────────────────
+// ─── Section Background Colors ─────────────────────────────
+// All transparent — opaque BgColor blocks the IPS glass and compositing layer.
+// BackgroudImageAddr (composite JPEG) handles visual depth behind text.
+
+export const SectionBg = {
+  header:    "#00000000",
+  indices:   "#00000000",
+  movers:    "#00000000",
+  portfolio: "#00000000",
+  news:      "#00000000",
+  footer:    "#00000000",
+} as const;
+
+// ─── Block Sparkline ────────────────────────────────────────
 
 /**
- * Render a numeric series as a braille sparkline string.
+ * Render a numeric series as a sparkline using Unicode block elements.
  *
- * Each braille character (U+2800–U+28FF) is a 2×4 dot grid.
- * We use the left column only (dots 1,2,3,7 = bits 0,1,2,6)
- * to create a single-column-per-character mini chart.
+ * Uses 8 Unicode block characters with ascending height: ▁▂▃▄▅▆▇█
+ * (U+2581–U+2588). Confirmed rendering on device FontID 52.
+ *
+ * Braille characters (U+2800–28FF) are NOT supported — garbled output.
  *
  * @param values  - Array of numbers (e.g. closing prices)
- * @param width   - Number of braille characters to output (default: 20)
- * @returns A string of braille characters representing the sparkline
+ * @param width   - Number of characters to output (default: 20)
+ * @returns A string of block characters representing the sparkline
  *
  * @example
- * brailleSparkline([100, 102, 98, 105, 103, 101, 107, 110])
- * // → "⡀⡄⡀⣄⡄⡀⣤⣴" (visual: price going up overall)
+ * blockSparkline([100, 102, 98, 105, 103, 101, 107, 110])
+ * // → "▂▃▁▅▄▃▆█"
  */
-export function brailleSparkline(values: number[], width = 20): string {
+export function blockSparkline(values: number[], width = 20): string {
   if (values.length === 0) return "";
 
   // Resample to target width using nearest-neighbor
@@ -116,28 +142,23 @@ export function brailleSparkline(values: number[], width = 20): string {
 
   const min = Math.min(...resampled);
   const max = Math.max(...resampled);
-  const range = max - min || 1; // avoid division by zero
+  const range = max - min || 1;
 
-  // Braille left-column dot positions (bottom to top): dots 7,3,2,1
-  // In the Unicode braille encoding: dot 1=bit0, dot 2=bit1, dot 3=bit2, dot 7=bit6
-  // We fill from bottom: level 0=none, 1=dot7, 2=dot7+3, 3=dot7+3+2, 4=dot7+3+2+1
-  const dotBits = [
-    0,                                  // level 0: empty
-    (1 << 6),                           // level 1: dot 7 only (bottom)
-    (1 << 6) | (1 << 2),               // level 2: dots 7+3
-    (1 << 6) | (1 << 2) | (1 << 1),   // level 3: dots 7+3+2
-    (1 << 6) | (1 << 2) | (1 << 1) | (1 << 0), // level 4: dots 7+3+2+1 (full)
-  ];
+  // 8 Unicode block levels from low to high: ▁▂▃▄▅▆▇█
+  const BLOCKS = "▁▂▃▄▅▆▇█";
 
   let result = "";
   for (const val of resampled) {
     const normalized = (val - min) / range; // 0..1
-    const level = Math.round(normalized * 4); // 0..4
-    result += String.fromCharCode(0x2800 + dotBits[level]);
+    const level = Math.min(7, Math.round(normalized * 7)); // 0..7
+    result += BLOCKS[level];
   }
 
   return result;
 }
+
+/** @deprecated Use blockSparkline — braille U+2800–28FF not supported */
+export const brailleSparkline = blockSparkline;
 
 /**
  * Create an Image DisplayElement.

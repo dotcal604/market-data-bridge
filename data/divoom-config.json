@@ -1,0 +1,49 @@
+{
+  "composite": {
+    "splitY": 740,
+    "jpegQuality": 85,
+    "cacheTtlMs": 20000,
+    "sections": {
+      "sparkline": {
+        "enabled": true,
+        "height": 200
+      },
+      "heatmap": {
+        "enabled": true,
+        "height": 220
+      },
+      "volume": {
+        "enabled": true,
+        "height": 120
+      },
+      "gauges": {
+        "enabled": true,
+        "height": 40
+      }
+    },
+    "palette": {
+      "green": "#00CC44",
+      "red": "#CC2200",
+      "cyan": "#00BBDD",
+      "yellow": "#CCAA00",
+      "orange": "#DD6600",
+      "magenta": "#BB00BB",
+      "white": "#E0E0E0",
+      "dimGray": "#404044",
+      "muted": "#606068"
+    }
+  },
+  "content": {
+    "sparklineTicker": "PLTR",
+    "sparklineTimeframe": "1mo",
+    "sparklineBars": 22,
+    "accentUp": "#00CC44",
+    "accentDown": "#CC2200",
+    "accentNeutral": "#00BBDD",
+    "fontId": 52
+  },
+  "layout": {
+    "widgetOrder": {},
+    "widgetOverrides": {}
+  }
+}

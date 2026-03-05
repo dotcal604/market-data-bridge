@@ -36,3 +36,9 @@ logs/
 bridge-codebase*
 repomix-output.xml
 *.pdf
+
+# Divoom probe/test artifacts
+nohup.out
+hud-test.jpg
+treemap-*.png
+.playwright-mcp/

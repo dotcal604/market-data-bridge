@@ -13,6 +13,7 @@ import type { ChartInputData, HeatmapCell, OHLC } from "./charts.js";
 import { getQuote, getNews, runScreener, getHistoricalBars, getTrendingSymbols } from "../providers/yahoo.js";
 import { getStatus } from "../providers/status.js";
 import { isConnected } from "../ibkr/connection.js";
+import { getContentSettings } from "./config-store.js";
 import { logger } from "../logging.js";
 
 const log = logger.child({ module: "divoom-screens" });
@@ -33,10 +34,36 @@ export const C = {
 
 // ─── Helpers ────────────────────────────────────────────────
 
+/**
+ * Graduated color by change magnitude — brighter = bigger move.
+ *
+ * Buckets (absolute %):
+ *   < 0.1  → gray   (noise)
+ *   0.1–0.5 → muted  (minor drift)
+ *   0.5–1.5 → medium (typical intraday)
+ *   1.5–3.0 → full   (significant)
+ *   > 3.0  → vivid  (extreme — hue-shifted for attention)
+ *
+ * Device constraint: FontColor is flat hex, no alpha — intensity
+ * is baked into RGB values (darker = less saturated toward gray).
+ */
 export function changeColor(change: number): string {
-  if (change > 0) return C.green;
-  if (change < 0) return C.red;
-  return C.gray;
+  const abs = Math.abs(change);
+
+  if (abs < 0.1) return C.gray;
+
+  if (change > 0) {
+    if (abs < 0.5) return "#2D8B2D"; // muted green
+    if (abs < 1.5) return "#00CC00"; // medium green
+    if (abs < 3.0) return C.green;   // full #00FF00
+    return "#00FF88";                 // extreme — green-cyan pop
+  }
+
+  // change < 0
+  if (abs < 0.5) return "#8B2D2D"; // muted red
+  if (abs < 1.5) return "#CC0000"; // medium red
+  if (abs < 3.0) return C.red;     // full #FF0000
+  return "#FF4400";                 // extreme — red-orange pop
 }
 
 export function fmtPrice(price: number): string {
@@ -425,9 +452,12 @@ async function fetchIndicators(): Promise<DashboardSection> {
 
 // ─── Chart Data Collectors ───────────────────────────────────
 
-async function fetchSpyChartData(): Promise<{ prices: number[]; candles: OHLC[] }> {
+export async function fetchSpyChartData(): Promise<{ prices: number[]; candles: OHLC[]; ticker: string; timeframe: string }> {
+  const content = getContentSettings();
+  const ticker = content.sparklineTicker;     // default "SPY"
+  const timeframe = content.sparklineTimeframe; // default "1mo"
   try {
-    const bars = await getHistoricalBars("SPY", "1mo", "1d");
+    const bars = await getHistoricalBars(ticker, timeframe, "1d");
     const prices = bars.map((b: any) => b.close).filter((v: any): v is number => v != null);
     const candles: OHLC[] = bars
       .filter((b: any) => b.open != null && b.high != null && b.low != null && b.close != null)
@@ -437,14 +467,14 @@ async function fetchSpyChartData(): Promise<{ prices: number[]; candles: OHLC[] 
         low: b.low as number,
         close: b.close as number,
       }));
-    return { prices, candles };
+    return { prices, candles, ticker, timeframe };
   } catch (err) {
-    log.warn({ err }, "Failed to fetch SPY chart data");
-    return { prices: [], candles: [] };
+    log.warn({ err, ticker, timeframe }, "Failed to fetch chart data");
+    return { prices: [], candles: [], ticker, timeframe };
   }
 }
 
-async function fetchSectorHeatmapData(): Promise<HeatmapCell[]> {
+export async function fetchSectorHeatmapData(): Promise<HeatmapCell[]> {
   const SECTORS = [
     { symbol: "XLK", label: "Tech" },
     { symbol: "XLF", label: "Fin" },
@@ -484,7 +514,7 @@ async function fetchPnlChartData(): Promise<{ values: number[]; labels: string[]
   }
 }
 
-async function fetchIndicatorValues(): Promise<{
+export async function fetchIndicatorValues(): Promise<{
   rsi: number | null;
   vix: number | null;
   volumeBars: Array<{ label: string; volume: number; change: number }>;

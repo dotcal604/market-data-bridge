@@ -4,11 +4,13 @@
  * Shows current market session, connection mode, and Eastern Time.
  * Format: "OPEN · LIVE · 14:22 ET"
  *
- * Uses 1 Text slot for maximum readability on the top line.
+ * Color: session-aware (cyan/yellow/orange/gray).
+ * BgColor: dark session-tinted background.
+ * Budget: 1 Text slot.
  */
 
 import type { Widget, WidgetContext, WidgetOutput, SlotCost } from "./types.js";
-import { textEl, HEADER_SIZE, PANEL_HEADER_H } from "./helpers.js";
+import { textEl, HEADER_SIZE, PANEL_HEADER_H, SectionBg } from "./helpers.js";
 import { C, sessionLabel } from "../screens.js";
 import { registerWidget } from "./registry.js";
 
@@ -49,15 +51,16 @@ export const headerWidget: Widget = {
         timeZone: "America/New_York",
       }) + " ET";
 
-    const text = `${label} \u00b7 ${mode} \u00b7 ${etTime}`;
+    const text = `| ${label} \u00b7 ${mode} \u00b7 ${etTime}`;
     const color = sessionColor(ctx.session);
 
     return {
       elements: [
         textEl(origin.firstId, origin.y, text, color, {
-          align: 1,
+          align: 0, // left (Align:1 = right on device firmware)
           fontSize: HEADER_SIZE,
           height: origin.height,
+          bgColor: SectionBg.header,
         }),
       ],
     };
