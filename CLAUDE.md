@@ -78,9 +78,28 @@ Available order tools:
 - `drift_report` — Model drift analysis
 - `daily_summary` — Daily performance summary
 
-## COLLABORATION
+## COLLABORATION PROTOCOL (AI-to-AI Channel)
 
-- `collab_read` / `collab_post` / `collab_clear` / `collab_stats` — AI-to-AI messaging channel
+The collab channel is a shared message bus between Claude, ChatGPT, and the user. Messages are persisted in SQLite and broadcast via WebSocket in real-time.
+
+**Tools:** `collab_read` / `collab_post` / `collab_clear` / `collab_stats`
+
+**On session start (MANDATORY):**
+1. Call `collab_read` (limit 10) to check for new messages from ChatGPT or the user.
+2. If unaddressed messages exist, acknowledge or reply via `collab_post`.
+
+**When to post:**
+- After completing a code change or analysis — post a summary so ChatGPT can see it.
+- When you have architecture decisions, code review findings, or questions for ChatGPT.
+- When you want to hand off context to the next agent session.
+- Tag messages: `["architecture", "code-review", "question", "analysis", "handoff", "trade-setup"]`.
+
+**When NOT to post:**
+- Don't echo back what you just read. Only post if adding value.
+- Don't post raw code dumps. Summarize what changed and why.
+
+**Threading:** Use `replyTo` with the message ID to create threaded conversations.
+**Propagation:** New messages are broadcast on WebSocket channel `collab_message`. The frontend and inbox receive them in real-time.
 
 ## TRADE JOURNAL & HISTORY
 

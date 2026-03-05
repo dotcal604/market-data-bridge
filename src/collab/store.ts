@@ -5,6 +5,8 @@ import {
   clearCollabDb,
 } from "../db/database.js";
 import { logCollab } from "../logging.js";
+import { wsBroadcast } from "../ws/server.js";
+import { appendInboxItem } from "../inbox/store.js";
 
 export interface CollabMessage {
   id: string;
@@ -128,6 +130,19 @@ export function postMessage(input: PostInput): CollabMessage {
   } catch (e: any) {
     logCollab.error({ err: e, msgId: msg.id }, "Failed to persist collab message to DB");
   }
+
+  // Broadcast via WebSocket for real-time clients (frontend, Claude)
+  try { wsBroadcast("collab_message", msg); } catch { /* non-fatal */ }
+
+  // Push to inbox so ChatGPT's check_inbox discovers cross-agent messages
+  try {
+    appendInboxItem({
+      type: "signal",
+      symbol: null,
+      title: `Collab: ${msg.author} posted`,
+      body: { collab_id: msg.id, author: msg.author, preview: msg.content.slice(0, 200), tags: msg.tags },
+    });
+  } catch { /* non-fatal */ }
 
   if (messages.length > MAX_MESSAGES) {
     messages = messages.slice(-MAX_MESSAGES);

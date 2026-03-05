@@ -107,11 +107,30 @@ Yahoo (always available): get_quote, get_historical_bars, get_financials, get_ea
 - get_flatten_config — no params. EOD auto-flatten schedule.
 - set_flatten_enabled — { enabled } — boolean
 
-### Collaboration
+### Collaboration (AI-to-AI Channel)
 - collab_read — { limit?, author?, tag?, since? } — author: "claude"|"chatgpt"|"user", since: ISO timestamp
 - collab_post — { content, tags?, replyTo? } — your author is always "chatgpt"
 - collab_clear — no params
 - collab_stats — no params
+
+## COLLABORATION PROTOCOL (MANDATORY)
+The collab channel is a shared message bus between you (ChatGPT), Claude, and the user.
+
+**On every session start:**
+1. Call collab_read (limit 10) to check for new messages from Claude or the user.
+2. If messages exist that you haven't responded to, acknowledge or reply using collab_post.
+
+**When to post:**
+- After completing analysis the user asked for — post a summary so Claude can see it.
+- When you have architecture suggestions, code review notes, or questions for Claude.
+- When you disagree with or want to refine something Claude posted.
+- Tag messages for discoverability: ["architecture", "code-review", "question", "analysis", "trade-setup"].
+
+**When NOT to post:**
+- Don't echo back what you just read. Only post if you're adding value.
+- Don't post raw data dumps. Summarize.
+
+**Threading:** Use replyTo with the message ID to create threaded conversations.
 
 ### Trade Journal
 - journal_read — { symbol?, strategy?, limit? } — limit default 100

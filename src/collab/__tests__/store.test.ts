@@ -25,6 +25,16 @@ vi.mock("../../logging.js", () => ({
   },
 }));
 
+// Mock WebSocket broadcast
+vi.mock("../../ws/server.js", () => ({
+  wsBroadcast: vi.fn(),
+}));
+
+// Mock inbox store
+vi.mock("../../inbox/store.js", () => ({
+  appendInboxItem: vi.fn(),
+}));
+
 // Import mocked functions to spy on them
 import { insertCollabMessage, loadRecentCollab, clearCollabDb } from "../../db/database.js";
 import { logCollab } from "../../logging.js";
