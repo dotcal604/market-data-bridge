@@ -1,6 +1,7 @@
 node_modules/
 build/
 .env
+.env.*
 *.js.map
 *.d.ts.map
 
@@ -25,8 +26,13 @@ coverage/
 .grok/
 .mcp.json
 
-# Python analytics venv
+# Python analytics
 analytics/.venv/
+analytics/holly_exit/data/parquet/
+analytics/holly_exit/data/duckdb/
+analytics/holly_exit/data/raw/
+analytics/holly_exit/output/
+analytics/holly_exit/.env
 __pycache__/
 *.pyc
 

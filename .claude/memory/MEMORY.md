@@ -44,19 +44,22 @@ Single-process Node.js 22+ TypeScript trading platform: IBKR + Yahoo Finance + 3
 ## Important Env Var
 NEVER set IBKR_CLIENT_ID in .env — causes collision for all MCP clients.
 
-## Current State (Feb 2026)
+## Current State (Mar 2026)
 - Build: clean, tests: all passing (1,693 tests, 98 files)
-- Branch: main (Divoom chart branch merged — 8579cc0, readonly MCP — 64bc742)
+- Branch: divoom/widget-engine (active work), main is base
 - Cloud module: WIP (code complete, not deployed)
 - Divoom charts: shipped (7 chart renderers, REST endpoint, @napi-rs/canvas + chartjs-node-canvas)
 - MCP readonly mode: `--mode mcp-readonly` (38 mutating tools filtered, analytics-only, no IBKR connect)
 - Analytics summary tools: edge_summary, exit_recommendation, regime_summary (always registered)
-- Launcher scripts: mcp-launch.cmd, mcp-launch-readonly.cmd (portable `%~dp0` paths)
 - Indicator engine: shipped (streaming EMA/RSI/MACD/BB/ATR/VWAP, 3 MCP tools, 2 REST routes, 38 tests)
-- Analytics roadmap: docs/ANALYTICS-ROADMAP.md (Tier 1 done, Tier 2-4 planned)
-- .claude/launch.json: created (api:3000, frontend:3001, dev-paper:3000)
-- Agent handshakes: 11/14 verified — Mintlify(14) ✅ auto-deployed on PR #394; Qodo Gen(8), Windsurf(9) pending (IDE-based)
-- CI: ci-build.yml needs --legacy-peer-deps on frontend npm install (pre-existing, not from our changes)
-- v0 note: clones repo directly from GitHub (not paste-only) — has "Open PR" button, full codebase context
-- pnpm-lock.yaml: removed (was causing Next.js Turbopack workspace root confusion)
-- frontend/src/lib/utils/colors.ts: import path fixed (was one level short + .js extension)
+
+## Holly Exit Optimizer (NEW — Mar 2026)
+- Full pipeline: Python analytics + TypeScript JIT bridge + React frontend
+- Python scripts: `analytics/holly_exit/scripts/` (03-11: fetch, load, optimize, suggest, walk-forward)
+- Walk-forward validation: 5-fold rolling, 30 robust / 18 overfit strategies (6,078 trades)
+- TypeScript bridge: `src/holly/suggest-exits.ts` — loads optimizer JSON + WF summary, maps to ExitPolicy
+- REST API: 4 agent actions (suggest_exits, optimal_exit_summary, optimal_exit_meta, optimal_exit_reload)
+- Frontend: `/holly/exits` page with simulator + leaderboard table + WF validation badges
+- Scheduler: `daily_exit_refresh` at 16:30 ET (45min timeout, runs full pipeline)
+- Daily orchestrator: `analytics/daily_exit_refresh.py` (fetch → load → optimize → suggest → walk-forward)
+- Output files: `analytics/holly_exit/output/` (optimal_exit_params.json, walk_forward_summary.json)

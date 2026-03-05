@@ -298,20 +298,14 @@ export const sectorsWidget: CanvasWidget = {
   name: "Sector Strength",
   gridSize: { w: 2, h: 2 },
 
-  async render(ctx, rect, params, palette) {
+  render(ctx, rect, params, palette) {
     const d = dc(ctx, rect, palette);
     const sectors = (params.sectors as SectorData[]) ?? [
       { name: "TECH", chg: 1.8 },
       { name: "HLTH", chg: 0.9 },
       { name: "FINL", chg: 0.3 },
-      { name: "INDU", chg: 0.5 },
       { name: "CONS", chg: -0.2 },
       { name: "ENER", chg: -1.1 },
-      { name: "UTIL", chg: 0.1 },
-      { name: "REAL", chg: -0.6 },
-      { name: "MATL", chg: 0.4 },
-      { name: "COMM", chg: 1.2 },
-      { name: "STPL", chg: -0.3 },
     ];
 
     // Section label
@@ -320,34 +314,23 @@ export const sectorsWidget: CanvasWidget = {
       [" SECTORS", palette.gray],
     ], 0, 16, 14);
 
-    // ── Squarified treemap ────────────────────────────────────
-    const mapTop = 24;
-    const mapH = rect.h - mapTop - 4;
-    const mapW = rect.w;
-    const cellGap = 3;
-
+    // ── Horizontal bar rows ──────────────────────────────────
     const maxChg = Math.max(...sectors.map(s => Math.abs(s.chg)), 0.1);
-    const weights = sectors.map(s => Math.max(Math.abs(s.chg), 0.15));
+    const barLeft = 60;   // x-offset past the label
+    const barMaxW = rect.w - barLeft - 80; // room for % text
+    const rowH = Math.max(18, Math.floor((rect.h - 24) / Math.max(sectors.length, 1)));
+    const barH = Math.max(10, rowH - 8);
+    let y = 28;
 
-    const cells = squarify(weights, 0, mapTop, mapW, mapH, cellGap);
+    for (const s of sectors) {
+      const col = s.chg >= 0 ? palette.green : palette.red;
+      const barW = Math.round((Math.abs(s.chg) / maxChg) * barMaxW);
+      const pct = `${s.chg >= 0 ? "+" : ""}${s.chg.toFixed(1)}%`;
 
-    for (const cell of cells) {
-      const s = sectors[cell.idx];
-      const [bg, textCol] = treemapColor(s.chg, maxChg);
-
-      // Cell background
-      d.fillRect(cell.x, cell.y, cell.w, cell.h, bg);
-
-      // ── Icon label ────────────────────────────────────────────
-      const minDim = Math.min(cell.w, cell.h);
-      const icon = SECTOR_ICONS[s.name];
-      if (icon) {
-        const iconSize = Math.max(12, Math.round(minDim * 0.55));
-        const iconW = d.measureText(icon, iconSize, "Ph Light");
-        const iconX = cell.x + Math.round((cell.w - iconW) / 2);
-        const iconY = cell.y + Math.round(cell.h / 2) + Math.round(iconSize * 0.35);
-        d.text(icon, iconX, iconY, textCol, iconSize, "Ph Light");
-      }
+      d.text(s.name, 0, y + barH, palette.white, 16);
+      d.fillRect(barLeft, y + 2, barW, barH, col);
+      d.text(pct, barLeft + barW + 6, y + barH, col, 14);
+      y += rowH;
     }
   },
 };
