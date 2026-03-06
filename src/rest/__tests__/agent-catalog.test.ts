@@ -84,6 +84,7 @@ describe("Action Catalog", () => {
         "holly_extract_rules",
         "holly_backtest",
         "holly_strategy_breakdown",
+        "holly_analytics_dashboard",
         "holly_trade_import",
         "holly_trade_import_file",
         "holly_trade_stats",
