@@ -1,0 +1,21 @@
+# Core
+vectorbt==0.26.2
+duckdb==1.2.1
+pandas==2.2.3
+numpy==1.26.4
+numba==0.60.0
+pyarrow==18.1.0
+
+# Data
+requests==2.32.3
+httpx==0.28.1
+python-dotenv==1.0.1
+
+# Visualization
+plotly==6.0.0
+quantstats==0.0.64
+matplotlib==3.9.3
+
+# Jupyter (optional, for notebooks)
+jupyterlab==4.3.4
+ipywidgets==8.1.5
