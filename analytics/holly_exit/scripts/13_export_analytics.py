@@ -70,6 +70,15 @@ def main():
             o.sharpe AS opt_sharpe,
             o.max_drawdown AS opt_max_drawdown,
             o.total_trades AS opt_total_trades,
+            -- Ticker details (sector, exchange, market cap)
+            td.name AS company_name,
+            td.sic_code,
+            td.sic_description AS sector,
+            td.primary_exchange,
+            td.market_cap,
+            td.total_employees,
+            td.address_state,
+            td.list_date AS ipo_date,
             -- Bar coverage flag
             CASE WHEN EXISTS (
                 SELECT 1 FROM bars b
@@ -81,6 +90,7 @@ def main():
                 THEN TRUE ELSE FALSE END AS has_regime_data
         FROM trades t
         LEFT JOIN trade_regime r ON t.trade_id = r.trade_id
+        LEFT JOIN ticker_details td ON t.symbol = td.symbol
         LEFT JOIN (
             SELECT strategy_filter, exit_rule, param_json,
                    avg_pnl, profit_factor, win_rate, sharpe, max_drawdown, total_trades,
@@ -126,6 +136,7 @@ def main():
     print(f"  With minute bars: {df['has_minute_bars'].sum():,}")
     print(f"  With regime data: {df['has_regime_data'].sum():,}")
     print(f"  With optimization: {df['opt_exit_rule'].notna().sum():,}")
+    print(f"  With sector data:  {df['sector'].notna().sum():,}")
 
     # Column summary
     print(f"\nColumns:")
