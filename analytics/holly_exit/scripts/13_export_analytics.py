@@ -164,6 +164,12 @@ def main():
     df = df.merge(strat_stats, on="strategy", how="left")
 
     # ── Sector-conditional win rate ────────────────────────────────
+    # MIN_SECTOR_TRADES: sectors with fewer trades than this threshold
+    # show unreliable WR (100% on 5 trades, etc.) that doesn't persist
+    # out-of-sample.  Investigation (equity_curves_investigation.py)
+    # found 106/203 passing sectors had <20 trades, causing -11.8pp OOS
+    # decay.  n>=50 cuts decay to -10.0pp; n>=100 to -7.8pp.
+    MIN_SECTOR_TRADES = 50
     if "sector" in df.columns:
         sector_mask = df["sector"].notna()
         sector_stats = df.loc[sector_mask].groupby("sector").agg(
@@ -171,11 +177,16 @@ def main():
             sector_win_rate=("is_winner", "mean"),
             sector_avg_pnl=("holly_pnl", "mean"),
         ).round(4)
+        sector_stats["sector_reliable"] = (
+            (sector_stats["sector_trades"] >= MIN_SECTOR_TRADES)
+            & (sector_stats["sector_win_rate"] > 0.52)
+        )
         df = df.merge(sector_stats, on="sector", how="left")
     else:
         df["sector_trades"] = np.nan
         df["sector_win_rate"] = np.nan
         df["sector_avg_pnl"] = np.nan
+        df["sector_reliable"] = False
 
     # ── Regime-conditional win rate (per regime state) ─────────────
     for regime_col in ["trend_regime", "vol_regime", "momentum_regime"]:

@@ -35,7 +35,10 @@ print(f"  {len(df):,} trades, {df['entry_dt'].min():%Y-%m-%d} to {df['entry_dt']
 edge_mask = df["prob_edge_verdict"] == "Strong Edge"
 tod_mask = df["tod_bucket"].isin(["06:30", "07:00", "07:30", "08:00"])
 regime_mask = df["trend_regime"].isin(["sideways", "downtrend"])
-sector_mask = df["sector_win_rate"] > 0.52
+# Robust sector filter: require minimum 50 trades per sector to avoid
+# small-sample overfitting (106/203 passing sectors had <20 trades)
+MIN_SECTOR_TRADES = 50
+sector_mask = (df["sector_win_rate"] > 0.52) & (df["sector_trades"] >= MIN_SECTOR_TRADES)
 
 full_stack = edge_mask & tod_mask & regime_mask & sector_mask
 

@@ -13,7 +13,7 @@ Layers tested:
   L1  +Edge Verdict     — filter to Strong Edge strategies (probability engine)
   L2  +Time-of-Day      — filter to optimal entry windows (07:00 bucket ± 30min)
   L3  +Regime           — filter to favorable trend regime (sideways/downtrend)
-  L4  +Sector           — filter to high-WR sectors (WR > 52%)
+  L4  +Sector           — filter to high-WR sectors (WR > 52%, min 50 trades)
   L5  Full Stack        — all filters combined
 
 Output: HTML report with charts + JSON metrics
@@ -197,18 +197,20 @@ if "trend_regime" in df.columns:
     l3_pnl = df.loc[l3_mask, "holly_pnl"].fillna(0).values
     layers.append(compute_layer_metrics(l3_pnl, "L3: +Regime (sideways+down)", baseline_pnl))
 
-# L4: High-WR sectors (> 52% WR from sector analysis)
-print("L4: +Sector (high-WR sectors)...")
+# L4: High-WR sectors (> 52% WR, minimum 50 trades to avoid small-sample overfit)
+MIN_SECTOR_TRADES = 50
+print(f"L4: +Sector (high-WR sectors, min {MIN_SECTOR_TRADES} trades)...")
 if "sector" in df.columns:
-    sector_wr = df.dropna(subset=["sector"]).groupby("sector")["holly_pnl"].apply(
-        lambda x: (x > 0).mean()
+    sector_agg = df.dropna(subset=["sector"]).groupby("sector").agg(
+        wr=("holly_pnl", lambda x: (x > 0).mean()),
+        n=("holly_pnl", "count"),
     )
-    good_sectors = sector_wr[sector_wr > 0.52].index.tolist()
+    good_sectors = sector_agg[(sector_agg["wr"] > 0.52) & (sector_agg["n"] >= MIN_SECTOR_TRADES)].index.tolist()
     l4_mask = df["sector"].isin(good_sectors)
     l4_pnl = df.loc[l4_mask, "holly_pnl"].fillna(0).values
-    layers.append(compute_layer_metrics(l4_pnl, "L4: +Sector (WR>52%)", baseline_pnl))
+    layers.append(compute_layer_metrics(l4_pnl, f"L4: +Sector (WR>52%, n>={MIN_SECTOR_TRADES})", baseline_pnl))
 
-    bad_sectors = sector_wr[sector_wr < 0.45].index.tolist()
+    bad_sectors = sector_agg[sector_agg["wr"] < 0.45].index.tolist()
     l4_bad_mask = df["sector"].isin(bad_sectors)
     l4_bad_pnl = df.loc[l4_bad_mask, "holly_pnl"].fillna(0).values
     if len(l4_bad_pnl) > 10:
