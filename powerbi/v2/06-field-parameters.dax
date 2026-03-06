@@ -1,0 +1,82 @@
+// ============================================================
+// FIELD PARAMETERS — DAX Definitions
+// ============================================================
+// Create each via: Modeling ribbon > New Parameter > Fields
+// Or paste the DAX directly after creating the parameter table.
+// ============================================================
+
+
+// ════════════════════════════════════════════════════════════
+// FIELD PARAMETER 1: Performance Metric
+// ════════════════════════════════════════════════════════════
+// Allows switching a visual's value between key measures
+
+Performance Metric =
+{
+    ("Total PnL", NAMEOF([Total PnL]), 0),
+    ("Avg PnL", NAMEOF([Avg PnL]), 1),
+    ("Win Rate", NAMEOF([Win Rate]), 2),
+    ("Profit Factor", NAMEOF([Profit Factor]), 3),
+    ("Sharpe Ratio", NAMEOF([Sharpe Ratio]), 4),
+    ("Avg R Multiple", NAMEOF([Avg R Multiple]), 5),
+    ("Expectancy", NAMEOF([Expectancy]), 6),
+    ("Edge Score", NAMEOF([Edge Score]), 7),
+    ("Consistency Score", NAMEOF([Consistency Score]), 8),
+    ("Total Trades", NAMEOF([Total Trades]), 9),
+    ("Avg Hold Minutes", NAMEOF([Avg Hold Minutes]), 10)
+}
+
+
+// ════════════════════════════════════════════════════════════
+// FIELD PARAMETER 2: Time Dimension
+// ════════════════════════════════════════════════════════════
+// Allows switching a visual's axis between time groupings
+
+Time Dimension =
+{
+    ("Year", NAMEOF(Holly_Trades[trade_year]), 0),
+    ("Month", NAMEOF(Holly_Trades[Month_Name_Short]), 1),
+    ("Day of Week", NAMEOF(Holly_Trades[Day_Name_Short]), 2),
+    ("Entry Hour", NAMEOF(Holly_Trades[Entry_Hour_Label]), 3),
+    ("Year-Month", NAMEOF(Date_Table[MonthYear]), 4),
+    ("Quarter", NAMEOF(Date_Table[YearQuarter]), 5)
+}
+
+
+// ════════════════════════════════════════════════════════════
+// FIELD PARAMETER 3: Category Dimension
+// ════════════════════════════════════════════════════════════
+// Allows switching a visual's axis between categorical groupings
+
+Category Dimension =
+{
+    ("Strategy", NAMEOF(Holly_Trades[strategy]), 0),
+    ("Direction", NAMEOF(Holly_Trades[direction]), 1),
+    ("Trend Regime", NAMEOF(Holly_Trades[trend_regime]), 2),
+    ("Vol Regime", NAMEOF(Holly_Trades[vol_regime]), 3),
+    ("Momentum Regime", NAMEOF(Holly_Trades[momentum_regime]), 4),
+    ("Exit Rule", NAMEOF(Holly_Trades[opt_exit_rule]), 5),
+    ("Trade Outcome", NAMEOF(Holly_Trades[Trade_Outcome]), 6),
+    ("Symbol", NAMEOF(Holly_Trades[symbol]), 7),
+    ("Regime Combo", NAMEOF(Holly_Trades[Regime_Combo]), 8)
+}
+
+
+// ════════════════════════════════════════════════════════════
+// WHAT-IF PARAMETER: Min Stop Buffer %
+// ════════════════════════════════════════════════════════════
+// Create via: Modeling > New Parameter > What If
+//   Name: Min Stop Buffer
+//   Data type: Decimal
+//   Minimum: 0
+//   Maximum: 3
+//   Increment: 0.05
+//   Default: 0
+//
+// This auto-creates:
+//   Table: "Min Stop Buffer" with column "Min Stop Buffer"
+//   Measure: Min Stop Buffer Value = SELECTEDVALUE('Min Stop Buffer'[Min Stop Buffer], 0)
+//
+// Then connect measures Filtered Total Trades, Filtered Win Rate,
+// Filtered Avg PnL, Filtered Profit Factor, Filtered Total PnL,
+// Filtered Cumulative PnL to any visual.

@@ -8,7 +8,7 @@ vi.mock("../account.js", () => ({
 }));
 
 // Mock the database module — return empty rows so RISK_CONFIG_DEFAULTS apply
-// (max_position_pct=0.05, volatility_scalar=1.0)
+// (max_position_pct=0.50, volatility_scalar=1.0)
 vi.mock("../../db/database.js", () => ({
   getRiskConfigRows: vi.fn().mockReturnValue([]),
 }));
@@ -18,7 +18,7 @@ vi.mock("../../db/database.js", () => ({
  *   byRisk, byCapital, byMargin, byConfig
  *
  * byConfig = floor(netLiq * max_position_pct / entryPrice)
- *          = floor(50000 * 0.05 / 200)  = 12  (at $200)
+ *          = floor(50000 * 0.50 / 200)  = 125  (at $200)
  *
  * After binding constraint, regime scaling applies:
  *   default regime = "normal" → regimeScalar = 0.75
@@ -53,7 +53,7 @@ describe("calculatePositionSize", () => {
   });
 
   describe("Basic Calculations", () => {
-    it("should calculate position size with byConfig as binding constraint", async () => {
+    it("should calculate position size with byRisk as binding constraint", async () => {
       const result = await calculatePositionSize({
         symbol: "AAPL",
         entryPrice: 200,
@@ -63,15 +63,15 @@ describe("calculatePositionSize", () => {
         volatilityRegime: "low", // scalar=1.0, no reduction
       });
 
-      // byRisk  = floor(500 / 5) = 100
+      // byRisk  = floor(500 / 5) = 100  ← binding
       // byCap   = floor(50000*50%/200) = 125
       // byMargin= floor(45000/(200*0.25)) = 900
-      // byConfig= floor(50000*0.05/200) = 12  ← binding
+      // byConfig= floor(50000*0.50/200) = 125
       expect(result.sizing.byRisk).toBe(100);
       expect(result.sizing.byCapital).toBe(125);
-      expect(result.sizing.byConfig).toBe(12);
-      expect(result.sizing.binding).toBe("byConfig");
-      expect(result.recommendedShares).toBe(12); // low regime, no scaling
+      expect(result.sizing.byConfig).toBe(125);
+      expect(result.sizing.binding).toBe("byRisk");
+      expect(result.recommendedShares).toBe(100); // low regime, no scaling
       expect(result.riskPerShare).toBe(5);
       expect(result.regime).toBe("low");
       expect(result.volatilityScalar).toBe(1.0);
@@ -87,10 +87,10 @@ describe("calculatePositionSize", () => {
         // no volatilityRegime → defaults to "normal" (0.75)
       });
 
-      // byConfig = 12 (binding), then floor(12 * 0.75) = 9
-      expect(result.sizing.byConfig).toBe(12);
-      expect(result.sizing.binding).toBe("byConfig");
-      expect(result.recommendedShares).toBe(9);
+      // byRisk = 100 (binding), then floor(100 * 0.75) = 75
+      expect(result.sizing.byConfig).toBe(125);
+      expect(result.sizing.binding).toBe("byRisk");
+      expect(result.recommendedShares).toBe(75);
       expect(result.regime).toBe("normal");
       expect(result.volatilityScalar).toBe(0.75);
     });
@@ -108,7 +108,7 @@ describe("calculatePositionSize", () => {
 
       // byRisk   = floor((50000*5%)/0.01) = 250000000 (huge)
       // byCap    = floor(50000*2%/5) = 200  ← binding
-      // byConfig = floor(50000*0.05/5) = 500
+      // byConfig = floor(50000*0.50/5) = 5000
       // byMargin = floor(45000/(5*0.25)) = 36000
       expect(result.sizing.byCapital).toBe(200);
       expect(result.sizing.binding).toBe("byCapital");
@@ -188,11 +188,11 @@ describe("calculatePositionSize", () => {
       });
 
       // Risk per share = abs(200 - 205) = 5
-      // byRisk = 100, byConfig = 12 (binding)
+      // byRisk = 100 (binding), byConfig = 125
       expect(result.riskPerShare).toBe(5);
       expect(result.sizing.byRisk).toBe(100);
-      expect(result.sizing.binding).toBe("byConfig");
-      expect(result.recommendedShares).toBe(12);
+      expect(result.sizing.binding).toBe("byRisk");
+      expect(result.recommendedShares).toBe(100);
     });
 
     it("should throw error for non-positive entry price", async () => {
@@ -332,11 +332,11 @@ describe("calculatePositionSize", () => {
         volatilityRegime: "high",
       });
 
-      // byRisk   = floor(500/1) = 500
-      // byConfig = floor(50000*0.05/10) = 250 ← binding
-      // high regime: floor(250 * 0.5) = 125
-      expect(result.sizing.binding).toBe("byConfig");
-      expect(result.recommendedShares).toBe(125);
+      // byRisk   = floor(500/1) = 500 ← binding
+      // byConfig = floor(50000*0.50/10) = 2500
+      // high regime: floor(500 * 0.5) = 250
+      expect(result.sizing.binding).toBe("byRisk");
+      expect(result.recommendedShares).toBe(250);
       expect(result.regime).toBe("high");
       expect(result.volatilityScalar).toBe(0.5);
     });
@@ -351,10 +351,10 @@ describe("calculatePositionSize", () => {
         volatilityRegime: "low",
       });
 
-      // byRisk   = floor(500/1) = 500
-      // byConfig = floor(50000*0.05/10) = 250 ← binding
+      // byRisk   = floor(500/1) = 500 ← binding
+      // byConfig = floor(50000*0.50/10) = 2500
       // low regime: scalar=1.0, no reduction
-      expect(result.recommendedShares).toBe(250);
+      expect(result.recommendedShares).toBe(500);
       expect(result.regime).toBe("low");
       expect(result.volatilityScalar).toBe(1.0);
     });
@@ -400,13 +400,13 @@ describe("calculatePositionSize", () => {
         volatilityRegime: "low",
       });
 
-      // byRisk   = floor(500/1) = 500
-      // byConfig = floor(50000*0.05/10) = 250 (binding)
-      // 250 shares * $10 = $2500
-      // $2500 / $50000 = 5%
-      expect(result.recommendedShares).toBe(250);
-      expect(result.totalCapital).toBe(2500);
-      expect(result.percentOfEquity).toBe(5);
+      // byRisk   = floor(500/1) = 500 (binding)
+      // byConfig = floor(50000*0.50/10) = 2500
+      // 500 shares * $10 = $5000
+      // $5000 / $50000 = 10%
+      expect(result.recommendedShares).toBe(500);
+      expect(result.totalCapital).toBe(5000);
+      expect(result.percentOfEquity).toBe(10);
     });
   });
 
@@ -421,12 +421,12 @@ describe("calculatePositionSize", () => {
       });
 
       // Default risk = 1% of 50000 = 500
-      // byRisk = floor(500/1) = 500
-      // byConfig = 250 (binding)
-      // totalRisk = 250 * 1 = 250 (capped by config constraint)
+      // byRisk = floor(500/1) = 500 (binding)
+      // byConfig = floor(50000*0.50/10) = 2500
+      // totalRisk = 500 * 1 = 500
       expect(result.sizing.byRisk).toBe(500);
-      expect(result.recommendedShares).toBe(250);
-      expect(result.totalRisk).toBe(250);
+      expect(result.recommendedShares).toBe(500);
+      expect(result.totalRisk).toBe(500);
     });
 
     it("should use default maxCapitalPercent of 10%", async () => {
@@ -439,12 +439,12 @@ describe("calculatePositionSize", () => {
       });
 
       // Max capital = 10% of 50000 = 5000
-      // Shares by capital = 5000 / 200 = 25
-      // byConfig = 12 — MORE restrictive than capital
+      // Shares by capital = 5000 / 200 = 25  ← binding
+      // byConfig = floor(50000*0.50/200) = 125
       expect(result.sizing.byCapital).toBe(25);
-      expect(result.sizing.byConfig).toBe(12);
-      // byConfig is binding at 12
-      expect(result.sizing.binding).toBe("byConfig");
+      expect(result.sizing.byConfig).toBe(125);
+      // byCapital is binding at 25
+      expect(result.sizing.binding).toBe("byCapital");
     });
   });
 });

@@ -186,8 +186,15 @@ export async function getPositions(): Promise<PositionData[]> {
       resolve(positions);
     };
 
-    const onError = (err: Error, code: ErrorCode) => {
+    const onError = (err: Error, code: ErrorCode, id: number) => {
       if (isNonFatalError(code, err)) return;
+      // reqPositions() is a global subscription with no request ID.
+      // Errors with a specific ticker/request ID (> 0) belong to other
+      // subscriptions (market data, etc.) — ignore them.
+      if (id > 0) return;
+      // Error 300 ("Can't find EId with tickerId") is benign TWS
+      // subscription lifecycle noise — always safe to ignore.
+      if ((code as number) === 300) return;
       if (settled) return;
       settled = true;
       cleanup();

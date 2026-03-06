@@ -162,7 +162,7 @@ vi.mock("../eval/risk-tuning.js", () => ({
 
 vi.mock("../db/schema.js", () => ({
   RISK_CONFIG_DEFAULTS: {
-    max_position_pct: 0.05,
+    max_position_pct: 0.50,
     max_daily_loss_pct: 0.02,
     max_concentration_pct: 0.25,
     volatility_scalar: 1.0,

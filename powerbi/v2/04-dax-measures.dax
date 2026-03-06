@@ -1,0 +1,688 @@
+// ============================================================
+// HOLLY AI DASHBOARD v2 — COMPLETE DAX MEASURES LIBRARY
+// ============================================================
+// 70+ measures organized by display folder
+// Table: Holly_Trades (loaded via 01-holly-trades.pq)
+// Date table: Date_Table (loaded via 02-date-table.pq)
+// ============================================================
+// CREATE MEASURES TABLE FIRST:
+//   Measures = ROW("_placeholder", 0)
+//   Then hide the _placeholder column.
+// ============================================================
+
+
+// ════════════════════════════════════════════════════════════
+// FOLDER: Core Performance
+// ════════════════════════════════════════════════════════════
+
+Total Trades = COUNTROWS(Holly_Trades)
+
+Winners = CALCULATE(COUNTROWS(Holly_Trades), Holly_Trades[is_winner] = TRUE)
+
+Losers = CALCULATE(COUNTROWS(Holly_Trades), Holly_Trades[is_loser] = TRUE)
+
+Breakeven Trades = [Total Trades] - [Winners] - [Losers]
+
+Win Rate =
+    VAR _trades = [Total Trades]
+    RETURN IF(_trades > 0, DIVIDE([Winners], _trades), BLANK())
+
+Loss Rate =
+    VAR _trades = [Total Trades]
+    RETURN IF(_trades > 0, DIVIDE([Losers], _trades), BLANK())
+
+Total PnL = SUM(Holly_Trades[holly_pnl])
+
+Avg PnL =
+    VAR _trades = [Total Trades]
+    RETURN IF(_trades > 0, DIVIDE([Total PnL], _trades), BLANK())
+
+Median PnL = MEDIAN(Holly_Trades[holly_pnl])
+
+Total Winner PnL = CALCULATE(SUM(Holly_Trades[holly_pnl]), Holly_Trades[is_winner] = TRUE)
+
+Total Loser PnL = CALCULATE(SUM(Holly_Trades[holly_pnl]), Holly_Trades[is_loser] = TRUE)
+
+Avg Winner PnL = CALCULATE(AVERAGE(Holly_Trades[holly_pnl]), Holly_Trades[is_winner] = TRUE)
+
+Avg Loser PnL = CALCULATE(AVERAGE(Holly_Trades[holly_pnl]), Holly_Trades[is_loser] = TRUE)
+
+Profit Factor =
+    VAR _winPnL = [Total Winner PnL]
+    VAR _losePnL = ABS([Total Loser PnL])
+    RETURN IF(_losePnL > 0, DIVIDE(_winPnL, _losePnL), BLANK())
+
+Win Loss Ratio =
+    VAR _avgW = [Avg Winner PnL]
+    VAR _avgL = ABS([Avg Loser PnL])
+    RETURN IF(_avgL > 0, DIVIDE(_avgW, _avgL), BLANK())
+
+Avg R Multiple = AVERAGE(Holly_Trades[r_multiple])
+
+Median R Multiple = MEDIAN(Holly_Trades[r_multiple])
+
+Best Trade = MAX(Holly_Trades[holly_pnl])
+
+Worst Trade = MIN(Holly_Trades[holly_pnl])
+
+Avg Hold Minutes = AVERAGE(Holly_Trades[hold_minutes])
+
+Unique Symbols = DISTINCTCOUNT(Holly_Trades[symbol])
+
+
+// ════════════════════════════════════════════════════════════
+// FOLDER: Advanced Performance
+// ════════════════════════════════════════════════════════════
+
+Expectancy =
+    // EV per trade = (WR * AvgWin) + (LR * AvgLoss)
+    VAR _wr = [Win Rate]
+    VAR _lr = [Loss Rate]
+    VAR _avgW = [Avg Winner PnL]
+    VAR _avgL = [Avg Loser PnL]
+    RETURN
+    IF(
+        [Total Trades] > 0,
+        (_wr * _avgW) + (_lr * _avgL),
+        BLANK()
+    )
+
+Sharpe Ratio =
+    // Annualized: (mean daily PnL / stdev daily PnL) * sqrt(252)
+    VAR _dailyPnL =
+        ADDCOLUMNS(
+            SUMMARIZE(Holly_Trades, Holly_Trades[trade_date]),
+            "@DayPnL", CALCULATE(SUM(Holly_Trades[holly_pnl]))
+        )
+    VAR _mean = AVERAGEX(_dailyPnL, [@DayPnL])
+    VAR _stdev =
+        SQRT(
+            DIVIDE(
+                SUMX(_dailyPnL, ([@DayPnL] - _mean) ^ 2),
+                COUNTROWS(_dailyPnL) - 1
+            )
+        )
+    RETURN IF(_stdev > 0, DIVIDE(_mean, _stdev) * SQRT(252), BLANK())
+
+Sortino Ratio =
+    // Like Sharpe but only penalizes downside deviation
+    VAR _dailyPnL =
+        ADDCOLUMNS(
+            SUMMARIZE(Holly_Trades, Holly_Trades[trade_date]),
+            "@DayPnL", CALCULATE(SUM(Holly_Trades[holly_pnl]))
+        )
+    VAR _mean = AVERAGEX(_dailyPnL, [@DayPnL])
+    VAR _downsideDev =
+        SQRT(
+            DIVIDE(
+                SUMX(
+                    _dailyPnL,
+                    IF([@DayPnL] < 0, [@DayPnL] ^ 2, 0)
+                ),
+                COUNTROWS(FILTER(_dailyPnL, [@DayPnL] < 0))
+            )
+        )
+    RETURN IF(_downsideDev > 0, DIVIDE(_mean, _downsideDev) * SQRT(252), BLANK())
+
+Edge Score =
+    // win_rate * avg_winner / abs(avg_loser) — measures edge quality
+    VAR _wr = [Win Rate]
+    VAR _avgW = [Avg Winner PnL]
+    VAR _avgL = ABS([Avg Loser PnL])
+    RETURN IF(_avgL > 0, _wr * DIVIDE(_avgW, _avgL), BLANK())
+
+Calmar Ratio =
+    // Total PnL / abs(Max Drawdown)
+    VAR _maxDD = [Max Drawdown Amount]
+    RETURN IF(_maxDD < 0, DIVIDE([Total PnL], ABS(_maxDD)), BLANK())
+
+Consistency Score =
+    // % of months that are profitable
+    VAR _monthlyPnL =
+        ADDCOLUMNS(
+            SUMMARIZE(Holly_Trades, Holly_Trades[trade_year], Holly_Trades[trade_month]),
+            "@MonthPnL", CALCULATE(SUM(Holly_Trades[holly_pnl]))
+        )
+    VAR _profitableMonths = COUNTROWS(FILTER(_monthlyPnL, [@MonthPnL] > 0))
+    VAR _totalMonths = COUNTROWS(_monthlyPnL)
+    RETURN IF(_totalMonths > 0, DIVIDE(_profitableMonths, _totalMonths), BLANK())
+
+Profitable Days Pct =
+    // % of trading days that are profitable
+    VAR _dailyPnL =
+        ADDCOLUMNS(
+            SUMMARIZE(Holly_Trades, Holly_Trades[trade_date]),
+            "@DayPnL", CALCULATE(SUM(Holly_Trades[holly_pnl]))
+        )
+    VAR _profDays = COUNTROWS(FILTER(_dailyPnL, [@DayPnL] > 0))
+    VAR _totalDays = COUNTROWS(_dailyPnL)
+    RETURN IF(_totalDays > 0, DIVIDE(_profDays, _totalDays), BLANK())
+
+Avg Trades Per Day =
+    VAR _tradingDays = DISTINCTCOUNT(Holly_Trades[trade_date])
+    RETURN IF(_tradingDays > 0, DIVIDE([Total Trades], _tradingDays), BLANK())
+
+Max Consecutive Wins =
+    // Uses ranked trades + running group counter
+    VAR _ranked =
+        ADDCOLUMNS(
+            TOPN(
+                [Total Trades],
+                Holly_Trades,
+                Holly_Trades[entry_time], ASC
+            ),
+            "@Rank", RANKX(Holly_Trades, Holly_Trades[entry_time], , ASC, Dense),
+            "@IsWin", IF(Holly_Trades[is_winner], 1, 0)
+        )
+    VAR _withGroups =
+        ADDCOLUMNS(
+            _ranked,
+            "@GroupBreak",
+            VAR _thisRank = [@Rank]
+            VAR _thisWin = [@IsWin]
+            RETURN
+            COUNTROWS(
+                FILTER(
+                    _ranked,
+                    [@Rank] <= _thisRank && [@IsWin] = 0
+                )
+            )
+        )
+    VAR _streaks =
+        ADDCOLUMNS(
+            SUMMARIZE(_withGroups, [@GroupBreak]),
+            "@StreakLen",
+            COUNTROWS(FILTER(_withGroups, [@GroupBreak] = EARLIER([@GroupBreak]) && [@IsWin] = 1))
+        )
+    RETURN MAXX(_streaks, [@StreakLen])
+
+Max Consecutive Losses =
+    VAR _ranked =
+        ADDCOLUMNS(
+            TOPN(
+                [Total Trades],
+                Holly_Trades,
+                Holly_Trades[entry_time], ASC
+            ),
+            "@Rank", RANKX(Holly_Trades, Holly_Trades[entry_time], , ASC, Dense),
+            "@IsLoss", IF(Holly_Trades[is_loser], 1, 0)
+        )
+    VAR _withGroups =
+        ADDCOLUMNS(
+            _ranked,
+            "@GroupBreak",
+            VAR _thisRank = [@Rank]
+            RETURN
+            COUNTROWS(
+                FILTER(_ranked, [@Rank] <= _thisRank && [@IsLoss] = 0)
+            )
+        )
+    VAR _streaks =
+        ADDCOLUMNS(
+            SUMMARIZE(_withGroups, [@GroupBreak]),
+            "@StreakLen",
+            COUNTROWS(FILTER(_withGroups, [@GroupBreak] = EARLIER([@GroupBreak]) && [@IsLoss] = 1))
+        )
+    RETURN MAXX(_streaks, [@StreakLen])
+
+
+// ════════════════════════════════════════════════════════════
+// FOLDER: Cumulative & Running
+// ════════════════════════════════════════════════════════════
+
+Cumulative PnL =
+    VAR _maxDate = MAX(Holly_Trades[trade_date])
+    RETURN
+    CALCULATE(
+        SUM(Holly_Trades[holly_pnl]),
+        FILTER(
+            ALLSELECTED(Holly_Trades[trade_date]),
+            Holly_Trades[trade_date] <= _maxDate
+        )
+    )
+
+Running Max PnL =
+    VAR _maxDate = MAX(Holly_Trades[trade_date])
+    VAR _allDates =
+        FILTER(
+            ALLSELECTED(Holly_Trades[trade_date]),
+            Holly_Trades[trade_date] <= _maxDate
+        )
+    RETURN
+    MAXX(
+        _allDates,
+        VAR _thisDate = Holly_Trades[trade_date]
+        RETURN
+        CALCULATE(
+            SUM(Holly_Trades[holly_pnl]),
+            FILTER(
+                ALLSELECTED(Holly_Trades[trade_date]),
+                Holly_Trades[trade_date] <= _thisDate
+            )
+        )
+    )
+
+Drawdown = [Cumulative PnL] - [Running Max PnL]
+
+Max Drawdown Amount =
+    VAR _allDates = ALLSELECTED(Holly_Trades[trade_date])
+    VAR _ddTable =
+        ADDCOLUMNS(
+            _allDates,
+            "@CumPnL",
+            VAR _d = Holly_Trades[trade_date]
+            RETURN
+            CALCULATE(
+                SUM(Holly_Trades[holly_pnl]),
+                FILTER(ALLSELECTED(Holly_Trades[trade_date]), Holly_Trades[trade_date] <= _d)
+            ),
+            "@RunMax",
+            VAR _d = Holly_Trades[trade_date]
+            VAR _priorDates = FILTER(ALLSELECTED(Holly_Trades[trade_date]), Holly_Trades[trade_date] <= _d)
+            RETURN
+            MAXX(
+                _priorDates,
+                VAR _d2 = Holly_Trades[trade_date]
+                RETURN
+                CALCULATE(
+                    SUM(Holly_Trades[holly_pnl]),
+                    FILTER(ALLSELECTED(Holly_Trades[trade_date]), Holly_Trades[trade_date] <= _d2)
+                )
+            )
+        )
+    VAR _ddValues = ADDCOLUMNS(_ddTable, "@DD", [@CumPnL] - [@RunMax])
+    RETURN MINX(_ddValues, [@DD])
+
+Running Win Rate =
+    VAR _maxDate = MAX(Holly_Trades[trade_date])
+    VAR _wins =
+        CALCULATE(
+            COUNTROWS(FILTER(Holly_Trades, Holly_Trades[is_winner] = TRUE)),
+            FILTER(ALLSELECTED(Holly_Trades[trade_date]), Holly_Trades[trade_date] <= _maxDate)
+        )
+    VAR _total =
+        CALCULATE(
+            COUNTROWS(Holly_Trades),
+            FILTER(ALLSELECTED(Holly_Trades[trade_date]), Holly_Trades[trade_date] <= _maxDate)
+        )
+    RETURN DIVIDE(_wins, _total)
+
+Running Profit Factor =
+    VAR _maxDate = MAX(Holly_Trades[trade_date])
+    VAR _winPnL =
+        CALCULATE(
+            SUM(Holly_Trades[holly_pnl]),
+            Holly_Trades[is_winner] = TRUE,
+            FILTER(ALLSELECTED(Holly_Trades[trade_date]), Holly_Trades[trade_date] <= _maxDate)
+        )
+    VAR _losePnL =
+        CALCULATE(
+            SUM(Holly_Trades[holly_pnl]),
+            Holly_Trades[is_loser] = TRUE,
+            FILTER(ALLSELECTED(Holly_Trades[trade_date]), Holly_Trades[trade_date] <= _maxDate)
+        )
+    RETURN IF(ABS(_losePnL) > 0, DIVIDE(_winPnL, ABS(_losePnL)), BLANK())
+
+
+// ════════════════════════════════════════════════════════════
+// FOLDER: Time Intelligence
+// ════════════════════════════════════════════════════════════
+
+PnL MTD = TOTALMTD(SUM(Holly_Trades[holly_pnl]), Date_Table[Date])
+
+PnL YTD = TOTALYTD(SUM(Holly_Trades[holly_pnl]), Date_Table[Date])
+
+PnL Prior Year = CALCULATE([Total PnL], SAMEPERIODLASTYEAR(Date_Table[Date]))
+
+PnL YoY Change = [Total PnL] - [PnL Prior Year]
+
+PnL YoY Pct = DIVIDE([PnL YoY Change], ABS([PnL Prior Year]))
+
+Trades Prior Year = CALCULATE([Total Trades], SAMEPERIODLASTYEAR(Date_Table[Date]))
+
+Win Rate Prior Year = CALCULATE([Win Rate], SAMEPERIODLASTYEAR(Date_Table[Date]))
+
+Win Rate YoY Change = [Win Rate] - [Win Rate Prior Year]
+
+PnL vs Prior Year Delta =
+    VAR _current = [Total PnL]
+    VAR _prior = [PnL Prior Year]
+    VAR _delta = _current - _prior
+    RETURN
+    IF(
+        NOT ISBLANK(_prior),
+        FORMAT(_delta, "$#,0") & " (" & FORMAT(DIVIDE(_delta, ABS(_prior)), "0.0%") & ")",
+        BLANK()
+    )
+
+
+// ════════════════════════════════════════════════════════════
+// FOLDER: MFE / MAE Analysis
+// ════════════════════════════════════════════════════════════
+
+Avg MFE = AVERAGE(Holly_Trades[mfe])
+
+Avg MAE = AVERAGE(Holly_Trades[mae])
+
+Avg Stop Buffer Pct = AVERAGE(Holly_Trades[stop_buffer_pct])
+
+Avg Edge Capture Pct =
+    CALCULATE(AVERAGE(Holly_Trades[Edge_Capture_Pct]), Holly_Trades[is_winner] = TRUE)
+
+Avg Left on Table =
+    CALCULATE(AVERAGE(Holly_Trades[Left_On_Table]), Holly_Trades[is_winner] = TRUE)
+
+Avg Winner MAE =
+    CALCULATE(AVERAGE(Holly_Trades[mae]), Holly_Trades[is_winner] = TRUE)
+
+MFE Captured Ratio =
+    VAR _totalMFE = CALCULATE(SUM(Holly_Trades[mfe]), Holly_Trades[is_winner] = TRUE)
+    VAR _totalPnL = CALCULATE(SUM(Holly_Trades[pnl_per_share]), Holly_Trades[is_winner] = TRUE)
+    RETURN IF(_totalMFE > 0, DIVIDE(_totalPnL, _totalMFE), BLANK())
+
+Max Single Trade Win =
+    CALCULATE(MAX(Holly_Trades[holly_pnl]), ALL(Holly_Trades))
+
+Max Single Trade Loss =
+    CALCULATE(MIN(Holly_Trades[holly_pnl]), ALL(Holly_Trades))
+
+
+// ════════════════════════════════════════════════════════════
+// FOLDER: Regime Metrics
+// ════════════════════════════════════════════════════════════
+
+Regime Trades =
+    CALCULATE([Total Trades], Holly_Trades[Has_Regime_Flag] = "With Regime Data")
+
+Regime Win Rate =
+    CALCULATE([Win Rate], Holly_Trades[Has_Regime_Flag] = "With Regime Data")
+
+Regime PnL =
+    CALCULATE([Total PnL], Holly_Trades[Has_Regime_Flag] = "With Regime Data")
+
+Regime Avg PnL =
+    CALCULATE([Avg PnL], Holly_Trades[Has_Regime_Flag] = "With Regime Data")
+
+Regime Coverage Pct = DIVIDE([Regime Trades], [Total Trades])
+
+PnL Uptrend NormalVol =
+    CALCULATE(
+        SUM(Holly_Trades[holly_pnl]),
+        Holly_Trades[trend_regime] = "uptrend",
+        Holly_Trades[vol_regime] = "normal_vol"
+    )
+
+Win Rate Uptrend NormalVol =
+    CALCULATE(
+        [Win Rate],
+        Holly_Trades[trend_regime] = "uptrend",
+        Holly_Trades[vol_regime] = "normal_vol"
+    )
+
+Regime PnL Improvement Pct =
+    VAR _filteredAvg =
+        CALCULATE(
+            AVERAGE(Holly_Trades[holly_pnl]),
+            Holly_Trades[trend_regime] = "uptrend",
+            Holly_Trades[vol_regime] = "normal_vol"
+        )
+    VAR _overallAvg = CALCULATE(AVERAGE(Holly_Trades[holly_pnl]), ALL(Holly_Trades))
+    RETURN DIVIDE(_filteredAvg - _overallAvg, ABS(_overallAvg), 0)
+
+Regime Improvement Text =
+    VAR _filteredAvg =
+        CALCULATE(
+            AVERAGE(Holly_Trades[holly_pnl]),
+            Holly_Trades[trend_regime] = "uptrend",
+            Holly_Trades[vol_regime] = "normal_vol"
+        )
+    VAR _overallAvg = CALCULATE(AVERAGE(Holly_Trades[holly_pnl]), ALL(Holly_Trades))
+    VAR _pct = DIVIDE(_filteredAvg - _overallAvg, ABS(_overallAvg), 0) * 100
+    RETURN
+    "Regime filter (uptrend + normal_vol): Avg PnL " &
+    FORMAT(_filteredAvg, "$#,0.00") & " vs Overall " &
+    FORMAT(_overallAvg, "$#,0.00") & " (" &
+    FORMAT(_pct, "#,0.0") & "% improvement)"
+
+
+// ════════════════════════════════════════════════════════════
+// FOLDER: Exit Rule Metrics
+// ════════════════════════════════════════════════════════════
+
+Exit Rule Trades =
+    CALCULATE([Total Trades], Holly_Trades[Has_Exit_Rule_Flag] = "With Exit Rule")
+
+Avg Opt Sharpe = AVERAGE(Holly_Trades[opt_sharpe])
+
+Avg Opt Win Rate = AVERAGE(Holly_Trades[opt_win_rate])
+
+Avg Opt Profit Factor = AVERAGE(Holly_Trades[opt_profit_factor])
+
+Avg Opt Max Drawdown = AVERAGE(Holly_Trades[opt_max_drawdown])
+
+Avg Opt PnL = AVERAGE(Holly_Trades[opt_avg_pnl])
+
+Holly Default Avg PnL =
+    CALCULATE(
+        AVERAGE(Holly_Trades[holly_pnl]),
+        Holly_Trades[Has_Exit_Rule_Flag] = "With Exit Rule"
+    )
+
+Optimizer Avg PnL =
+    CALCULATE(
+        AVERAGE(Holly_Trades[opt_avg_pnl]),
+        Holly_Trades[Has_Exit_Rule_Flag] = "With Exit Rule"
+    )
+
+Exit Rule Improvement =
+    VAR _holly = [Holly Default Avg PnL]
+    VAR _opt = [Optimizer Avg PnL]
+    RETURN _opt - _holly
+
+Top 10 Symbol PnL Pct =
+    VAR _top10 =
+        TOPN(
+            10,
+            ADDCOLUMNS(
+                VALUES(Holly_Trades[symbol]),
+                "@PnL", CALCULATE(SUM(Holly_Trades[holly_pnl]))
+            ),
+            [@PnL], DESC
+        )
+    VAR _top10Total = SUMX(_top10, [@PnL])
+    VAR _grandTotal = CALCULATE(SUM(Holly_Trades[holly_pnl]), ALL(Holly_Trades))
+    RETURN DIVIDE(_top10Total, _grandTotal, 0)
+
+
+// ════════════════════════════════════════════════════════════
+// FOLDER: What-If Analysis
+// ════════════════════════════════════════════════════════════
+
+// Create What-If Parameter first:
+//   Min Stop Buffer = GENERATESERIES(0, 3, 0.05)
+//   Min Stop Buffer Value = SELECTEDVALUE('Min Stop Buffer'[Min Stop Buffer], 0)
+
+Filtered Total Trades =
+    VAR _minBuffer = [Min Stop Buffer Value]
+    RETURN
+    CALCULATE(
+        COUNTROWS(Holly_Trades),
+        Holly_Trades[stop_buffer_pct] >= _minBuffer
+    )
+
+Filtered Win Rate =
+    VAR _minBuffer = [Min Stop Buffer Value]
+    VAR _filtered = FILTER(Holly_Trades, Holly_Trades[stop_buffer_pct] >= _minBuffer)
+    VAR _wins = COUNTROWS(FILTER(_filtered, Holly_Trades[is_winner] = TRUE))
+    VAR _total = COUNTROWS(_filtered)
+    RETURN DIVIDE(_wins, _total)
+
+Filtered Avg PnL =
+    VAR _minBuffer = [Min Stop Buffer Value]
+    RETURN
+    CALCULATE(
+        AVERAGE(Holly_Trades[holly_pnl]),
+        Holly_Trades[stop_buffer_pct] >= _minBuffer
+    )
+
+Filtered Profit Factor =
+    VAR _minBuffer = [Min Stop Buffer Value]
+    VAR _winPnL =
+        CALCULATE(
+            SUM(Holly_Trades[holly_pnl]),
+            Holly_Trades[is_winner] = TRUE,
+            Holly_Trades[stop_buffer_pct] >= _minBuffer
+        )
+    VAR _losePnL =
+        CALCULATE(
+            SUM(Holly_Trades[holly_pnl]),
+            Holly_Trades[is_loser] = TRUE,
+            Holly_Trades[stop_buffer_pct] >= _minBuffer
+        )
+    RETURN IF(ABS(_losePnL) > 0, DIVIDE(_winPnL, ABS(_losePnL)), BLANK())
+
+Filtered Total PnL =
+    VAR _minBuffer = [Min Stop Buffer Value]
+    RETURN
+    CALCULATE(
+        SUM(Holly_Trades[holly_pnl]),
+        Holly_Trades[stop_buffer_pct] >= _minBuffer
+    )
+
+Filtered Cumulative PnL =
+    VAR _minBuffer = [Min Stop Buffer Value]
+    VAR _maxDate = MAX(Holly_Trades[trade_date])
+    RETURN
+    CALCULATE(
+        SUM(Holly_Trades[holly_pnl]),
+        Holly_Trades[stop_buffer_pct] >= _minBuffer,
+        FILTER(
+            ALLSELECTED(Holly_Trades[trade_date]),
+            Holly_Trades[trade_date] <= _maxDate
+        )
+    )
+
+
+// ════════════════════════════════════════════════════════════
+// FOLDER: Conditional Formatting
+// ════════════════════════════════════════════════════════════
+
+PnL Color = IF([Total PnL] >= 0, "#00D4AA", "#FF4444")
+
+Win Rate Color =
+    SWITCH(
+        TRUE(),
+        [Win Rate] >= 0.55, "#00D4AA",
+        [Win Rate] >= 0.50, "#FFD700",
+        TRUE(), "#FF4444"
+    )
+
+PF Color =
+    SWITCH(
+        TRUE(),
+        [Profit Factor] >= 2.0, "#00D4AA",
+        [Profit Factor] >= 1.0, "#FFD700",
+        TRUE(), "#FF4444"
+    )
+
+R Multiple Color =
+    SWITCH(
+        TRUE(),
+        [Avg R Multiple] >= 1, "#00D4AA",
+        [Avg R Multiple] >= 0, "#FFD700",
+        TRUE(), "#FF4444"
+    )
+
+Sharpe Color =
+    SWITCH(
+        TRUE(),
+        [Sharpe Ratio] >= 2.0, "#00D4AA",
+        [Sharpe Ratio] >= 1.0, "#FFD700",
+        TRUE(), "#FF4444"
+    )
+
+Edge Score Color =
+    SWITCH(
+        TRUE(),
+        [Edge Score] >= 1.5, "#00D4AA",
+        [Edge Score] >= 1.0, "#FFD700",
+        TRUE(), "#FF4444"
+    )
+
+Consistency Color =
+    SWITCH(
+        TRUE(),
+        [Consistency Score] >= 0.60, "#00D4AA",
+        [Consistency Score] >= 0.45, "#FFD700",
+        TRUE(), "#FF4444"
+    )
+
+
+// ════════════════════════════════════════════════════════════
+// FOLDER: Display Formatting
+// ════════════════════════════════════════════════════════════
+
+Win Rate Display = FORMAT([Win Rate], "0.0%")
+
+Total PnL Display =
+    VAR _pnl = [Total PnL]
+    RETURN
+    IF(
+        ABS(_pnl) >= 1000000,
+        FORMAT(_pnl / 1000000, "$#,0.0") & "M",
+        IF(
+            ABS(_pnl) >= 1000,
+            FORMAT(_pnl / 1000, "$#,0.0") & "K",
+            FORMAT(_pnl, "$#,0")
+        )
+    )
+
+Avg PnL Display = FORMAT([Avg PnL], "$#,0.00")
+
+Profit Factor Display = FORMAT([Profit Factor], "#,0.00")
+
+Avg R Display = FORMAT([Avg R Multiple], "#,0.00")
+
+Hold Time Display = FORMAT([Avg Hold Minutes], "#,0") & " min"
+
+Total Trades Display = FORMAT([Total Trades], "#,0")
+
+Sharpe Display = FORMAT([Sharpe Ratio], "#,0.00")
+
+Edge Score Display = FORMAT([Edge Score], "#,0.00")
+
+Consistency Display = FORMAT([Consistency Score], "0.0%")
+
+
+// ════════════════════════════════════════════════════════════
+// FOLDER: Dynamic Titles
+// ════════════════════════════════════════════════════════════
+
+Equity Curve Title =
+    "Cumulative P&L: " & [Total PnL Display] &
+    " | Max DD: " & FORMAT([Max Drawdown Amount], "$#,0") &
+    " | Current DD: " & FORMAT([Drawdown], "$#,0")
+
+Strategy Scorecard Title =
+    VAR _count = DISTINCTCOUNT(Holly_Trades[strategy])
+    VAR _topStrat =
+        TOPN(1,
+            ADDCOLUMNS(
+                VALUES(Holly_Trades[strategy]),
+                "@WR", CALCULATE([Win Rate])
+            ),
+            [@WR], DESC
+        )
+    VAR _topName = MAXX(_topStrat, Holly_Trades[strategy])
+    VAR _topWR = MAXX(_topStrat, [@WR])
+    RETURN
+    FORMAT(_count, "#,0") & " Strategies Ranked | Top Edge: " &
+    _topName & " at " & FORMAT(_topWR, "0.0%") & " WR"
+
+Page Summary Text =
+    FORMAT([Total Trades], "#,0") & " trades | " &
+    FORMAT(DISTINCTCOUNT(Holly_Trades[symbol]), "#,0") & " symbols | " &
+    FORMAT(MIN(Holly_Trades[trade_date]), "MMM YYYY") & " – " &
+    FORMAT(MAX(Holly_Trades[trade_date]), "MMM YYYY")
+
+Last Refreshed = "Last refreshed: " & FORMAT(NOW(), "MMM DD, YYYY HH:MM")

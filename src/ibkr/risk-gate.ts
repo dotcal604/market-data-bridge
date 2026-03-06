@@ -253,7 +253,11 @@ export function checkRisk(params: RiskCheckParams): RiskCheckResult {
     (SESSION_LIMITS.marketCloseHour - et.hours) * 60 +
     (SESSION_LIMITS.marketCloseMinute - et.minutes);
 
-  if (minutesBeforeClose <= SESSION_LIMITS.lateDayLockoutMinutes && minutesBeforeClose >= 0) {
+  // Closing/exit orders bypass late-day lockout and notional limits —
+  // you should always be able to flatten positions.
+  const isSell = params.action.toUpperCase() === "SELL";
+
+  if (!isSell && minutesBeforeClose <= SESSION_LIMITS.lateDayLockoutMinutes && minutesBeforeClose >= 0) {
     const reason = `Late-day lockout: ${minutesBeforeClose} min before close (lockout at ${SESSION_LIMITS.lateDayLockoutMinutes} min)`;
     logRisk.warn({ ...params, minutesBeforeClose }, reason);
     emitIncident("risk_late_lockout", "info", reason);
@@ -273,7 +277,7 @@ export function checkRisk(params: RiskCheckParams): RiskCheckResult {
   }
 
   const price = params.estimatedPrice ?? params.lmtPrice ?? params.auxPrice ?? 0;
-  if (price > 0) {
+  if (!isSell && price > 0) {
     const notional = params.totalQuantity * price;
     if (notional > dynamicMaxNotional) {
       const reason = `Notional value $${notional.toFixed(2)} exceeds max $${dynamicMaxNotional.toFixed(2)}`;

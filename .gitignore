@@ -27,6 +27,11 @@ coverage/
 
 # Python analytics venv
 analytics/.venv/
+analytics/holly_exit/.venv/
+analytics/holly_exit/data/parquet/
+analytics/holly_exit/data/duckdb/
+analytics/holly_exit/output/
+analytics/holly_exit/.env
 __pycache__/
 *.pyc
 
@@ -42,3 +47,18 @@ nohup.out
 hud-test.jpg
 treemap-*.png
 .playwright-mcp/
+
+# Holly raw data exports (large CSV batches)
+holly_exports/
+analytics/holly_exit/data/raw/
+analytics/holly_exit/data/reference/
+analytics/holly_exit/fetch_lookback.log
+analytics/output/
+
+# Holly export bot artifacts
+scripts/debug_screenshots/
+scripts/holly_export_progress.json
+scripts/holly_calibration.json
+
+# Power BI data files (binary, too large for git)
+powerbi/*.xlsx

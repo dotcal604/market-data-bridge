@@ -24,7 +24,10 @@ import { computePortfolioExposure } from "../ibkr/portfolio.js";
 import { setFlattenEnabled, getFlattenConfig } from "../scheduler.js";
 import { getContractDetails } from "../ibkr/contracts.js";
 import { getIBKRQuote, getHistoricalTicks } from "../ibkr/marketdata.js";
-import { reqHistoricalNews, reqNewsArticle, reqNewsBulletins, reqNewsProviders } from "../ibkr/news.js";
+import {
+  reqHistoricalNews, reqNewsArticle, reqNewsBulletins, reqNewsProviders,
+  reqBenzingaNews, reqBenzingaArticle, detectBenzingaProvider, buildNewsDateRange,
+} from "../ibkr/news.js";
 import {
   subscribeRealTimeBars, unsubscribeRealTimeBars, getRealTimeBars,
   subscribeAccountUpdates, unsubscribeAccountUpdates, getAccountSnapshot,
@@ -416,6 +419,90 @@ router.get("/news/bulletins", async (_req, res) => {
   try {
     const bulletins = await reqNewsBulletins();
     res.json({ count: bulletins.length, bulletins });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/news/benzinga/providers — Check Benzinga availability
+router.get("/news/benzinga/providers", async (_req, res) => {
+  if (!isConnected()) {
+    res.json({ error: "IBKR not connected. Start TWS/Gateway for Benzinga news." });
+    return;
+  }
+  try {
+    const code = await detectBenzingaProvider();
+    res.json({ benzingaAvailable: true, providerCode: code });
+  } catch (e: any) {
+    const providers = await reqNewsProviders();
+    res.json({ benzingaAvailable: false, message: e.message, availableProviders: providers });
+  }
+});
+
+// GET /api/news/benzinga/headlines/:symbol — Benzinga headlines for a symbol
+router.get("/news/benzinga/headlines/:symbol", async (req, res) => {
+  if (!isConnected()) {
+    res.json({ error: "IBKR not connected. Start TWS/Gateway for Benzinga news." });
+    return;
+  }
+  const { symbol } = req.params;
+  const symError = validateSymbol(symbol);
+  if (symError) { res.status(400).json({ error: symError }); return; }
+
+  const hoursBack = req.query.hoursBack ? parseInt(String(req.query.hoursBack), 10) : 24;
+  const startOverride = req.query.startDateTime ? String(req.query.startDateTime) : undefined;
+  const endOverride = req.query.endDateTime ? String(req.query.endDateTime) : undefined;
+
+  let start: string;
+  let end: string;
+  if (startOverride && endOverride) {
+    start = startOverride;
+    end = endOverride;
+  } else {
+    const range = buildNewsDateRange(Math.min(hoursBack, 720));
+    start = range.startDateTime;
+    end = range.endDateTime;
+  }
+
+  try {
+    const [contract] = await getContractDetails({
+      symbol: symbol.toUpperCase(),
+      secType: qs(req.query.secType, "") || undefined,
+      exchange: qs(req.query.exchange, "") || undefined,
+      currency: qs(req.query.currency, "") || undefined,
+    });
+    if (!contract) {
+      res.status(404).json({ error: `No contract found for symbol ${symbol}` });
+      return;
+    }
+    const headlines = await reqBenzingaNews(contract.conId, start, end);
+    res.json({
+      symbol: symbol.toUpperCase(),
+      conId: contract.conId,
+      source: "Benzinga (via IBKR)",
+      dateRange: { start, end },
+      count: headlines.length,
+      headlines,
+    });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/news/benzinga/article/:articleId — Full Benzinga article
+router.get("/news/benzinga/article/:articleId", async (req, res) => {
+  if (!isConnected()) {
+    res.json({ error: "IBKR not connected. Start TWS/Gateway for Benzinga articles." });
+    return;
+  }
+  const { articleId } = req.params;
+  if (!articleId || articleId.length < 1) {
+    res.status(400).json({ error: "articleId is required" });
+    return;
+  }
+  try {
+    const article = await reqBenzingaArticle(articleId);
+    res.json({ source: "Benzinga (via IBKR)", ...article });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }

@@ -139,3 +139,30 @@
   - episodic-memory plugin: DO NOT install (conflicts with .claude/memory/)
   - Recommendation: keep core superpowers, skip episodic-memory + session-driver
 - Next: test typescript-lsp in fresh session; Qodo Gen(8) + Windsurf(9) handshakes still pending
+
+## 2026-03-04 17:00 — desktop — Holly Exit Optimizer complete + Benzinga integration + feature plan
+
+- **Holly Exit Optimizer v2 pipeline completed end-to-end:**
+  - Scripts 01→07 all ran successfully
+  - 8,224 trades ingested, 6,016 symbol-dates fetched from Polygon (paid API key, 5yr lookback)
+  - 2,714,335 bars loaded into DuckDB (6.8s), 6,099 trades with bar data (74.2% coverage)
+  - 264 parameter combos × 34 strategies = 9,240 total sweep results
+  - 30 heatmaps + summary report generated
+  - Exported `optimal_exit_params.json` with 34 strategy configurations
+  - **Bug noted:** Bull Trap ($1.85B P&L) and Count De Monet (-$1.37B) results likely from direction inference issues with `direction_int=0` trades — needs fix before production use
+- **Benzinga news integration shipped:**
+  - Added `reqBenzingaNews()`, `reqBenzingaArticle()`, `detectBenzingaProvider()`, `buildNewsDateRange()` to `src/ibkr/news.ts`
+  - 3 new MCP tools: `get_benzinga_news`, `get_benzinga_article`, `get_benzinga_providers`
+  - 3 new REST endpoints: `GET /api/news/benzinga/providers`, `GET /api/news/benzinga/headlines/:symbol`, `GET /api/news/benzinga/article/:articleId`
+  - Auto-detects Benzinga provider code from IBKR subscription (caches for session)
+  - Smart defaults: 24h lookback, auto-date-range builder, source disclosure
+  - TSC clean, 1703/1706 tests passing (3 pre-existing divoom widget test failures)
+  - Updated CLAUDE.md data routing section with Benzinga tools
+- **Feature implementation plan created:** `docs/FEATURE-PLAN.md`
+  - 5 phases, 13 features, 6 agents, ~52 hours estimated
+  - Cost-optimized: ~70% free/cheap agents, ~30% Claude Code
+  - Priority order: P0 (exit params tool + direction bug) → P1 (sentiment + auto-apply) → P2-P4
+  - Agent delegation follows ORCHESTRATION.md routing rules
+- **Polygon API key:** Upgraded to paid Starter tier (`6SGQUWC_...`), unlimited rate, 5-year lookback (2021-03-04+)
+- Build: clean. Tests: 98/99 files pass, 1703/1706 tests pass
+- Next: P0 features (exit params MCP tool + direction bug fix), then P1 sentiment scoring

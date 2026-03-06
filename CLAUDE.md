@@ -30,6 +30,7 @@ If `get_status` fails, do not proceed with analysis. Report the connection issue
 - Contract details — `get_contract_details`
 - Direct IBKR quote snapshots — `get_ibkr_quote`
 - Portfolio analytics — `portfolio_exposure`, `stress_test`, `size_position`
+- Benzinga news — `get_benzinga_news`, `get_benzinga_article`, `get_benzinga_providers`
 
 **Yahoo Finance (always available):**
 - Quotes (fallback when IBKR unavailable) — `get_quote` auto-routes

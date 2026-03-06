@@ -1,0 +1,406 @@
+// ============================================================
+// HOLLY AI DASHBOARD — DAX MEASURES
+// ============================================================
+// IMPORT INSTRUCTIONS:
+// 1. In Power BI Model view, select the "Measures" table
+// 2. For each measure below, click "New Measure" in the ribbon
+// 3. Paste the DAX formula into the formula bar
+// 4. Press Enter to save
+//
+// TIP: You can also paste these into DAX Studio or Tabular Editor
+// for faster bulk entry.
+// ============================================================
+
+
+// ============================================================
+// SECTION 1: CORE KPIs
+// ============================================================
+
+Total Trades = COUNTROWS('holly_analytics')
+
+Win Count = COUNTROWS(FILTER('holly_analytics', 'holly_analytics'[holly_pnl] > 0))
+
+Loss Count = COUNTROWS(FILTER('holly_analytics', 'holly_analytics'[holly_pnl] < 0))
+
+Scratch Count = COUNTROWS(FILTER('holly_analytics', 'holly_analytics'[holly_pnl] = 0))
+
+Win Rate =
+    DIVIDE(
+        [Win Count],
+        [Total Trades],
+        0
+    )
+
+Loss Rate =
+    DIVIDE(
+        [Loss Count],
+        [Total Trades],
+        0
+    )
+
+Total PnL = SUM('holly_analytics'[holly_pnl])
+
+Avg PnL = AVERAGE('holly_analytics'[holly_pnl])
+
+Gross Profit =
+    CALCULATE(
+        SUM('holly_analytics'[holly_pnl]),
+        'holly_analytics'[holly_pnl] > 0
+    )
+
+Gross Loss =
+    CALCULATE(
+        SUM('holly_analytics'[holly_pnl]),
+        'holly_analytics'[holly_pnl] < 0
+    )
+
+Profit Factor =
+    DIVIDE(
+        [Gross Profit],
+        ABS([Gross Loss]),
+        0
+    )
+
+Avg Winner =
+    CALCULATE(
+        AVERAGE('holly_analytics'[holly_pnl]),
+        'holly_analytics'[holly_pnl] > 0
+    )
+
+Avg Loser =
+    CALCULATE(
+        AVERAGE('holly_analytics'[holly_pnl]),
+        'holly_analytics'[holly_pnl] < 0
+    )
+
+Win Loss Ratio =
+    DIVIDE(
+        [Avg Winner],
+        ABS([Avg Loser]),
+        0
+    )
+
+Avg R-Multiple = AVERAGE('holly_analytics'[r_multiple])
+
+Median R-Multiple = MEDIAN('holly_analytics'[r_multiple])
+
+Avg Hold Minutes = AVERAGE('holly_analytics'[hold_minutes])
+
+Expectancy =
+    ([Win Rate] * [Avg Winner]) + ([Loss Rate] * [Avg Loser])
+
+
+// ============================================================
+// SECTION 2: EQUITY CURVE & DRAWDOWN
+// ============================================================
+
+Cumulative PnL =
+    VAR CurrentTime = MAX('holly_analytics'[entry_time])
+    RETURN
+    CALCULATE(
+        SUM('holly_analytics'[holly_pnl]),
+        FILTER(
+            ALL('holly_analytics'),
+            'holly_analytics'[entry_time] <= CurrentTime
+        )
+    )
+
+// --- Running Max PnL (for drawdown calculation) ---
+// NOTE: This is computationally expensive. For 28K rows, consider
+// using a calculated column instead if performance is slow.
+// To add as calculated column: Table tools > New Column > paste formula below.
+
+Running Max PnL =
+    VAR CurrentTime = MAX('holly_analytics'[entry_time])
+    VAR AllPriorTrades =
+        FILTER(
+            ALL('holly_analytics'),
+            'holly_analytics'[entry_time] <= CurrentTime
+        )
+    RETURN
+    MAXX(
+        AllPriorTrades,
+        VAR TradeTime = 'holly_analytics'[entry_time]
+        RETURN
+        CALCULATE(
+            SUM('holly_analytics'[holly_pnl]),
+            FILTER(
+                ALL('holly_analytics'),
+                'holly_analytics'[entry_time] <= TradeTime
+            )
+        )
+    )
+
+Drawdown = [Cumulative PnL] - [Running Max PnL]
+
+// --- ALTERNATIVE: Pre-computed equity curve using calculated columns ---
+// If the measures above are too slow, add these as CALCULATED COLUMNS
+// on holly_analytics (sort by Trade Index first):
+//
+// Cumulative PnL Col =
+//     CALCULATE(
+//         SUM('holly_analytics'[holly_pnl]),
+//         FILTER(
+//             ALL('holly_analytics'),
+//             'holly_analytics'[Trade Index] <= 'holly_analytics'[Trade Index]
+//         )
+//     )
+//
+// Then use MAX('holly_analytics'[Cumulative PnL Col]) in charts.
+
+
+// ============================================================
+// SECTION 3: ROLLING METRICS
+// ============================================================
+
+// Rolling 30-trade win rate
+Rolling 30 Win Rate =
+    VAR CurrentIndex = MAX('holly_analytics'[Trade Index])
+    VAR WindowStart = CurrentIndex - 29
+    RETURN
+    DIVIDE(
+        CALCULATE(
+            COUNTROWS(FILTER('holly_analytics', 'holly_analytics'[holly_pnl] > 0)),
+            FILTER(
+                ALL('holly_analytics'),
+                'holly_analytics'[Trade Index] >= WindowStart &&
+                'holly_analytics'[Trade Index] <= CurrentIndex
+            )
+        ),
+        CALCULATE(
+            COUNTROWS('holly_analytics'),
+            FILTER(
+                ALL('holly_analytics'),
+                'holly_analytics'[Trade Index] >= WindowStart &&
+                'holly_analytics'[Trade Index] <= CurrentIndex
+            )
+        ),
+        BLANK()
+    )
+
+// Rolling 100-trade profit factor
+Rolling 100 Profit Factor =
+    VAR CurrentIndex = MAX('holly_analytics'[Trade Index])
+    VAR WindowStart = CurrentIndex - 99
+    VAR WindowProfit =
+        CALCULATE(
+            SUM('holly_analytics'[holly_pnl]),
+            FILTER(
+                ALL('holly_analytics'),
+                'holly_analytics'[Trade Index] >= WindowStart &&
+                'holly_analytics'[Trade Index] <= CurrentIndex &&
+                'holly_analytics'[holly_pnl] > 0
+            )
+        )
+    VAR WindowLoss =
+        CALCULATE(
+            SUM('holly_analytics'[holly_pnl]),
+            FILTER(
+                ALL('holly_analytics'),
+                'holly_analytics'[Trade Index] >= WindowStart &&
+                'holly_analytics'[Trade Index] <= CurrentIndex &&
+                'holly_analytics'[holly_pnl] < 0
+            )
+        )
+    RETURN
+    DIVIDE(WindowProfit, ABS(WindowLoss), BLANK())
+
+// Rolling 50-trade Avg PnL
+Rolling 50 Avg PnL =
+    VAR CurrentIndex = MAX('holly_analytics'[Trade Index])
+    VAR WindowStart = CurrentIndex - 49
+    RETURN
+    CALCULATE(
+        AVERAGE('holly_analytics'[holly_pnl]),
+        FILTER(
+            ALL('holly_analytics'),
+            'holly_analytics'[Trade Index] >= WindowStart &&
+            'holly_analytics'[Trade Index] <= CurrentIndex
+        )
+    )
+
+
+// ============================================================
+// SECTION 4: RISK & QUALITY METRICS
+// ============================================================
+
+Avg Left on Table = AVERAGE('holly_analytics'[Left on Table])
+
+Avg MFE = AVERAGE('holly_analytics'[mfe])
+
+Avg MAE = AVERAGE('holly_analytics'[mae])
+
+Avg Stop Buffer Pct = AVERAGE('holly_analytics'[stop_buffer_pct])
+
+Max Single Trade Loss =
+    CALCULATE(
+        MIN('holly_analytics'[holly_pnl]),
+        ALL('holly_analytics')
+    )
+
+Max Single Trade Win =
+    CALCULATE(
+        MAX('holly_analytics'[holly_pnl]),
+        ALL('holly_analytics')
+    )
+
+// Sharpe Proxy (annualized, assuming ~252 trading days)
+Sharpe Proxy =
+    VAR AvgDaily =
+        AVERAGEX(
+            VALUES('holly_analytics'[trade_date]),
+            CALCULATE(SUM('holly_analytics'[holly_pnl]))
+        )
+    VAR StdDaily =
+        CALCULATE(
+            STDEV.S('holly_analytics'[holly_pnl])
+        )
+    RETURN
+    DIVIDE(AvgDaily, StdDaily, 0) * SQRT(252)
+
+// Max Drawdown (absolute)
+Max Drawdown =
+    CALCULATE(
+        MIN('holly_analytics'[holly_pnl]),
+        ALLSELECTED('holly_analytics')
+    )
+
+// Unique Symbols Traded
+Unique Symbols = DISTINCTCOUNT('holly_analytics'[symbol])
+
+
+// ============================================================
+// SECTION 5: REGIME-FILTERED MEASURES
+// ============================================================
+
+// PnL in best regime (uptrend + normal vol)
+PnL Uptrend NormalVol =
+    CALCULATE(
+        SUM('holly_analytics'[holly_pnl]),
+        'holly_analytics'[trend_regime] = "uptrend",
+        'holly_analytics'[vol_regime] = "normal_vol"
+    )
+
+// Trade count in best regime
+Trades Uptrend NormalVol =
+    CALCULATE(
+        COUNTROWS('holly_analytics'),
+        'holly_analytics'[trend_regime] = "uptrend",
+        'holly_analytics'[vol_regime] = "normal_vol"
+    )
+
+// Win rate in best regime
+Win Rate Uptrend NormalVol =
+    CALCULATE(
+        [Win Rate],
+        'holly_analytics'[trend_regime] = "uptrend",
+        'holly_analytics'[vol_regime] = "normal_vol"
+    )
+
+// Avg PnL in best regime
+Avg PnL Uptrend NormalVol =
+    CALCULATE(
+        AVERAGE('holly_analytics'[holly_pnl]),
+        'holly_analytics'[trend_regime] = "uptrend",
+        'holly_analytics'[vol_regime] = "normal_vol"
+    )
+
+// Regime PnL improvement estimate
+Regime PnL Improvement Pct =
+    VAR FilteredAvg = [Avg PnL Uptrend NormalVol]
+    VAR OverallAvg = CALCULATE(AVERAGE('holly_analytics'[holly_pnl]), ALL('holly_analytics'))
+    RETURN
+    DIVIDE(FilteredAvg - OverallAvg, ABS(OverallAvg), 0)
+
+// PnL by regime (for text card)
+Regime Improvement Text =
+    VAR Pct = [Regime PnL Improvement Pct] * 100
+    RETURN
+    "If regime filters were applied (uptrend + normal_vol), estimated Avg PnL improvement = " &
+    FORMAT(Pct, "#,0.0") & "%  |  Filtered Avg PnL: $" &
+    FORMAT([Avg PnL Uptrend NormalVol], "#,0.00") & " vs Overall: $" &
+    FORMAT(CALCULATE(AVERAGE('holly_analytics'[holly_pnl]), ALL('holly_analytics')), "#,0.00")
+
+
+// ============================================================
+// SECTION 6: CONCENTRATION & DIVERSITY
+// ============================================================
+
+// Top 10 symbol concentration
+Top 10 Symbol PnL Pct =
+    VAR Top10Symbols =
+        TOPN(
+            10,
+            ADDCOLUMNS(
+                VALUES('holly_analytics'[symbol]),
+                "@PnL", CALCULATE(SUM('holly_analytics'[holly_pnl]))
+            ),
+            [@PnL],
+            DESC
+        )
+    VAR Top10Total = SUMX(Top10Symbols, [@PnL])
+    VAR GrandTotal = CALCULATE(SUM('holly_analytics'[holly_pnl]), ALL('holly_analytics'))
+    RETURN
+    DIVIDE(Top10Total, GrandTotal, 0)
+
+// Monthly unique symbols (for diversity trend line)
+Monthly Unique Symbols =
+    DISTINCTCOUNT('holly_analytics'[symbol])
+
+
+// ============================================================
+// SECTION 7: OPTIMIZATION COMPARISON
+// ============================================================
+
+// Holly Default Avg PnL (for comparison with optimizer)
+Holly Default Avg PnL =
+    CALCULATE(
+        AVERAGE('holly_analytics'[holly_pnl]),
+        'holly_analytics'[opt_exit_rule] <> "No Data"
+    )
+
+// Optimizer Avg PnL (from opt_avg_pnl column)
+Optimizer Avg PnL =
+    CALCULATE(
+        AVERAGE('holly_analytics'[opt_avg_pnl]),
+        'holly_analytics'[opt_exit_rule] <> "No Data"
+    )
+
+
+// ============================================================
+// SECTION 8: CONDITIONAL FORMATTING COLORS
+// ============================================================
+
+PnL Color =
+    IF([Total PnL] >= 0, "#00E676", "#FF5252")
+
+Win Rate Color =
+    IF([Win Rate] >= 0.55, "#00E676",
+    IF([Win Rate] >= 0.45, "#FFD740", "#FF5252"))
+
+Profit Factor Color =
+    IF([Profit Factor] >= 1.5, "#00E676",
+    IF([Profit Factor] >= 1.0, "#FFD740", "#FF5252"))
+
+R Multiple Color =
+    IF([Avg R-Multiple] >= 1, "#00E676",
+    IF([Avg R-Multiple] >= 0, "#FFD740", "#FF5252"))
+
+
+// ============================================================
+// SECTION 9: FORMATTED DISPLAY MEASURES
+// ============================================================
+
+Win Rate Display = FORMAT([Win Rate], "0.0%")
+
+Total PnL Display = FORMAT([Total PnL], "$#,0")
+
+Avg PnL Display = FORMAT([Avg PnL], "$#,0.00")
+
+Profit Factor Display = FORMAT([Profit Factor], "#,0.00")
+
+Avg R Display = FORMAT([Avg R-Multiple], "#,0.00")
+
+Hold Time Display = FORMAT([Avg Hold Minutes], "#,0") & " min"
+
+Total Trades Display = FORMAT([Total Trades], "#,0")
