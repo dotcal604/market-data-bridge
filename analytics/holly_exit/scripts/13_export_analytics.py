@@ -1,22 +1,33 @@
 """
 13_export_analytics.py — Export denormalized analytics file for Tableau/Power BI.
 
-Joins trades + regime features + optimization results into a single flat
-Parquet (and CSV) file for BI tool consumption.
+Joins trades + regime features + optimization results + ticker details into a
+single flat Parquet (and CSV) file for BI tool consumption.
+
+Enrichments added post-query:
+  - Time-of-day 30-min bucket with conditional win rate & expectancy
+  - Strategy-level edge metrics (Bayesian WR, Kelly, edge verdict)
+  - Sector-conditional win rates
+  - Regime-conditional win rates
+  - Rolling strategy performance (20-trade trailing WR/PnL)
 
 Usage:
     python scripts/13_export_analytics.py
 """
 
+import json
 import sys
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config.settings import OUTPUT_DIR
 from engine.data_loader import get_db
+
+PROB_JSON = Path(__file__).parent.parent.parent / "output" / "statistical_probability.json"
 
 
 def main():
@@ -120,6 +131,113 @@ def main():
         df["pnl_per_share"] / risk.replace(0, float("nan"))
     ).round(2)
 
+    # ── Time-of-day bucketing (30-min buckets) ─────────────────────
+    entry_dt = pd.to_datetime(df["entry_time"])
+    entry_minutes = entry_dt.dt.hour * 60 + entry_dt.dt.minute
+    df["tod_bucket"] = (entry_minutes // 30 * 30).apply(
+        lambda m: f"{m // 60:02d}:{m % 60:02d}"
+    )
+
+    # Conditional WR & expectancy per time-of-day bucket
+    tod_stats = df.groupby("tod_bucket").agg(
+        tod_trades=("holly_pnl", "count"),
+        tod_win_rate=("is_winner", "mean"),
+        tod_avg_pnl=("holly_pnl", "mean"),
+    ).round(4)
+    df = df.merge(tod_stats, on="tod_bucket", how="left")
+
+    # ── Strategy-level conditional metrics ─────────────────────────
+    strat_stats = df.groupby("strategy").agg(
+        strat_trades=("holly_pnl", "count"),
+        strat_win_rate=("is_winner", "mean"),
+        strat_avg_pnl=("holly_pnl", "mean"),
+        strat_total_pnl=("holly_pnl", "sum"),
+        strat_std_pnl=("holly_pnl", "std"),
+    ).round(4)
+    # Sharpe proxy (mean/std annualized by sqrt(trades))
+    strat_stats["strat_sharpe"] = np.where(
+        strat_stats["strat_std_pnl"] > 0,
+        (strat_stats["strat_avg_pnl"] / strat_stats["strat_std_pnl"]).round(4),
+        0,
+    )
+    strat_stats = strat_stats.drop(columns=["strat_std_pnl"])
+    df = df.merge(strat_stats, on="strategy", how="left")
+
+    # ── Sector-conditional win rate ────────────────────────────────
+    if "sector" in df.columns:
+        sector_mask = df["sector"].notna()
+        sector_stats = df.loc[sector_mask].groupby("sector").agg(
+            sector_trades=("holly_pnl", "count"),
+            sector_win_rate=("is_winner", "mean"),
+            sector_avg_pnl=("holly_pnl", "mean"),
+        ).round(4)
+        df = df.merge(sector_stats, on="sector", how="left")
+    else:
+        df["sector_trades"] = np.nan
+        df["sector_win_rate"] = np.nan
+        df["sector_avg_pnl"] = np.nan
+
+    # ── Regime-conditional win rate (per regime state) ─────────────
+    for regime_col in ["trend_regime", "vol_regime", "momentum_regime"]:
+        prefix = regime_col.replace("_regime", "")
+        if regime_col in df.columns:
+            regime_mask = df[regime_col].notna()
+            regime_stats = df.loc[regime_mask].groupby(regime_col).agg(
+                **{f"{prefix}_cond_wr": ("is_winner", "mean"),
+                   f"{prefix}_cond_avg_pnl": ("holly_pnl", "mean"),
+                   f"{prefix}_cond_trades": ("holly_pnl", "count")},
+            ).round(4)
+            df = df.merge(regime_stats, left_on=regime_col, right_index=True, how="left")
+
+    # ── Rolling 20-trade trailing metrics per strategy ─────────────
+    df = df.sort_values(["strategy", "entry_time"])
+    df["strat_rolling_wr_20"] = (
+        df.groupby("strategy")["is_winner"]
+        .transform(lambda x: x.rolling(20, min_periods=10).mean())
+    ).round(4)
+    df["strat_rolling_pnl_20"] = (
+        df.groupby("strategy")["holly_pnl"]
+        .transform(lambda x: x.rolling(20, min_periods=10).mean())
+    ).round(2)
+    df = df.sort_values("entry_time")  # restore chronological order
+
+    # ── Probability engine results (per strategy) ──────────────────
+    if PROB_JSON.exists():
+        print(f"  Loading probability results from {PROB_JSON.name}...")
+        with open(PROB_JSON) as f:
+            prob = json.load(f)
+        profiles = prob.get("strategy_profiles", [])
+        if profiles:
+            prof_df = pd.DataFrame(profiles)[
+                ["strategy", "win_rate", "bayesian_wr_mean", "bayesian_ci_95",
+                 "prob_wr_gt_50", "prob_wr_gt_60", "t_stat", "t_p_value",
+                 "edge_verdict", "cohens_d", "kelly", "var_95", "payoff_ratio"]
+            ].rename(columns={
+                "win_rate": "prob_win_rate",
+                "bayesian_wr_mean": "prob_bayesian_wr",
+                "prob_wr_gt_50": "prob_wr_above_50",
+                "prob_wr_gt_60": "prob_wr_above_60",
+                "t_stat": "prob_t_stat",
+                "t_p_value": "prob_t_pvalue",
+                "edge_verdict": "prob_edge_verdict",
+                "cohens_d": "prob_cohens_d",
+                "kelly": "prob_kelly",
+                "var_95": "prob_var95",
+                "payoff_ratio": "prob_payoff_ratio",
+            })
+            # Bayesian CI -> two columns
+            prof_df["prob_bayesian_ci_lo"] = prof_df["bayesian_ci_95"].apply(
+                lambda x: x[0] if isinstance(x, list) else np.nan
+            )
+            prof_df["prob_bayesian_ci_hi"] = prof_df["bayesian_ci_95"].apply(
+                lambda x: x[1] if isinstance(x, list) else np.nan
+            )
+            prof_df = prof_df.drop(columns=["bayesian_ci_95"])
+            df = df.merge(prof_df, on="strategy", how="left")
+            print(f"    Matched {df['prob_edge_verdict'].notna().sum():,} trades with probability data")
+    else:
+        print("  No probability JSON found, skipping. Run statistical_probability.py first.")
+
     # ── Export ─────────────────────────────────────────────────────────
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -137,13 +255,53 @@ def main():
     print(f"  With regime data: {df['has_regime_data'].sum():,}")
     print(f"  With optimization: {df['opt_exit_rule'].notna().sum():,}")
     print(f"  With sector data:  {df['sector'].notna().sum():,}")
+    if "prob_edge_verdict" in df.columns:
+        print(f"  With prob data:    {df['prob_edge_verdict'].notna().sum():,}")
+        # Show edge verdict distribution
+        verdicts = df["prob_edge_verdict"].dropna().value_counts()
+        for v, c in verdicts.items():
+            print(f"    {v}: {c:,} trades")
 
-    # Column summary
-    print(f"\nColumns:")
-    for col in df.columns:
-        dtype = df[col].dtype
-        nulls = df[col].isna().sum()
-        print(f"  {col:<25} {str(dtype):<15} {nulls:>6} nulls")
+    # Column summary by category
+    print(f"\nColumns ({len(df.columns)} total):")
+    categories = {
+        "Trade Core": ["trade_id", "symbol", "strategy", "direction", "entry_time",
+                       "entry_price", "exit_time", "exit_price", "real_entry_price",
+                       "real_entry_time", "holly_pnl", "shares", "stop_price",
+                       "target_price", "mfe", "mae", "stop_buffer_pct"],
+        "Time": ["trade_date", "trade_year", "trade_month", "trade_dow",
+                 "entry_hour", "tod_bucket"],
+        "Regime": ["sma20", "sma5", "trend_slope", "above_sma20", "atr14",
+                   "atr_pct", "daily_range_pct", "rsi14", "roc5", "roc20",
+                   "trend_regime", "vol_regime", "momentum_regime"],
+        "Optimization": ["opt_exit_rule", "opt_params", "opt_avg_pnl",
+                        "opt_profit_factor", "opt_win_rate", "opt_sharpe",
+                        "opt_max_drawdown", "opt_total_trades"],
+        "Ticker": ["company_name", "sic_code", "sector", "primary_exchange",
+                   "market_cap", "total_employees", "address_state", "ipo_date"],
+        "Computed": ["hold_minutes", "pnl_per_share", "is_winner", "is_loser",
+                     "risk_per_share", "r_multiple", "has_minute_bars", "has_regime_data"],
+        "Conditional (new)": [c for c in df.columns if c.startswith(("tod_", "strat_", "sector_",
+                             "trend_cond", "vol_cond", "momentum_cond", "prob_"))],
+    }
+    listed = set()
+    for cat, cols in categories.items():
+        present = [c for c in cols if c in df.columns]
+        if present:
+            print(f"  [{cat}] ({len(present)})")
+            for col in present:
+                dtype = df[col].dtype
+                nulls = df[col].isna().sum()
+                print(f"    {col:<30} {str(dtype):<15} {nulls:>6} nulls")
+                listed.add(col)
+    # Any unlisted columns
+    unlisted = [c for c in df.columns if c not in listed]
+    if unlisted:
+        print(f"  [Other] ({len(unlisted)})")
+        for col in unlisted:
+            dtype = df[col].dtype
+            nulls = df[col].isna().sum()
+            print(f"    {col:<30} {str(dtype):<15} {nulls:>6} nulls")
 
 
 if __name__ == "__main__":
