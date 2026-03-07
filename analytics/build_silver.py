@@ -49,6 +49,10 @@ BRIDGE_DB = DATA_DIR / "bridge.db"
 SILVER_DDB = SILVER_DIR / "holly_trades.duckdb"
 SILVER_PARQUET = SILVER_DIR / "holly_trades.parquet"
 
+# Polygon enrichment sources
+INDICATOR_DIR = ANALYTICS_DIR / "holly_exit" / "data" / "indicators"
+SNAPSHOT_DIR = ANALYTICS_DIR / "holly_exit" / "data" / "snapshots"
+
 # Optional: probability engine JSON (enrichment)
 PROB_JSON = ANALYTICS_DIR / "output" / "statistical_probability.json"
 
@@ -376,6 +380,16 @@ def extract_from_holly_ddb() -> pd.DataFrame:
             m.yield_curve_regime AS macro_yield_curve_regime,
             m.rate_regime AS macro_rate_regime,
             m.rate_direction AS macro_rate_direction,
+            m.put_call_equity AS macro_put_call_equity,
+            m.put_call_total AS macro_put_call_total,
+            m.put_call_regime AS macro_put_call_regime,
+            m.put_call_5d_change AS macro_put_call_momentum,
+            -- Economic event flags
+            COALESCE(ev.is_fomc_day, 0) AS is_fomc_day,
+            COALESCE(ev.is_nfp_day, 0) AS is_nfp_day,
+            COALESCE(ev.is_event_day, 0) AS is_event_day,
+            -- Earnings proximity
+            ec_exact.earnings_date AS earnings_date_exact,
             -- SPY relative strength at entry
             ts.spy_price_at_entry,
             ts.spy_open_price,
@@ -425,11 +439,148 @@ def extract_from_holly_ddb() -> pd.DataFrame:
         LEFT JOIN trade_spy ts ON ts.trade_id = t.trade_id
         LEFT JOIN trade_breadth tb ON tb.trade_id = t.trade_id
         LEFT JOIN trade_daily_context tdc ON tdc.trade_id = t.trade_id
+        -- Economic event flags
+        LEFT JOIN economic_event_flags ev ON ev.date = CAST(t.entry_time AS DATE)
+        -- Earnings calendar (exact match on trade date)
+        LEFT JOIN earnings_calendar ec_exact
+            ON ec_exact.symbol = t.symbol
+            AND ec_exact.earnings_date = CAST(t.entry_time AS DATE)
         ORDER BY t.entry_time
     """).fetchdf()
 
     db.close()
     logger.info(f"Extracted {len(df):,} trades from Bronze")
+    return df
+
+
+# ---------------------------------------------------------------------------
+# 1b. Enrich with Polygon technical indicators (parquet)
+# ---------------------------------------------------------------------------
+
+def enrich_with_indicators(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Join Polygon pre-computed indicator values to each trade on (symbol, date).
+    Reads parquet files from INDICATOR_DIR, filters to trade symbols, merges.
+    Adds: ind_sma_20, ind_sma_50, ind_ema_9, ind_ema_21, ind_rsi_14,
+          ind_macd_value, ind_macd_signal, ind_macd_histogram
+    """
+    if not INDICATOR_DIR.exists():
+        logger.info("No indicator directory found, skipping indicator enrichment")
+        return df
+
+    # Build join key matching parquet date type (datetime.date)
+    df["_ind_date"] = pd.to_datetime(df["entry_time"]).dt.date
+    trade_symbols = set(df["symbol"].unique())
+
+    indicator_files = [
+        ("ind_sma_20",  "sma_20.parquet"),
+        ("ind_sma_50",  "sma_50.parquet"),
+        ("ind_ema_9",   "ema_9.parquet"),
+        ("ind_ema_21",  "ema_21.parquet"),
+        ("ind_rsi_14",  "rsi_14.parquet"),
+    ]
+
+    for col_name, filename in indicator_files:
+        path = INDICATOR_DIR / filename
+        if not path.exists():
+            df[col_name] = np.nan
+            continue
+        ind = pd.read_parquet(path, columns=["ticker", "date", "value"])
+        ind = ind[ind["ticker"].isin(trade_symbols)]
+        ind = ind.rename(columns={"ticker": "symbol", "date": "_ind_date", "value": col_name})
+        ind = ind.drop_duplicates(subset=["symbol", "_ind_date"], keep="first")
+        df = df.merge(ind[["symbol", "_ind_date", col_name]],
+                       on=["symbol", "_ind_date"], how="left")
+
+    # MACD has 3 value columns
+    macd_path = INDICATOR_DIR / "macd.parquet"
+    if macd_path.exists():
+        macd = pd.read_parquet(macd_path,
+                               columns=["ticker", "date", "value", "signal", "histogram"])
+        macd = macd[macd["ticker"].isin(trade_symbols)]
+        macd = macd.rename(columns={
+            "ticker": "symbol", "date": "_ind_date",
+            "value": "ind_macd_value", "signal": "ind_macd_signal",
+            "histogram": "ind_macd_histogram",
+        })
+        macd = macd.drop_duplicates(subset=["symbol", "_ind_date"], keep="first")
+        df = df.merge(
+            macd[["symbol", "_ind_date", "ind_macd_value", "ind_macd_signal", "ind_macd_histogram"]],
+            on=["symbol", "_ind_date"], how="left",
+        )
+    else:
+        for c in ["ind_macd_value", "ind_macd_signal", "ind_macd_histogram"]:
+            df[c] = np.nan
+
+    df = df.drop(columns=["_ind_date"])
+
+    matched = df["ind_sma_20"].notna().sum()
+    logger.info(f"Indicator enrichment: {matched:,}/{len(df):,} trades matched "
+                f"({matched / len(df) * 100:.1f}%)")
+    return df
+
+
+# ---------------------------------------------------------------------------
+# 1c. Enrich with Polygon market snapshots (parquet)
+# ---------------------------------------------------------------------------
+
+def enrich_with_snapshots(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Join Polygon full-market snapshot data to each trade on (symbol, date).
+    Reads daily parquet files from SNAPSHOT_DIR.
+    Adds: snap_day_vwap, snap_prev_close, snap_prev_volume,
+          snap_change_pct, snap_day_volume, snap_day_open/high/low/close
+    """
+    if not SNAPSHOT_DIR.exists():
+        logger.info("No snapshot directory found, skipping snapshot enrichment")
+        return df
+
+    files = sorted(SNAPSHOT_DIR.glob("*.parquet"))
+    if not files:
+        logger.info("No snapshot files found, skipping")
+        return df
+
+    # Read all daily snapshot files, tag with date from filename
+    frames = []
+    for f in files:
+        sdf = pd.read_parquet(f)
+        sdf["_snap_date"] = pd.to_datetime(f.stem).date()  # datetime.date
+        frames.append(sdf)
+
+    snaps = pd.concat(frames, ignore_index=True)
+
+    # Rename to Silver conventions
+    rename_map = {
+        "ticker": "symbol",
+        "day_vw": "snap_day_vwap",
+        "prev_c": "snap_prev_close",
+        "prev_v": "snap_prev_volume",
+        "todays_change_pct": "snap_change_pct",
+        "day_v": "snap_day_volume",
+        "day_o": "snap_day_open",
+        "day_h": "snap_day_high",
+        "day_l": "snap_day_low",
+        "day_c": "snap_day_close",
+    }
+    snaps = snaps.rename(columns=rename_map)
+
+    keep_cols = ["symbol", "_snap_date"] + [v for v in rename_map.values() if v != "symbol"]
+    snaps = snaps[[c for c in keep_cols if c in snaps.columns]]
+    snaps = snaps.drop_duplicates(subset=["symbol", "_snap_date"], keep="first")
+
+    # Merge
+    df["_snap_date"] = pd.to_datetime(df["entry_time"]).dt.date
+    df = df.merge(snaps, on=["symbol", "_snap_date"], how="left")
+    df = df.drop(columns=["_snap_date"])
+
+    # Ensure all snapshot columns exist
+    for col in rename_map.values():
+        if col != "symbol" and col not in df.columns:
+            df[col] = np.nan
+
+    matched = df["snap_day_vwap"].notna().sum()
+    logger.info(f"Snapshot enrichment: {matched:,}/{len(df):,} trades matched "
+                f"({matched / len(df) * 100:.1f}%)")
     return df
 
 
@@ -664,6 +815,78 @@ def transform(df: pd.DataFrame) -> pd.DataFrame:
             ).round(4)
             df = df.merge(mstats, left_on=macro_col, right_index=True, how="left")
 
+    # ── Technical indicator derived features ────────────────────
+    if "ind_sma_20" in df.columns:
+        sma20_safe = df["ind_sma_20"].replace(0, float("nan"))
+        sma50_safe = df["ind_sma_50"].replace(0, float("nan"))
+        df["ind_above_sma20"] = df["entry_price"] > df["ind_sma_20"]
+        df["ind_above_sma50"] = df["entry_price"] > df["ind_sma_50"]
+        df["ind_sma_golden_cross"] = df["ind_sma_20"] > df["ind_sma_50"]
+        df["ind_ema_bullish"] = df["ind_ema_9"] > df["ind_ema_21"]
+        df["ind_price_vs_sma20_pct"] = (
+            (df["entry_price"] - df["ind_sma_20"]) / sma20_safe * 100
+        ).round(2)
+        df["ind_price_vs_sma50_pct"] = (
+            (df["entry_price"] - df["ind_sma_50"]) / sma50_safe * 100
+        ).round(2)
+
+    if "ind_rsi_14" in df.columns:
+        df["ind_rsi_zone"] = pd.cut(
+            df["ind_rsi_14"],
+            bins=[0, 30, 70, 100],
+            labels=["oversold", "neutral", "overbought"],
+            right=True,
+        )
+
+    if "ind_macd_histogram" in df.columns:
+        df["ind_macd_trend"] = np.where(
+            df["ind_macd_histogram"] > 0, "bullish",
+            np.where(df["ind_macd_histogram"] < 0, "bearish", "neutral")
+        )
+
+    # ── Snapshot derived features ────────────────────────────────
+    if "snap_day_vwap" in df.columns:
+        vwap_safe = df["snap_day_vwap"].replace(0, float("nan"))
+        df["snap_price_vs_vwap"] = np.where(
+            df["entry_price"] > df["snap_day_vwap"], "above",
+            np.where(df["entry_price"] < df["snap_day_vwap"], "below", "at")
+        )
+        df["snap_price_vs_vwap_pct"] = (
+            (df["entry_price"] - df["snap_day_vwap"]) / vwap_safe * 100
+        ).round(2)
+
+    # ── Earnings proximity ──────────────────────────────────────
+    if "earnings_date_exact" in df.columns:
+        df["is_earnings_day"] = df["earnings_date_exact"].notna()
+    else:
+        df["is_earnings_day"] = False
+
+    # ── Event day interaction (FOMC or NFP on trade day) ──────
+    if "is_event_day" in df.columns:
+        df["event_type"] = np.where(
+            df["is_fomc_day"] == 1, "FOMC",
+            np.where(df["is_nfp_day"] == 1, "NFP", "none")
+        )
+
+    # ── Put/call regime conditional metrics ────────────────────
+    if "macro_put_call_regime" in df.columns:
+        mask = df["macro_put_call_regime"].notna()
+        pcstats = df.loc[mask].groupby("macro_put_call_regime").agg(
+            **{"macro_pc_cond_wr": ("is_winner", "mean"),
+               "macro_pc_cond_avg_pnl": ("holly_pnl", "mean"),
+               "macro_pc_cond_trades": ("holly_pnl", "count")},
+        ).round(4)
+        df = df.merge(pcstats, left_on="macro_put_call_regime", right_index=True, how="left")
+
+    # ── Coverage flags for new enrichments ────────────────────────
+    df["has_indicators"] = df.get("ind_sma_20", pd.Series(dtype=float)).notna()
+    df["has_snapshot"] = df.get("snap_day_vwap", pd.Series(dtype=float)).notna()
+    df["has_put_call"] = df.get("macro_put_call_equity", pd.Series(dtype=float)).notna()
+    df["has_event_flags"] = df.get("is_event_day", pd.Series(dtype=int)).isin([1])
+
+    # Drop temp columns used for derivation
+    df = df.drop(columns=["earnings_date_exact"], errors="ignore")
+
     # ── Rolling 20-trade trailing metrics per strategy ───────────
     df = df.sort_values(["strategy", "entry_time"])
     df["strat_rolling_wr_20"] = (
@@ -798,6 +1021,16 @@ def print_stats(df: pd.DataFrame, load_result: dict, duration_s: float) -> None:
         print(f"  With breadth data: {df['has_breadth_data'].sum():,}")
     if "has_prior_day" in df.columns:
         print(f"  With prior day:    {df['has_prior_day'].sum():,}")
+    if "has_indicators" in df.columns:
+        print(f"  With indicators:   {df['has_indicators'].sum():,}")
+    if "has_snapshot" in df.columns:
+        print(f"  With snapshots:    {df['has_snapshot'].sum():,}")
+    if "has_put_call" in df.columns:
+        print(f"  With put/call:     {df['has_put_call'].sum():,}")
+    if "has_event_flags" in df.columns:
+        print(f"  On event days:     {df['has_event_flags'].sum():,}")
+    if "is_earnings_day" in df.columns:
+        print(f"  On earnings day:   {df['is_earnings_day'].sum():,}")
 
     # Date range
     dates = pd.to_datetime(df["trade_date"])
@@ -839,13 +1072,19 @@ def main():
 
     # ETL pipeline
     logger.info("=== Silver Layer Build ===")
-    logger.info("Step 1/3: Extract from Bronze (holly.ddb)")
+    logger.info("Step 1/5: Extract from Bronze (holly.ddb)")
     df = extract_from_holly_ddb()
 
-    logger.info(f"Step 2/3: Transform ({len(df):,} rows)")
+    logger.info("Step 2/5: Enrich with Polygon indicators")
+    df = enrich_with_indicators(df)
+
+    logger.info("Step 3/5: Enrich with Polygon snapshots")
+    df = enrich_with_snapshots(df)
+
+    logger.info(f"Step 4/5: Transform ({len(df):,} rows)")
     df = transform(df)
 
-    logger.info("Step 3/3: Load to Silver")
+    logger.info("Step 5/5: Load to Silver")
     result = load_to_silver(df, skip_parquet=args.skip_parquet)
 
     duration = time.time() - start

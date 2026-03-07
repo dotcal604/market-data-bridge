@@ -263,3 +263,18 @@
 - Phase 1a fully complete: exit-params.ts → REST route → MCP tools → all working
 - 109 MCP tests passing, tsc clean
 - **Open issues (8)**: F01 OCA (#396), F03 race (#398), F06 API key (#401), F07 rate limit (#402), F08/F09 types (#403), Sprint 1 (#368), D1 (#313), D3 (#314)
+
+## 2026-03-07 22:00 — desktop — Polygon data audit + Silver indicator/snapshot enrichment
+
+- **Comprehensive Polygon data audit:** all Starter plan endpoints already fetched (19 scripts, 428 MB reference + 25 GB bars). Only unused: per-ticker previous close (redundant with snapshots) and market status now (handled by MCP).
+- **Wired Polygon indicators into Silver layer (`build_silver.py`):**
+  - New `enrich_with_indicators()`: reads 6 indicator parquets (SMA20/50, EMA9/21, RSI14, MACD), joins on (symbol, trade_date)
+  - 8 raw columns + 8 derived: ind_above_sma20/50, ind_sma_golden_cross, ind_ema_bullish, ind_rsi_zone, ind_macd_trend, ind_price_vs_sma20/50_pct
+  - Coverage: 6,359/28,875 trades (22% — indicators start 2021-04-05)
+- **Wired Polygon snapshots into Silver layer:**
+  - New `enrich_with_snapshots()`: reads daily snapshot parquets, joins on (symbol, trade_date)
+  - 11 columns: snap_day_vwap, snap_prev_close, snap_change_pct, snap_day_open/high/low/close/volume, snap_prev_volume, snap_price_vs_vwap, snap_price_vs_vwap_pct
+  - Coverage: 0% (only 2026-03-07 snapshot, latest trade 2026-03-04 — will accumulate daily)
+- **Silver layer now 224 columns** (up from 195), 5 Bronze sources, pipeline is 5-step (Extract → Indicators → Snapshots → Transform → Load)
+- Build: 28,875 rows, 17.1 MB DuckDB, 9.3 MB Parquet, 400s duration
+- Next: commit all changes

@@ -99,14 +99,19 @@ NEVER set IBKR_CLIENT_ID in .env — causes collision for all MCP clients.
 - Smart defaults: 24h lookback, `buildNewsDateRange()` helper
 
 ### Silver Layer Normalization (Extended)
-- `build_silver.py` now produces **195 columns** (up from 171)
+- `build_silver.py` now produces **238 columns** (up from 224)
 - Dual-track: vendor_R (from holly_pnl) vs price_exit_R (from entry/exit math)
 - Quality flags: bad_risk_flag, penny_flag, low_price_flag, high_risk_pct_flag, small_cap_flag
 - Stratification: price_bucket (7 bins), hold_bucket (5 bins)
 - Capture ratios, capital efficiency (RON), vendor-price disagreement flag
-- **3 Bronze sources wired in:** etf_bars (SPY context), market_daily (breadth), daily_bars_flat (prior day/gaps)
+- **8 Bronze sources wired in:** etf_bars (SPY), market_daily (breadth), daily_bars_flat (gaps), Polygon indicators, Polygon snapshots, FRED put/call ratio, economic events, earnings calendar
 - New dimensions: relative_return_vs_spy, mkt_ad_ratio, mkt_breadth_regime, gap_bucket, gap_direction
-- Coverage flags: has_spy_context (6,544), has_breadth_data (28,875), has_prior_day (6,543)
+- **Polygon indicator features (16 cols):** ind_sma_20/50, ind_ema_9/21, ind_rsi_14, ind_macd_value/signal/histogram, ind_above_sma20/50, ind_sma_golden_cross, ind_ema_bullish, ind_rsi_zone, ind_macd_trend, ind_price_vs_sma20/50_pct
+- **Polygon snapshot features (11 cols):** snap_day_vwap, snap_prev_close, snap_change_pct, snap_day_open/high/low/close/volume, snap_prev_volume, snap_price_vs_vwap, snap_price_vs_vwap_pct
+- Coverage: indicators 6,359/28,875 (22%, data starts 2021), snapshots accumulating daily
+- **CBOE put/call ratio (4 cols):** macro_put_call_equity/total/regime/momentum — 17,911/28,875 (62%, CBOE data 2006-2019)
+- **Economic event flags (4 cols):** is_fomc_day, is_nfp_day, is_event_day, event_type — 2,346 trades on event days (8.1%)
+- **Earnings proximity (1 col):** is_earnings_day — needs full yfinance fetch for coverage (only 10 symbols cached)
 - PBI rewired: `powerbi/data-prep.pq` now reads Silver Parquet (was holly_analytics.xlsx)
 - `13_export_analytics.py` deprecated with runtime DeprecationWarning → use build_silver.py
 
