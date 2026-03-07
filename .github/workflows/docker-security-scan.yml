@@ -20,7 +20,6 @@ jobs:
 
       - name: Build Docker image
         run: |
-          cd market-data-bridge
           docker build -f Dockerfile.prod -t market-data-bridge:scan .
 
       - name: Run Trivy vulnerability scanner
