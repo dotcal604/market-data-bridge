@@ -78,6 +78,10 @@ vi.mock("../ibkr/news.js", () => ({
   reqNewsArticle: vi.fn(),
   reqNewsBulletins: vi.fn(),
   reqNewsProviders: vi.fn(),
+  reqBenzingaNews: vi.fn(),
+  reqBenzingaArticle: vi.fn(),
+  detectBenzingaProvider: vi.fn(),
+  buildNewsDateRange: vi.fn(() => ({ startDateTime: "20260101 00:00:00", endDateTime: "20260102 00:00:00" })),
 }));
 
 vi.mock("../ibkr/subscriptions.js", () => ({

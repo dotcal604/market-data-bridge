@@ -33,8 +33,8 @@ import {
   subscribeAccountUpdates, unsubscribeAccountUpdates, getAccountSnapshot,
   getScannerParameters, listSubscriptions,
 } from "../ibkr/subscriptions.js";
-import {
-  getSnapshot as getIndicatorSnapshot,
+import { getExitParams } from "../holly/exit-params.js";
+import { getSnapshot as getIndicatorSnapshot,
   getAllSnapshots as getAllIndicatorSnapshots,
 } from "../indicators/engine.js";
 import {
@@ -1783,3 +1783,17 @@ router.get("/indicators", (_req, res) => {
   const snapshots = getAllIndicatorSnapshots();
   res.json({ count: snapshots.length, snapshots });
 });
+
+// ── Holly AI ─────────────────────────────────────────────────────────────────
+
+// GET /api/holly/exit-params — Get optimized exit parameters for all strategies
+router.get("/holly/exit-params", async (_req, res) => {
+  try {
+    const data = await getExitParams();
+    res.json(data);
+  } catch (e: any) {
+    log.error({ err: e }, "GET /holly/exit-params failed");
+    res.status(500).json({ error: e.message });
+  }
+});
+
