@@ -111,6 +111,27 @@ Mastery = repeated exposure to the same tools/patterns -> fewer mistakes, faster
 - Claude Code reviews all agent PRs before human merge
 - No agent merges their own PR — human approval required
 
+### Collaboration Channel Protocol
+
+The collab channel (`collab_read` / `collab_post`) is the shared message bus for async agent-to-agent communication.
+
+**On session start (all agents):**
+1. Call `collab_read` with `type: "request"` or `type: "handoff"` to check for pending tasks from other agents
+2. If a request/handoff is addressed to you, acknowledge it and take action
+
+**On task completion (all agents):**
+1. Post a summary via `collab_post` with the appropriate type:
+   - `info` — status update, analysis result, FYI
+   - `request` — asking another agent to do something
+   - `decision` — recording an architectural or implementation choice
+   - `handoff` — transferring ownership of a task to another agent
+   - `blocker` — flagging something that's stuck and needs help
+2. Include `metadata` for machine-parseable context (files changed, PR numbers, etc.)
+3. Use `tags` for discoverability (e.g. `['architecture', 'holly', 'risk-gate']`)
+
+**Claude Code:** `collab_read` on session start → work → `collab_post` with decision/handoff summary
+**ChatGPT:** `collab_read` on session start (via mandatory first steps) → work → `collab_post` with results
+
 ## Orchestration Plan
 
 ### Task Routing by Complexity Tier

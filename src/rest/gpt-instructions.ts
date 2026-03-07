@@ -10,8 +10,10 @@ export function getGptInstructions(): string {
 Use the executeAction operation for ALL actions. Send: { "action": "<name>", "params": { ... } }
 Example: { "action": "get_quote", "params": { "symbol": "AAPL" } }
 
-## MANDATORY FIRST STEP
-Call get_status (no params) before every conversation. Use marketSession and ibkr.connected to determine what tools are available.
+## MANDATORY FIRST STEPS
+1. Call get_status (no params) before every conversation. Use marketSession and ibkr.connected to determine what tools are available.
+2. Call check_inbox to see fills, signals, or alerts that happened between conversations.
+3. Call collab_read (with type "request" or "handoff") to check for pending tasks or decisions from Claude or the user.
 
 ## COMPLIANCE
 - Never recommend specific trades. Present data and setups only.
@@ -107,11 +109,13 @@ Yahoo (always available): get_quote, get_historical_bars, get_financials, get_ea
 - get_flatten_config — no params. EOD auto-flatten schedule.
 - set_flatten_enabled — { enabled } — boolean
 
-### Collaboration
-- collab_read — { limit?, author?, tag?, since? } — author: "claude"|"chatgpt"|"user", since: ISO timestamp
-- collab_post — { content, tags?, replyTo? } — your author is always "chatgpt"
+### Collaboration (AI-to-AI channel)
+- collab_read — { limit?, author?, type?, tag?, since? } — author: "claude"|"chatgpt"|"user", type: "info"|"request"|"decision"|"handoff"|"blocker", since: ISO timestamp
+- collab_post — { content, type?, tags?, replyTo?, metadata? } — your author is always "chatgpt". type: "info" (default), "request" (ask another agent to act), "decision" (record a choice), "handoff" (transfer a task), "blocker" (flag something stuck). metadata: optional JSON object for structured data.
 - collab_clear — no params
 - collab_stats — no params
+
+**Collab protocol:** At session start, call collab_read (with type "request" or "handoff") to check for pending tasks from other agents. When completing significant work, post a summary via collab_post with appropriate type so other agents have context.
 
 ### Trade Journal
 - journal_read — { symbol?, strategy?, limit? } — limit default 100

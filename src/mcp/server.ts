@@ -1231,16 +1231,17 @@ export function createMcpServer(opts?: { readonly?: boolean }): McpServer {
 
   server.tool(
     "collab_read",
-    "Read messages from the AI collaboration channel. Use this to see what ChatGPT or the user has posted. Returns most recent messages by default.",
+    "Read messages from the AI collaboration channel. Use this to see what ChatGPT or the user has posted. Returns most recent messages by default. IMPORTANT: Call this at the start of every session to check for pending requests, decisions, or handoffs from other agents.",
     {
       since: z.string().optional().describe("ISO timestamp — return only messages posted after this time"),
       author: z.enum(["claude", "chatgpt", "user"]).optional().describe("Filter by author"),
+      type: z.enum(["info", "request", "decision", "handoff", "blocker"]).optional().describe("Filter by message type"),
       tag: z.string().optional().describe("Filter by tag (e.g. 'code-review', 'architecture')"),
       limit: z.number().optional().describe("Max messages to return (default 50, max 100)"),
     },
-    async ({ since, author, tag, limit }) => {
+    async ({ since, author, type, tag, limit }) => {
       try {
-        const msgs = readMessages({ since, author, tag, limit });
+        const msgs = readMessages({ since, author, type, tag, limit });
         return { content: [{ type: "text" as const, text: JSON.stringify({ count: msgs.length, messages: msgs }, null, 2) }] };
       } catch (e: any) {
         return { content: [{ type: "text" as const, text: `Error: ${e.message}` }], isError: true };
@@ -1250,15 +1251,17 @@ export function createMcpServer(opts?: { readonly?: boolean }): McpServer {
 
   server.tool(
     "collab_post",
-    "Post a message to the AI collaboration channel. Use this to share analysis, code suggestions, or responses to ChatGPT. Your author is always 'claude'.",
+    "Post a message to the AI collaboration channel. Use this to share analysis, decisions, handoffs, or responses to ChatGPT. Your author is always 'claude'. IMPORTANT: Post a summary when completing any significant task — especially decisions, handoffs, or blockers — so other agents can pick up context.",
     {
       content: z.string().describe("The message content (max 8000 chars). Can include code blocks, analysis, questions."),
+      type: z.enum(["info", "request", "decision", "handoff", "blocker"]).optional().describe("Message intent type. 'info' = status update (default), 'request' = asking another agent to act, 'decision' = recording a choice made, 'handoff' = transferring a task, 'blocker' = flagging something stuck"),
       replyTo: z.string().optional().describe("ID of a message to reply to (creates a thread reference)"),
       tags: z.array(z.string()).optional().describe("Tags for the message, e.g. ['code-review', 'architecture', 'question']"),
+      metadata: z.record(z.unknown()).optional().describe("Structured data for machine-parseable context, e.g. { files: ['src/foo.ts'], pr: 123, decision: 'approved' }"),
     },
-    async ({ content, replyTo, tags }) => {
+    async ({ content, type, replyTo, tags, metadata }) => {
       try {
-        const msg = postMessage({ author: "claude", content, replyTo, tags });
+        const msg = postMessage({ author: "claude", type, content, replyTo, tags, metadata });
         return { content: [{ type: "text" as const, text: JSON.stringify(msg, null, 2) }] };
       } catch (e: any) {
         return { content: [{ type: "text" as const, text: `Error: ${e.message}` }], isError: true };

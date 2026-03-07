@@ -166,3 +166,26 @@
 - **Polygon API key:** Upgraded to paid Starter tier (`6SGQUWC_...`), unlimited rate, 5-year lookback (2021-03-04+)
 - Build: clean. Tests: 98/99 files pass, 1703/1706 tests pass
 - Next: P0 features (exit params MCP tool + direction bug fix), then P1 sentiment scoring
+
+## 2026-03-05 18:00 — desktop — Power BI dashboard automation + statistical probability engine
+
+- **Power BI v2 TOM automation (10 PowerShell scripts):**
+  - push-v2-tables: Date_Table (17 cols) + Strategy_Lookup (2 cols) as calculated tables
+  - push-v2-configure: sort-by-column settings (MonthName→Month, DayName→DayOfWeek, etc.)
+  - push-v2-rels: 2 relationships (trade_date→Date, strategy→Strategy_Lookup) — TOM quirk: FromColumn=Many, ToColumn=One
+  - push-v2-measures: 105 base measures + push-v2-stats: 33 time-intelligence + stats measures = 138 total
+  - push-v2-params: 4 field parameter tables + What-If (Min Stop Buffer) + 7 WhatIf measures = 146 total
+  - push-v2-calcgroups2: 2 calculation groups (Time Comparison + Measure Selector) — required DiscourageImplicitMeasures=true
+  - Final model: 13 tables, 146 measures, 5 relationships, 2 calc groups, compatibility 1600
+- **Statistical probability Python engine (analytics/statistical_probability.py):**
+  - 9 modules: Monte Carlo equity curves, Bayesian posteriors, bootstrap CIs, Markov regime transitions, strategy correlations, distribution fitting, VaR/CVaR risk metrics, edge significance, per-strategy profiles
+  - Tested on 28,863 trades: Strong Edge (t=57.30), Bayesian 100% P(WR>50%), Student-t best fit
+  - Outputs JSON (analytics/output/) + stdout for MCP consumption
+- **Dedicated MCP tool added: `stat_probability`** (src/mcp/server.ts:2902)
+  - Named params: days, strategy, sims, module (full/monte-carlo/regime-transitions)
+  - Parses JSON from Python stdout, returns structured results
+  - Also callable via run_analytics script="statistical_probability"
+- **Commit 7a8cb7a pushed:** 48 files, +15,613 lines — PBI automation + stats engine + Benzinga + export bot
+- Updated .gitignore: holly_exports/, analytics raw data, debug screenshots, xlsx files
+- Build: clean (tsc --noEmit). Tests: 96/99 pass, 1698/1706 (8 pre-existing divoom widget failures)
+- Next: visual report pages need manual PBI Desktop construction (TOM can't create visuals — follow 07-visual-specs.md)

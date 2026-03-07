@@ -52,6 +52,7 @@ describe("Collaboration Store", () => {
 
       expect(posted).toMatchObject({
         author: "claude",
+        type: "info",
         content: "Hello from Claude",
       });
       expect(posted.id).toBeDefined();
@@ -61,9 +62,11 @@ describe("Collaboration Store", () => {
       expect(insertCollabMessage).toHaveBeenCalledWith({
         id: posted.id,
         author: posted.author,
+        type: "info",
         content: posted.content,
         reply_to: undefined,
         tags: undefined,
+        metadata: undefined,
         created_at: posted.timestamp,
       });
 
@@ -99,9 +102,11 @@ describe("Collaboration Store", () => {
       expect(insertCollabMessage).toHaveBeenLastCalledWith({
         id: msg2.id,
         author: msg2.author,
+        type: "info",
         content: msg2.content,
         reply_to: msg1.id,
         tags: ["important", "follow-up"],
+        metadata: undefined,
         created_at: msg2.timestamp,
       });
     });
@@ -136,6 +141,75 @@ describe("Collaboration Store", () => {
       const messages = readMessages({ author: "user" });
       expect(messages).toHaveLength(1);
       expect(messages[0].author).toBe("user");
+    });
+  });
+
+  describe("message type field", () => {
+    it("should default type to 'info' when not provided", () => {
+      const msg = postMessage({ author: "claude", content: "Default type" });
+      expect(msg.type).toBe("info");
+    });
+
+    it("should accept explicit type values", () => {
+      const request = postMessage({ author: "claude", type: "request", content: "Please review" });
+      const decision = postMessage({ author: "chatgpt", type: "decision", content: "Approved" });
+      const handoff = postMessage({ author: "claude", type: "handoff", content: "Take over" });
+      const blocker = postMessage({ author: "user", type: "blocker", content: "Stuck on X" });
+
+      expect(request.type).toBe("request");
+      expect(decision.type).toBe("decision");
+      expect(handoff.type).toBe("handoff");
+      expect(blocker.type).toBe("blocker");
+    });
+
+    it("should filter by type", () => {
+      postMessage({ author: "claude", type: "info", content: "Info 1" });
+      postMessage({ author: "claude", type: "request", content: "Request 1" });
+      postMessage({ author: "chatgpt", type: "decision", content: "Decision 1" });
+      postMessage({ author: "claude", type: "request", content: "Request 2" });
+
+      const requests = readMessages({ type: "request" });
+      expect(requests).toHaveLength(2);
+      expect(requests.every((m) => m.type === "request")).toBe(true);
+
+      const decisions = readMessages({ type: "decision" });
+      expect(decisions).toHaveLength(1);
+      expect(decisions[0].content).toBe("Decision 1");
+    });
+
+    it("should combine type with author filter", () => {
+      postMessage({ author: "claude", type: "request", content: "Claude request" });
+      postMessage({ author: "chatgpt", type: "request", content: "ChatGPT request" });
+      postMessage({ author: "claude", type: "info", content: "Claude info" });
+
+      const messages = readMessages({ author: "claude", type: "request" });
+      expect(messages).toHaveLength(1);
+      expect(messages[0].content).toBe("Claude request");
+    });
+  });
+
+  describe("metadata field", () => {
+    it("should accept metadata object", () => {
+      const meta = { files: ["src/foo.ts"], pr: 123 };
+      const msg = postMessage({ author: "claude", content: "With metadata", metadata: meta });
+      expect(msg.metadata).toEqual(meta);
+    });
+
+    it("should omit metadata when not provided", () => {
+      const msg = postMessage({ author: "claude", content: "No metadata" });
+      expect(msg.metadata).toBeUndefined();
+    });
+
+    it("should persist metadata to DB", () => {
+      const meta = { decision: "approved", reason: "tests pass" };
+      const msg = postMessage({ author: "chatgpt", type: "decision", content: "Approved", metadata: meta });
+
+      expect(insertCollabMessage).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          metadata: meta,
+          type: "decision",
+        })
+      );
     });
   });
 
@@ -321,6 +395,7 @@ describe("Collaboration Store", () => {
       const stats = getStats();
       expect(stats.totalMessages).toBe(0);
       expect(stats.byAuthor).toEqual({});
+      expect(stats.byType).toEqual({});
     });
 
     it("should return correct stats with single author", () => {
@@ -330,6 +405,7 @@ describe("Collaboration Store", () => {
       const stats = getStats();
       expect(stats.totalMessages).toBe(2);
       expect(stats.byAuthor).toEqual({ claude: 2 });
+      expect(stats.byType).toEqual({ info: 2 });
     });
 
     it("should return correct stats with multiple authors", () => {
@@ -346,6 +422,17 @@ describe("Collaboration Store", () => {
         chatgpt: 2,
         user: 1,
       });
+      expect(stats.byType).toEqual({ info: 5 });
+    });
+
+    it("should return correct byType breakdown", () => {
+      postMessage({ author: "claude", type: "request", content: "Request" });
+      postMessage({ author: "chatgpt", type: "decision", content: "Decision" });
+      postMessage({ author: "claude", type: "request", content: "Another request" });
+      postMessage({ author: "user", content: "Default info" });
+
+      const stats = getStats();
+      expect(stats.byType).toEqual({ request: 2, decision: 1, info: 1 });
     });
 
     it("should update stats after clearing messages", () => {
@@ -357,6 +444,7 @@ describe("Collaboration Store", () => {
       const stats = getStats();
       expect(stats.totalMessages).toBe(0);
       expect(stats.byAuthor).toEqual({});
+      expect(stats.byType).toEqual({});
     });
   });
 
@@ -512,17 +600,21 @@ describe("Collaboration Store", () => {
         {
           id: "msg-1",
           author: "claude",
+          type: "info",
           content: "Loaded message 1",
           reply_to: null,
           tags: null,
+          metadata: null,
           created_at: "2024-01-01T10:00:00.000Z",
         },
         {
           id: "msg-2",
           author: "chatgpt",
+          type: "decision",
           content: "Loaded message 2",
           reply_to: "msg-1",
           tags: JSON.stringify(["important"]),
+          metadata: JSON.stringify({ approved: true }),
           created_at: "2024-01-01T10:01:00.000Z",
         },
       ];
@@ -535,15 +627,18 @@ describe("Collaboration Store", () => {
       expect(messages[0]).toMatchObject({
         id: "msg-1",
         author: "claude",
+        type: "info",
         content: "Loaded message 1",
         timestamp: "2024-01-01T10:00:00.000Z",
       });
       expect(messages[1]).toMatchObject({
         id: "msg-2",
         author: "chatgpt",
+        type: "decision",
         content: "Loaded message 2",
         replyTo: "msg-1",
         tags: ["important"],
+        metadata: { approved: true },
         timestamp: "2024-01-01T10:01:00.000Z",
       });
       expect(logCollab.info).toHaveBeenCalledWith(
@@ -569,9 +664,11 @@ describe("Collaboration Store", () => {
         {
           id: "msg-1",
           author: "user",
+          type: null,
           content: "Simple message",
           reply_to: null,
           tags: null,
+          metadata: null,
           created_at: "2024-01-01T10:00:00.000Z",
         },
       ];
@@ -584,11 +681,13 @@ describe("Collaboration Store", () => {
       expect(messages[0]).toMatchObject({
         id: "msg-1",
         author: "user",
+        type: "info",
         content: "Simple message",
         timestamp: "2024-01-01T10:00:00.000Z",
       });
       expect(messages[0].replyTo).toBeUndefined();
       expect(messages[0].tags).toBeUndefined();
+      expect(messages[0].metadata).toBeUndefined();
     });
 
     it("should handle malformed JSON tags gracefully", () => {
@@ -596,9 +695,11 @@ describe("Collaboration Store", () => {
         {
           id: "msg-1",
           author: "claude",
+          type: "info",
           content: "Message with bad tags",
           reply_to: null,
           tags: "not-valid-json",
+          metadata: null,
           created_at: "2024-01-01T10:00:00.000Z",
         },
       ];
@@ -616,9 +717,11 @@ describe("Collaboration Store", () => {
         {
           id: "msg-1",
           author: "claude",
+          type: "info",
           content: "Message with invalid tags structure",
           reply_to: null,
           tags: JSON.stringify({ not: "an array" }),
+          metadata: null,
           created_at: "2024-01-01T10:00:00.000Z",
         },
       ];

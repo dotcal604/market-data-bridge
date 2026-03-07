@@ -31,8 +31,8 @@ jobs:
       - name: Build application image
         uses: docker/build-push-action@v5
         with:
-          context: ./market-data-bridge
-          file: ./market-data-bridge/Dockerfile.prod
+          context: .
+          file: ./Dockerfile.prod
           load: true
           tags: market-data-bridge:test
           cache-from: type=gha

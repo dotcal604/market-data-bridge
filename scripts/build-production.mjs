@@ -13,7 +13,7 @@
  */
 
 import { execSync } from 'child_process';
-import { writeFileSync, mkdirSync, existsSync } from 'fs';
+import { writeFileSync, mkdirSync, existsSync, readFileSync } from 'fs';
 import { resolve } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -65,7 +65,8 @@ function getGitInfo() {
 
 function emitVersionFile(commit, branch) {
   const timestamp = new Date().toISOString();
-  const version = require(resolve(projectRoot, 'package.json')).version;
+  const pkg = JSON.parse(readFileSync(resolve(projectRoot, 'package.json'), 'utf-8'));
+  const version = pkg.version;
 
   const versionData = {
     version,

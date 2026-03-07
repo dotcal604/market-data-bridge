@@ -111,9 +111,11 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS collab_messages (
     id TEXT PRIMARY KEY,
     author TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'info',  -- info|request|decision|handoff|blocker
     content TEXT NOT NULL,
     reply_to TEXT,
     tags TEXT,               -- JSON array
+    metadata TEXT,           -- JSON object for structured data
     created_at TEXT NOT NULL
   );
 
@@ -476,6 +478,10 @@ addColumnIfMissing("orders", "eval_id", "TEXT");
 addColumnIfMissing("risk_config", "source", "TEXT NOT NULL DEFAULT 'manual'");
 addColumnIfMissing("risk_config", "updated_at", "TEXT NOT NULL DEFAULT (datetime('now'))");
 
+// v7: Collab message type + metadata for performative messaging
+addColumnIfMissing("collab_messages", "type", "TEXT NOT NULL DEFAULT 'info'");
+addColumnIfMissing("collab_messages", "metadata", "TEXT");
+
 function ensureRiskConfigDefaults(): void {
   const upsert = db.prepare(`
     INSERT INTO risk_config (param, value, source)
@@ -538,8 +544,8 @@ const stmts = {
 
   // Collab messages
   insertCollab: db.prepare(`
-    INSERT INTO collab_messages (id, author, content, reply_to, tags, created_at)
-    VALUES (@id, @author, @content, @reply_to, @tags, @created_at)
+    INSERT INTO collab_messages (id, author, type, content, reply_to, tags, metadata, created_at)
+    VALUES (@id, @author, @type, @content, @reply_to, @tags, @metadata, @created_at)
   `),
   getRecentCollab: db.prepare(`SELECT * FROM collab_messages ORDER BY created_at DESC LIMIT ?`),
   deleteAllCollab: db.prepare(`DELETE FROM collab_messages`),
@@ -837,17 +843,21 @@ export function updateExecutionCommission(execId: string, commission: number, re
 export function insertCollabMessage(msg: {
   id: string;
   author: string;
+  type?: string;
   content: string;
   reply_to?: string | null;
   tags?: string[] | null;
+  metadata?: Record<string, unknown> | null;
   created_at: string;
 }) {
   stmts.insertCollab.run({
     id: msg.id,
     author: msg.author,
+    type: msg.type ?? "info",
     content: msg.content,
     reply_to: msg.reply_to ?? null,
     tags: msg.tags ? JSON.stringify(msg.tags) : null,
+    metadata: msg.metadata ? JSON.stringify(msg.metadata) : null,
     created_at: msg.created_at,
   });
 }
@@ -858,7 +868,7 @@ export function insertCollabMessage(msg: {
  * @returns Array of messages (oldest first)
  */
 export function loadRecentCollab(limit: number = 200): Array<{
-  id: string; author: string; content: string; reply_to: string | null; tags: string | null; created_at: string;
+  id: string; author: string; type: string | null; content: string; reply_to: string | null; tags: string | null; metadata: string | null; created_at: string;
 }> {
   const rows = stmts.getRecentCollab.all(limit) as any[];
   return rows.reverse(); // DB returns newest first, we want oldest first

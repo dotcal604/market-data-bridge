@@ -1548,6 +1548,7 @@ router.get("/collab/messages", (req, res) => {
   try {
     const since = qs(req.query.since, "") || undefined;
     const author = qs(req.query.author, "") || undefined;
+    const type = qs(req.query.type, "") || undefined;
     const tag = qs(req.query.tag, "") || undefined;
     const limit = safeLimit(qs(req.query.limit, "") || undefined, 50, 100);
 
@@ -1555,10 +1556,15 @@ router.get("/collab/messages", (req, res) => {
       res.status(400).json({ error: "author must be 'claude', 'chatgpt', or 'user'" });
       return;
     }
+    if (type && !["info", "request", "decision", "handoff", "blocker"].includes(type)) {
+      res.status(400).json({ error: "type must be 'info', 'request', 'decision', 'handoff', or 'blocker'" });
+      return;
+    }
 
     const msgs = readMessages({
       since,
       author: author as "claude" | "chatgpt" | "user" | undefined,
+      type: type as "info" | "request" | "decision" | "handoff" | "blocker" | undefined,
       tag,
       limit,
     });
@@ -1572,10 +1578,14 @@ router.get("/collab/messages", (req, res) => {
 router.post("/collab/message", (req, res) => {
   try {
     const body = req.body ?? {};
-    const { author, content, replyTo, tags } = body;
+    const { author, type, content, replyTo, tags, metadata } = body;
 
     if (!author || !["claude", "chatgpt", "user"].includes(author)) {
       res.status(400).json({ error: "author is required and must be 'claude', 'chatgpt', or 'user'" });
+      return;
+    }
+    if (type && !["info", "request", "decision", "handoff", "blocker"].includes(type)) {
+      res.status(400).json({ error: "type must be 'info', 'request', 'decision', 'handoff', or 'blocker'" });
       return;
     }
     if (!content || typeof content !== "string") {
@@ -1583,7 +1593,7 @@ router.post("/collab/message", (req, res) => {
       return;
     }
 
-    const msg = postMessage({ author, content, replyTo, tags });
+    const msg = postMessage({ author, type, content, replyTo, tags, metadata });
     res.status(201).json(msg);
   } catch (e: any) {
     if (e.message.includes("limit") || e.message.includes("empty") || e.message.includes("not found")) {

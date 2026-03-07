@@ -574,8 +574,8 @@ const actions: Record<string, ActionHandler> = {
   set_flatten_enabled: async (p) => { setFlattenEnabled(bool(p, "enabled")); return { enabled: bool(p, "enabled") }; },
 
   // ── Collaboration ──
-  collab_read: async (p) => readMessages({ limit: num(p, "limit", 50), author: (str(p, "author") || undefined) as "claude" | "chatgpt" | "user" | undefined, tag: str(p, "tag") || undefined, since: str(p, "since") || undefined }),
-  collab_post: async (p) => postMessage({ author: "chatgpt", content: str(p, "content"), tags: p.tags as string[] | undefined, replyTo: str(p, "replyTo") || undefined }),
+  collab_read: async (p) => readMessages({ limit: num(p, "limit", 50), author: (str(p, "author") || undefined) as "claude" | "chatgpt" | "user" | undefined, type: (str(p, "type") || undefined) as "info" | "request" | "decision" | "handoff" | "blocker" | undefined, tag: str(p, "tag") || undefined, since: str(p, "since") || undefined }),
+  collab_post: async (p) => postMessage({ author: "chatgpt", type: (str(p, "type") || undefined) as "info" | "request" | "decision" | "handoff" | "blocker" | undefined, content: str(p, "content"), tags: p.tags as string[] | undefined, replyTo: str(p, "replyTo") || undefined, metadata: p.metadata as Record<string, unknown> | undefined }),
   collab_clear: async () => clearMessages(),
   collab_stats: async () => getStats(),
 
@@ -589,7 +589,11 @@ const actions: Record<string, ActionHandler> = {
       limit: num(p, "limit", 50),
     });
     const stats = getInboxStats();
-    return { total: stats.total, unread: stats.unread, count: items.length, items };
+    // Include pending collab messages (requests/handoffs) so ChatGPT sees them passively
+    const pendingCollab = readMessages({ type: "request", limit: 10 })
+      .concat(readMessages({ type: "handoff", limit: 10 }))
+      .concat(readMessages({ type: "blocker", limit: 5 }));
+    return { total: stats.total, unread: stats.unread, count: items.length, items, pendingCollab: pendingCollab.length > 0 ? pendingCollab : undefined };
   },
   mark_inbox_read: async (p) => {
     if (bool(p, "all")) {

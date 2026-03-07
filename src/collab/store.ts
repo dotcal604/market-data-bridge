@@ -6,13 +6,17 @@ import {
 } from "../db/database.js";
 import { logCollab } from "../logging.js";
 
+export type CollabMessageType = "info" | "request" | "decision" | "handoff" | "blocker";
+
 export interface CollabMessage {
   id: string;
   author: "claude" | "chatgpt" | "user";
+  type: CollabMessageType;
   content: string;
   timestamp: string;
   replyTo?: string;
   tags?: string[];
+  metadata?: Record<string, unknown>;
 }
 
 const MAX_MESSAGES = 200;
@@ -28,6 +32,17 @@ function safeParseJsonArray(raw: string): string[] {
   }
 }
 
+/** Safely parse a JSON string as Record<string, unknown>; returns undefined on failure. */
+function safeParseJsonObject(raw: string | null): Record<string, unknown> | undefined {
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw);
+    return typeof parsed === "object" && !Array.isArray(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 let messages: CollabMessage[] = [];
 
 /**
@@ -39,10 +54,12 @@ export function initCollabFromDb() {
     messages = rows.map((r) => ({
       id: r.id,
       author: r.author as CollabMessage["author"],
+      type: (r.type ?? "info") as CollabMessageType,
       content: r.content,
       timestamp: r.created_at,
       ...(r.reply_to ? { replyTo: r.reply_to } : {}),
       ...(r.tags ? { tags: safeParseJsonArray(r.tags) } : {}),
+      ...(r.metadata ? { metadata: safeParseJsonObject(r.metadata) } : {}),
     }));
     logCollab.info({ count: messages.length }, "Loaded collab messages from DB");
   } catch (e: any) {
@@ -54,6 +71,7 @@ export function initCollabFromDb() {
 export interface ReadOptions {
   since?: string;
   author?: "claude" | "chatgpt" | "user";
+  type?: CollabMessageType;
   tag?: string;
   limit?: number;
 }
@@ -73,6 +91,9 @@ export function readMessages(opts: ReadOptions = {}): CollabMessage[] {
   if (opts.author) {
     result = result.filter((m) => m.author === opts.author);
   }
+  if (opts.type) {
+    result = result.filter((m) => m.type === opts.type);
+  }
   if (opts.tag) {
     result = result.filter((m) => m.tags?.includes(opts.tag!));
   }
@@ -83,9 +104,11 @@ export function readMessages(opts: ReadOptions = {}): CollabMessage[] {
 
 export interface PostInput {
   author: "claude" | "chatgpt" | "user";
+  type?: CollabMessageType;
   content: string;
   replyTo?: string;
   tags?: string[];
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -107,10 +130,12 @@ export function postMessage(input: PostInput): CollabMessage {
   const msg: CollabMessage = {
     id: randomUUID(),
     author: input.author,
+    type: input.type ?? "info",
     content: input.content.trim(),
     timestamp: new Date().toISOString(),
     ...(input.replyTo ? { replyTo: input.replyTo } : {}),
     ...(input.tags?.length ? { tags: input.tags } : {}),
+    ...(input.metadata ? { metadata: input.metadata } : {}),
   };
 
   messages.push(msg);
@@ -120,9 +145,11 @@ export function postMessage(input: PostInput): CollabMessage {
     insertCollabMessage({
       id: msg.id,
       author: msg.author,
+      type: msg.type,
       content: msg.content,
       reply_to: msg.replyTo,
       tags: msg.tags,
+      metadata: msg.metadata,
       created_at: msg.timestamp,
     });
   } catch (e: any) {
@@ -155,10 +182,12 @@ export function clearMessages(): { cleared: number } {
  * Get message statistics.
  * @returns Object with total count and breakdown by author
  */
-export function getStats(): { totalMessages: number; byAuthor: Record<string, number> } {
+export function getStats(): { totalMessages: number; byAuthor: Record<string, number>; byType: Record<string, number> } {
   const byAuthor: Record<string, number> = {};
+  const byType: Record<string, number> = {};
   for (const m of messages) {
     byAuthor[m.author] = (byAuthor[m.author] ?? 0) + 1;
+    byType[m.type] = (byType[m.type] ?? 0) + 1;
   }
-  return { totalMessages: messages.length, byAuthor };
+  return { totalMessages: messages.length, byAuthor, byType };
 }

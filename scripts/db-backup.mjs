@@ -57,7 +57,10 @@ for (const db of DBS) {
   } catch (err) {
     // Fallback: simple file copy (still safe for SQLite in WAL mode if DB isn't mid-write)
     try {
-      execSync(`copy "${db.path}" "${dest}"`, { timeout: 10_000 });
+      const cpCmd = process.platform === "win32"
+        ? `copy "${db.path}" "${dest}"`
+        : `cp "${db.path}" "${dest}"`;
+      execSync(cpCmd, { timeout: 10_000 });
       console.log(`  COPY  ${db.name} → ${dest} (fallback — sqlite3 not available)`);
       backed++;
     } catch {

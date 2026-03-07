@@ -25,7 +25,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config.settings import OUTPUT_DIR
+from config.settings import OUTPUT_DIR, SIM_RISK_PER_TRADE, SIM_MAX_SHARES, SIM_MAX_CAPITAL
 from engine.data_loader import get_db
 
 PROB_JSON = Path(__file__).parent.parent.parent / "output" / "statistical_probability.json"
@@ -256,6 +256,31 @@ def main():
         df["pnl_per_share"] / risk.replace(0, float("nan"))
     ).round(2)
 
+    # ── Normalized metrics (separates signal quality from sizing) ──
+    # A. % return on deployed capital
+    capital_deployed = df["entry_price"] * df["shares"]
+    df["pct_return"] = (
+        df["holly_pnl"] / capital_deployed.replace(0, float("nan")) * 100
+    ).round(4)
+
+    # B. MFE/MAE in R-multiples (excursions normalized by initial risk)
+    risk_safe = risk.replace(0, float("nan"))
+    df["mfe_r"] = (df["mfe"] / risk_safe).round(2)
+    df["mae_r"] = (df["mae"] / risk_safe).round(2)
+
+    # C. Risk-budget sizing simulation
+    #    Converts Holly's trade path into user's sizing regime:
+    #    fixed $SIM_RISK_PER_TRADE risk, capped by SIM_MAX_SHARES and SIM_MAX_CAPITAL
+    shares_from_risk = (SIM_RISK_PER_TRADE / risk_safe).round(0)
+    shares_from_capital = (SIM_MAX_CAPITAL / df["entry_price"].replace(0, float("nan"))).round(0)
+    df["sim_shares"] = shares_from_risk.clip(upper=SIM_MAX_SHARES)
+    df["sim_shares"] = df["sim_shares"].clip(upper=shares_from_capital)
+    df["sim_pnl"] = (df["sim_shares"] * df["pnl_per_share"]).round(2)
+    df["sim_capital"] = (df["sim_shares"] * df["entry_price"]).round(2)
+    df["sim_pct_return"] = (
+        df["sim_pnl"] / df["sim_capital"].replace(0, float("nan")) * 100
+    ).round(4)
+
     # ── Time-of-day bucketing (30-min buckets) ─────────────────────
     entry_dt = pd.to_datetime(df["entry_time"])
     entry_minutes = entry_dt.dt.hour * 60 + entry_dt.dt.minute
@@ -463,7 +488,9 @@ def main():
                   "macro_vix_regime", "macro_yield_curve_regime",
                   "macro_rate_regime", "macro_rate_direction"],
         "Computed": ["hold_minutes", "pnl_per_share", "is_winner", "is_loser",
-                     "risk_per_share", "r_multiple", "has_minute_bars", "has_regime_data"],
+                     "risk_per_share", "r_multiple", "pct_return",
+                     "mfe_r", "mae_r", "has_minute_bars", "has_regime_data"],
+        "Simulated Sizing": ["sim_shares", "sim_pnl", "sim_capital", "sim_pct_return"],
         "Conditional (new)": [c for c in df.columns if c.startswith(
                              ("tod_", "strat_", "sector_", "trend_cond",
                               "vol_cond", "momentum_cond", "prob_"))
