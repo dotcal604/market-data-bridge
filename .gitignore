@@ -70,3 +70,4 @@ data/silver/
 
 # Power BI data files (binary, too large for git)
 powerbi/*.xlsx
+best_practices.md
