@@ -870,7 +870,9 @@ export function insertCollabMessage(msg: {
 export function loadRecentCollab(limit: number = 200): Array<{
   id: string; author: string; type: string | null; content: string; reply_to: string | null; tags: string | null; metadata: string | null; created_at: string;
 }> {
-  const rows = stmts.getRecentCollab.all(limit) as any[];
+  const rows = stmts.getRecentCollab.all(limit) as Array<{
+    id: string; author: string; type: string | null; content: string; reply_to: string | null; tags: string | null; metadata: string | null; created_at: string;
+  }>;
   return rows.reverse(); // DB returns newest first, we want oldest first
 }
 
@@ -982,7 +984,7 @@ export function insertPositionSnapshot(positions: any[], source: string = "recon
  * @returns Array of positions or null
  */
 export function getLatestPositionSnapshot(): any[] | null {
-  const row = stmts.getLatestPositionSnapshot.get() as any;
+  const row = stmts.getLatestPositionSnapshot.get() as { positions: string } | undefined;
   if (!row) return null;
   return JSON.parse(row.positions);
 }
@@ -1316,9 +1318,9 @@ export function getOutcomeForEval(evaluationId: string): Record<string, unknown>
  * @returns Stats object
  */
 export function getEvalStats(): Record<string, unknown> {
-  const totalEvals = (stmts.countEvaluations.get() as any)?.n ?? 0;
-  const totalOutcomes = (stmts.countOutcomes.get() as any)?.n ?? 0;
-  const modelStats = stmts.modelStats.all() as any[];
+  const totalEvals = (stmts.countEvaluations.get() as { n: number } | undefined)?.n ?? 0;
+  const totalOutcomes = (stmts.countOutcomes.get() as { n: number } | undefined)?.n ?? 0;
+  const modelStats = stmts.modelStats.all() as Array<{ model_id: string; total: number; compliant: number; avg_score: number | null; avg_confidence: number | null; avg_latency_ms: number | null }>;
 
   // Calculate aggregate stats
   const evalAggregates = db.prepare(`
@@ -1329,7 +1331,7 @@ export function getEvalStats(): Record<string, unknown> {
       SUM(CASE WHEN guardrail_allowed = 0 THEN 1 ELSE 0 END) * 1.0 / COUNT(*) as guardrail_block_rate
     FROM evaluations
     WHERE prefilter_passed = 1
-  `).get() as any;
+  `).get() as Record<string, number | null> | undefined;
 
   const outcomeAggregates = db.prepare(`
     SELECT
@@ -1339,7 +1341,7 @@ export function getEvalStats(): Record<string, unknown> {
       SUM(CASE WHEN r_multiple <= 0 THEN 1 ELSE 0 END) as losses
     FROM outcomes
     WHERE trade_taken = 1 AND r_multiple IS NOT NULL
-  `).get() as any;
+  `).get() as Record<string, number | null> | undefined;
 
   const wins = outcomeAggregates?.wins ?? 0;
   const losses = outcomeAggregates?.losses ?? 0;
@@ -1455,7 +1457,7 @@ export function getExecutionByExecId(execId: string): Record<string, unknown> | 
  * @returns Stats object
  */
 export function getAutoLinkStats(): Record<string, unknown> {
-  const linkStats = stmts.getAutoLinkStats.get() as any ?? { total: 0, explicit_links: 0, heuristic_links: 0, avg_confidence: null };
+  const linkStats = stmts.getAutoLinkStats.get() as { total: number; explicit_links: number; heuristic_links: number; avg_confidence: number | null } | undefined ?? { total: 0, explicit_links: 0, heuristic_links: 0, avg_confidence: null };
 
   const outcomeCount = db.prepare(`
     SELECT COUNT(DISTINCT eel.evaluation_id) as count

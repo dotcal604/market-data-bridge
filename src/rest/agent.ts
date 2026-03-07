@@ -86,6 +86,8 @@ import { applyTrailingStopToOrder, trailingStopRecommendation } from "../holly/t
 import { suggestExits, getOptimalExitSummary, getOptimalExitMeta, reloadOptimalParams } from "../holly/suggest-exits.js";
 import { getMetrics, getRecentIncidents, getLastIncident } from "../ops/metrics.js";
 import { getConnectionStatus } from "../ibkr/connection.js";
+import type { FeatureVector } from "../eval/features/types.js";
+import type { TrailingStopParams } from "../holly/trailing-stop-optimizer.js";
 
 const log = logger.child({ module: "agent" });
 
@@ -100,6 +102,10 @@ function str(p: Record<string, unknown>, key: string, fallback = ""): string {
 function num(p: Record<string, unknown>, key: string, fallback = 0): number {
   const v = p[key];
   return typeof v === "number" ? v : fallback;
+}
+function numOpt(p: Record<string, unknown>, key: string): number | undefined {
+  const v = p[key];
+  return typeof v === "number" ? v : undefined;
 }
 function bool(p: Record<string, unknown>, key: string, fallback = false): boolean {
   const v = p[key];
@@ -669,7 +675,7 @@ const actions: Record<string, ActionHandler> = {
     const db = getDb();
     const profiles = buildProfiles(db);
     // Build a minimal feature vector for the single symbol
-    const featureVec = { symbol } as any;
+    const featureVec: Partial<FeatureVector> = { symbol };
     return scanSymbols([featureVec], profiles);
   },
   holly_predictor_scan_batch: async (p) => {
@@ -677,7 +683,7 @@ const actions: Record<string, ActionHandler> = {
     if (!symbols || !Array.isArray(symbols) || symbols.length === 0) throw new Error("symbols array is required");
     const db = getDb();
     const profiles = buildProfiles(db);
-    const features = symbols.map(s => ({ symbol: s }) as any);
+    const features: Partial<FeatureVector>[] = symbols.map(s => ({ symbol: s }));
     return scanSymbols(features, profiles);
   },
   holly_predictor_candidates: async (p) => {
@@ -764,19 +770,19 @@ const actions: Record<string, ActionHandler> = {
   }),
   trailing_stop_recommend: async (p) => trailingStopRecommendation(str(p, "symbol"), str(p, "strategy") || undefined),
   trailing_stop_simulate: async (p) => {
-    const type = str(p, "type") as any;
+    const type = str(p, "type") as TrailingStopParams["type"];
     if (!type) throw new Error("type is required (fixed_pct, atr_multiple, time_decay, mfe_escalation, breakeven_trail)");
     return runTrailingStopSimulation({
       name: str(p, "name") || type,
       type,
-      trail_pct: num(p, "trail_pct", undefined as any) || undefined,
-      atr_mult: num(p, "atr_mult", undefined as any) || undefined,
-      initial_target_pct: num(p, "initial_target_pct", undefined as any) || undefined,
-      decay_per_min: num(p, "decay_per_min", undefined as any) || undefined,
-      mfe_trigger_pct: num(p, "mfe_trigger_pct", undefined as any) || undefined,
-      tight_trail_pct: num(p, "tight_trail_pct", undefined as any) || undefined,
-      be_trigger_r: num(p, "be_trigger_r", undefined as any) || undefined,
-      post_be_trail_pct: num(p, "post_be_trail_pct", undefined as any) || undefined,
+      trail_pct: numOpt(p, "trail_pct"),
+      atr_mult: numOpt(p, "atr_mult"),
+      initial_target_pct: numOpt(p, "initial_target_pct"),
+      decay_per_min: numOpt(p, "decay_per_min"),
+      mfe_trigger_pct: numOpt(p, "mfe_trigger_pct"),
+      tight_trail_pct: numOpt(p, "tight_trail_pct"),
+      be_trigger_r: numOpt(p, "be_trigger_r"),
+      post_be_trail_pct: numOpt(p, "post_be_trail_pct"),
     }, {
       strategy: str(p, "strategy") || undefined,
       segment: str(p, "segment") || undefined,
