@@ -1,7 +1,14 @@
 import dotenv from "dotenv";
 import { existsSync, readFileSync } from "fs";
 
-dotenv.config();
+// Support --env-file flag for dev/prod separation
+// Usage: node build/index.js --env-file .env.dev
+const envFileIdx = process.argv.indexOf("--env-file");
+const envFile = envFileIdx !== -1 && process.argv[envFileIdx + 1]
+  ? process.argv[envFileIdx + 1]
+  : undefined;
+
+dotenv.config({ path: envFile });
 
 // ── ClientId collision guard ────────────────────────────────────────────
 // Each MCP client sets IBKR_CLIENT_ID via its own JSON config env vars.

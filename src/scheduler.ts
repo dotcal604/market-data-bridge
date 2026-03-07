@@ -270,14 +270,18 @@ function checkPrune() {
 
 interface ScheduledScript {
   script: string;
-  hour: number;   // ET hour (24h)
-  minute: number;  // ET minute
+  hour: number;      // ET hour (24h)
+  minute: number;    // ET minute
   label: string;
+  args?: string[];   // Optional CLI args to pass to script
+  timeoutMs?: number; // Optional per-job timeout (default: 5 min)
 }
 
 const ANALYTICS_SCHEDULE: ScheduledScript[] = [
   { script: "recalibrate_weights", hour: 9,  minute: 20, label: "pre-market weight recalibration" },
   { script: "regime",              hour: 16, minute: 10, label: "post-close regime detection" },
+  { script: "daily_exit_refresh",  hour: 16, minute: 30, label: "post-close exit optimization refresh",
+    timeoutMs: 45 * 60 * 1000 },  // 45 min — runs full pipeline (fetch + optimize + walk-forward)
 ];
 
 const analyticsFiredToday = new Map<string, string>(); // script → dateET
@@ -309,7 +313,8 @@ async function checkAnalyticsSchedule() {
         `Scheduled analytics: running ${job.label}`);
 
       try {
-        const result = await runAnalyticsScript(job.script, [], 5 * 60 * 1000, "scheduled");
+        const timeout = job.timeoutMs ?? 5 * 60 * 1000;
+        const result = await runAnalyticsScript(job.script, job.args ?? [], timeout, "scheduled");
         log.info(
           { script: job.script, jobId: result.jobId, exitCode: result.exitCode, durationMs: result.durationMs },
           `Scheduled analytics complete: ${job.script} → exit ${result.exitCode} (${result.durationMs}ms)`,

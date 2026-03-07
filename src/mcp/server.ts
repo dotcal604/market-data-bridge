@@ -119,6 +119,7 @@ import {
 import type { ExitPlanState, OverrideReason } from "../exit-plan/types.js";
 import { getRecalibrationStatus } from "../eval/ensemble/recalibration-hook.js";
 import { classifyVolatilityRegime } from "../eval/features/volatility-regime.js";
+import { suggestExits, getOptimalExitSummary, getOptimalExitMeta, reloadOptimalParams } from "../holly/suggest-exits.js";
 
 const log = logger.child({ subsystem: "mcp" });
 
@@ -2997,6 +2998,57 @@ export function createMcpServer(opts?: { readonly?: boolean }): McpServer {
         strategy: params.strategy,
       });
       return { content: [{ type: "text", text: JSON.stringify(policy, null, 2) }] };
+    })
+  );
+
+  // --- Tool: suggest_exits --- Data-driven exit policy from optimizer
+  server.tool(
+    "suggest_exits",
+    "Get data-driven exit policy based on Holly optimizer backtest results. Returns optimized TP targets, trailing stop params, protect triggers, and giveback guards. Falls back to heuristic recommendation if no optimizer data exists for the strategy. Params: symbol, direction (long/short), entry_price, stop_price, total_shares, strategy (Holly strategy name).",
+    {
+      symbol: z.string().describe("Ticker symbol"),
+      direction: z.enum(["long", "short"]).describe("Trade direction"),
+      entry_price: z.number().describe("Entry price"),
+      stop_price: z.number().describe("Stop loss price"),
+      total_shares: z.number().describe("Position size in shares"),
+      strategy: z.string().optional().describe("Holly strategy name (matches to optimizer data)"),
+    },
+    withErrorHandling("suggest_exits", async (params) => {
+      const result = suggestExits({
+        symbol: params.symbol,
+        direction: params.direction,
+        entry_price: params.entry_price,
+        stop_price: params.stop_price,
+        total_shares: params.total_shares,
+        strategy: params.strategy,
+      });
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    })
+  );
+
+  // --- Tool: optimal_exit_summary --- All optimizer results
+  server.tool(
+    "optimal_exit_summary",
+    "Get summary table of all Holly exit optimizer results: strategy, direction, exit rule, params, win rate, profit factor, sharpe. Sorted by profit factor. No params required.",
+    {},
+    withErrorHandling("optimal_exit_summary", async () => {
+      const summary = getOptimalExitSummary();
+      if (!summary) {
+        return { content: [{ type: "text", text: "No optimizer data found. Run analytics/holly_exit pipeline first." }] };
+      }
+      const meta = getOptimalExitMeta();
+      return { content: [{ type: "text", text: JSON.stringify({ meta, strategies: summary }, null, 2) }] };
+    })
+  );
+
+  // --- Tool: optimal_exit_reload --- Force reload optimizer data
+  server.tool(
+    "optimal_exit_reload",
+    "Force reload optimal_exit_params.json from disk (e.g., after re-running the optimizer pipeline). Returns success/failure.",
+    {},
+    withErrorHandling("optimal_exit_reload", async () => {
+      const ok = reloadOptimalParams();
+      return { content: [{ type: "text", text: ok ? "Optimizer data reloaded successfully." : "Failed to reload — file not found or invalid." }] };
     })
   );
 

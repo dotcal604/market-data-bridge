@@ -25,6 +25,7 @@ import {
   DollarSign,
   PieChart,
   Monitor,
+  Target,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -51,6 +52,7 @@ const NAV_ITEMS = [
   { href: "/holly/autopsy", label: "Holly Autopsy", icon: Microscope, children: [
     { href: "/holly/performance", label: "Performance", icon: TrendingUp },
     { href: "/holly/analytics", label: "Analytics", icon: BarChart3 },
+    { href: "/holly/exits", label: "Exit Optimizer", icon: Target },
   ]},
   { href: "/weights", label: "Weights", icon: SlidersHorizontal },
   { href: "/account", label: "Account", icon: Wallet },

@@ -46,12 +46,11 @@ NEVER set IBKR_CLIENT_ID in .env — causes collision for all MCP clients.
 
 ## Current State (Mar 2026)
 - Build: clean, tests: 1,703 passing (98 files)
-- Branch: main (Divoom chart branch merged — 8579cc0, readonly MCP — 64bc742)
+- Branch: main (all feature branches merged)
 - Cloud module: WIP (code complete, not deployed)
 - Divoom charts: shipped (7 chart renderers, REST endpoint, @napi-rs/canvas + chartjs-node-canvas)
 - MCP readonly mode: `--mode mcp-readonly` (38 mutating tools filtered, analytics-only, no IBKR connect)
 - Analytics summary tools: edge_summary, exit_recommendation, regime_summary (always registered)
-- Launcher scripts: mcp-launch.cmd, mcp-launch-readonly.cmd (portable `%~dp0` paths)
 - Indicator engine: shipped (streaming EMA/RSI/MACD/BB/ATR/VWAP, 3 MCP tools, 2 REST routes, 38 tests)
 - Analytics roadmap: docs/ANALYTICS-ROADMAP.md (Tier 1 done, Tier 2-4 planned)
 - .claude/launch.json: created (api:3000, frontend:3001, dev-paper:3000)
@@ -63,9 +62,17 @@ NEVER set IBKR_CLIENT_ID in .env — causes collision for all MCP clients.
 
 ### Holly Exit Optimizer (analytics/holly_exit/)
 - **Complete pipeline:** Scripts 01→07 all ran successfully
+- Full pipeline: Python analytics + TypeScript JIT bridge + React frontend
+- Python scripts: `analytics/holly_exit/scripts/` (03-11: fetch, load, optimize, suggest, walk-forward)
+- Walk-forward validation: 5-fold rolling, 30 robust / 18 overfit strategies (6,078 trades)
 - 8,224 trades, 6,099 with bar data (74.2% coverage, 5-year Polygon lookback)
 - 9 Numba-compiled exit kernels, 264 param combos × 34 strategies
-- Output: `output/optimal_exit_params.json` — ready for Layer 2 MCP consumption
+- TypeScript bridge: `src/holly/suggest-exits.ts` — loads optimizer JSON + WF summary, maps to ExitPolicy
+- REST API: 4 agent actions (suggest_exits, optimal_exit_summary, optimal_exit_meta, optimal_exit_reload)
+- Frontend: `/holly/exits` page with simulator + leaderboard table + WF validation badges
+- Scheduler: `daily_exit_refresh` at 16:30 ET (45min timeout, runs full pipeline)
+- Daily orchestrator: `analytics/daily_exit_refresh.py` (fetch → load → optimize → suggest → walk-forward)
+- Output files: `analytics/holly_exit/output/` (optimal_exit_params.json, walk_forward_summary.json)
 - **Known bug:** direction inference for `direction_int=0` trades produces unrealistic P&L (Bull Trap $1.85B, Count De Monet -$1.37B) — fix before production use
 - Polygon API: paid Starter tier, unlimited rate, `MIN_DATE=2021-03-04`
 

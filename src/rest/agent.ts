@@ -83,6 +83,7 @@ import { onOutcomeRecorded, getRecalibrationStatus } from "../eval/ensemble/reca
 import { z } from "zod";
 import { orchestrator, getConsensusVerdict, formatDisagreements, ProviderScoresSchema } from "../orchestrator.js";
 import { applyTrailingStopToOrder, trailingStopRecommendation } from "../holly/trailing-stop-executor.js";
+import { suggestExits, getOptimalExitSummary, getOptimalExitMeta, reloadOptimalParams } from "../holly/suggest-exits.js";
 import { getMetrics, getRecentIncidents, getLastIncident } from "../ops/metrics.js";
 import { getConnectionStatus } from "../ibkr/connection.js";
 
@@ -784,6 +785,34 @@ const actions: Record<string, ActionHandler> = {
     });
   },
   trailing_stop_params: async () => getDefaultParamSets(),
+
+  // ── Holly Exit Optimizer (data-driven) ──
+  suggest_exits: async (p) => {
+    const symbol = str(p, "symbol");
+    const direction = str(p, "direction") as "long" | "short";
+    const entryPrice = num(p, "entry_price", 0);
+    const stopPrice = num(p, "stop_price", 0);
+    const totalShares = num(p, "total_shares", 100);
+    const strategy = str(p, "strategy") || undefined;
+    if (!symbol || !direction || !entryPrice || !stopPrice) {
+      throw new Error("Required: symbol, direction (long/short), entry_price, stop_price");
+    }
+    return suggestExits({ symbol, direction, entry_price: entryPrice, stop_price: stopPrice, total_shares: totalShares, strategy });
+  },
+  optimal_exit_summary: async () => {
+    const summary = getOptimalExitSummary();
+    if (!summary) throw new Error("No optimizer data. Run Python optimizer pipeline first.");
+    return { count: summary.length, strategies: summary };
+  },
+  optimal_exit_meta: async () => {
+    const meta = getOptimalExitMeta();
+    if (!meta) throw new Error("No optimizer data. Run Python optimizer pipeline first.");
+    return meta;
+  },
+  optimal_exit_reload: async () => {
+    const ok = reloadOptimalParams();
+    return { reloaded: ok, message: ok ? "Optimizer data reloaded" : "Failed to load optimizer data" };
+  },
 
   // ── Signals / Auto-Eval ──
   signal_feed: async (p) => {
@@ -1777,6 +1806,28 @@ export const actionsMeta: Record<string, ActionMeta> = {
     },
   },
   trailing_stop_params: { description: "List all 19 default trailing stop parameter sets that can be tested" },
+
+  // Holly Exit Optimizer (data-driven, walk-forward validated)
+  suggest_exits: {
+    description: "Get data-driven exit policy for a Holly trade based on optimizer results. Returns walk-forward validated optimal exit parameters per strategy.",
+    params: {
+      symbol: { type: "string", description: "Stock ticker symbol", required: true },
+      direction: { type: "string", description: "Trade direction", enum: ["long", "short"], required: true },
+      entry_price: { type: "number", description: "Entry price", required: true },
+      stop_price: { type: "number", description: "Stop loss price", required: true },
+      total_shares: { type: "number", description: "Total shares", default: 100 },
+      strategy: { type: "string", description: "Holly strategy name (e.g., 'Pullback Short', 'Breakdown Short')" },
+    },
+  },
+  optimal_exit_summary: {
+    description: "Get all optimizer results: per-strategy optimal exit rules, params, win rates, Sharpe ratios, and walk-forward validation status",
+  },
+  optimal_exit_meta: {
+    description: "Get optimizer metadata: generation time, data range, trade counts, walk-forward summary stats",
+  },
+  optimal_exit_reload: {
+    description: "Force reload optimizer and walk-forward data from disk",
+  },
 
   // Signals / Auto-Eval
   signal_feed: { 

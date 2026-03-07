@@ -119,18 +119,18 @@ async function buildLiveLayout(): Promise<Slot[]> {
     },
   });
 
-  // Sparklines — SPY + QQQ side by side (w:2 h:3 each)
+  // Sparklines — SPY + QQQ side by side (w:2 h:2 each — compact charts)
   if (spyPrices.length >= 5) {
     slots.push({
       widget: "sparkline",
-      h: 3,
+      h: 2,
       params: { label: "SPY 1mo", data: spyPrices, color: "#00CCEE" },
     });
   }
   if (qqqPrices.length >= 5) {
     slots.push({
       widget: "sparkline",
-      h: 3,
+      h: 2,
       params: { label: "QQQ 1mo", data: qqqPrices, color: "#BB66FF" },
     });
   }
@@ -141,7 +141,10 @@ async function buildLiveLayout(): Promise<Slot[]> {
       widget: "sectors",
       h: 2,
       params: {
-        sectors: sectorData.map(s => ({ name: s.label.toUpperCase(), chg: s.value })),
+        sectors: sectorData
+          .map(s => ({ name: s.label.toUpperCase(), chg: s.value }))
+          .sort((a, b) => Math.abs(b.chg) - Math.abs(a.chg))
+          .slice(0, 5),
       },
     });
   }
