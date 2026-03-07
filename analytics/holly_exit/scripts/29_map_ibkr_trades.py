@@ -5,7 +5,7 @@ Architecture:
   Step 1: Execution Normalization
     - Parse IBKR Flex CSV (HEADER/DATA multi-section or flat)
     - Filter to STK + EXECUTION level
-    - Cluster partial fills by OrderID → VWAP entry/exit per order
+    - Cluster partial fills by OrderID -> VWAP entry/exit per order
     - Pair opening/closing orders into round-trip positions (FIFO by symbol)
 
   Step 2: Match Engine
@@ -49,14 +49,15 @@ from engine.data_loader import get_db
 # ── Defaults ──────────────────────────────────────────────────────────────
 
 DEFAULT_FILLS_PATH = RAW_DIR / "TradeConfirmations_FULL.csv"
-MATCH_WINDOW_MINUTES = 5
+MATCH_WINDOW_MINUTES = 480  # 8 hours: Holly fires pre-market, user trades during regular session
 REPORT_DIR = OUTPUT_DIR / "reports" / "trade_mapping"
 
 # Record-type prefixes used in multi-section IBKR CSVs
 MULTI_SECTION_TYPES = {"HEADER", "DATA", "EOS", "EOA", "EOF", "BOF", "TRAILER"}
 
-# Minimum match confidence to auto-accept (below this → review queue)
-MIN_AUTO_CONFIDENCE = 0.70
+# Minimum match confidence to auto-accept (below this -> review queue)
+# Threshold is lenient because _filter_holly_day already requires same-day Holly alert
+MIN_AUTO_CONFIDENCE = 0.40
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -214,14 +215,14 @@ def parse_fills(path: Path) -> pd.DataFrame:
         before = len(raw)
         raw = raw[raw[C["level"]] == "EXECUTION"]
         if len(raw) < before:
-            print(f"  Filtered to EXECUTION: {before} → {len(raw)} rows")
+            print(f"  Filtered to EXECUTION: {before} -> {len(raw)} rows")
 
     # Filter to STK only
     if C["asset_class"] and C["asset_class"] in raw.columns:
         before = len(raw)
         raw = raw[raw[C["asset_class"]].str.strip().str.upper() == "STK"]
         if len(raw) < before:
-            print(f"  Filtered to STK: {before} → {len(raw)} rows")
+            print(f"  Filtered to STK: {before} -> {len(raw)} rows")
 
     fills = []
     for _, row in raw.iterrows():
@@ -277,7 +278,7 @@ def parse_fills(path: Path) -> pd.DataFrame:
 
 
 def cluster_by_order(fills: pd.DataFrame) -> pd.DataFrame:
-    """Cluster partial fills by OrderID → one row per logical order with VWAP price.
+    """Cluster partial fills by OrderID -> one row per logical order with VWAP price.
 
     Each OrderID represents one logical order that may have been filled
     across multiple exchanges in partial lots.
@@ -334,7 +335,7 @@ def cluster_by_order(fills: pd.DataFrame) -> pd.DataFrame:
 
     df = pd.DataFrame(orders)
     partial = (df["n_fills"] > 1).sum()
-    print(f"\n  Clustered: {len(fills)} fills → {len(df)} orders "
+    print(f"\n  Clustered: {len(fills)} fills -> {len(df)} orders "
           f"({partial} had partial fills, avg {fills.shape[0]/len(df):.1f} fills/order)")
     return df
 
@@ -497,9 +498,9 @@ def _score_match(
         if price_diff_pct <= 0.1:
             price_score = 1.0
         elif price_diff_pct <= 1.0:
-            price_score = 1.0 - (price_diff_pct - 0.1) / 0.9 * 0.5  # 1.0 → 0.5
+            price_score = 1.0 - (price_diff_pct - 0.1) / 0.9 * 0.5  # 1.0 -> 0.5
         elif price_diff_pct <= 5.0:
-            price_score = 0.5 - (price_diff_pct - 1.0) / 4.0 * 0.5  # 0.5 → 0.0
+            price_score = 0.5 - (price_diff_pct - 1.0) / 4.0 * 0.5  # 0.5 -> 0.0
         else:
             price_score = 0.0
     else:
@@ -886,7 +887,7 @@ def compute_analytics(matched: pd.DataFrame, holly_all: pd.DataFrame,
 def print_report(analytics: dict, matched: pd.DataFrame):
     """Print human-readable report."""
     print("\n" + "=" * 70)
-    print("  IBKR ↔ HOLLY TRADE MAPPING REPORT")
+    print("  IBKR <-> HOLLY TRADE MAPPING REPORT")
     print("  (matches are best-candidate, not confirmed causal links)")
     print("=" * 70)
 
@@ -927,7 +928,7 @@ def print_report(analytics: dict, matched: pd.DataFrame):
         print(f"  Commission:        ${p['ibkr_commission']:,.2f}")
         print(f"  IBKR net:          ${p['ibkr_net']:+,.2f}")
         print(f"  Holly theoretical: ${p['holly_total']:+,.2f}")
-        print(f"  Diff (IBKR−Holly): ${p['diff_total']:+,.2f}")
+        print(f"  Diff (IBKR-Holly): ${p['diff_total']:+,.2f}")
         print(f"  IBKR win rate:     {p['ibkr_win_rate']:.1%}")
         print(f"  Holly win rate:    {p['holly_win_rate']:.1%}")
         print(f"  Same-sign P&L:     {p['same_sign']:.1%}")
@@ -1049,7 +1050,7 @@ def _load_fills(args) -> pd.DataFrame:
         before = len(combined)
         combined = combined.drop_duplicates(subset=["trade_id", "symbol", "fill_time"])
         if len(combined) < before:
-            print(f"  Deduplicated: {before} → {len(combined)}")
+            print(f"  Deduplicated: {before} -> {len(combined)}")
         return combined
     else:
         p = Path(args.fills)
