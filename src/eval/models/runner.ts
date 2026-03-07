@@ -1,5 +1,5 @@
 import type { ModelFeatureVector } from "../features/types.js";
-import type { ModelEvaluation } from "./types.js";
+import type { ModelEvaluation, ModelId } from "./types.js";
 import { buildUserPrompt, hashPrompt } from "./prompt.js";
 import { evaluateWithClaude } from "./providers/claude.js";
 import { evaluateWithGPT } from "./providers/openai.js";
@@ -40,10 +40,11 @@ export async function evaluateAllModels(
     evaluateWithGemini(userPrompt, promptHash),
   ]);
 
-  const evaluations: ModelEvaluation[] = results.map((r) => {
+  const modelIds: ModelId[] = ["claude", "gpt4o", "gemini"];
+  const evaluations: ModelEvaluation[] = results.map((r, i) => {
     if (r.status === "fulfilled") return r.value;
     return {
-      model_id: "claude" as const,
+      model_id: modelIds[i],
       output: null,
       raw_response: "",
       latency_ms: 0,
