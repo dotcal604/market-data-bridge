@@ -114,3 +114,13 @@ export const config = {
     pollIntervalMs: parseInt(process.env.IMPORT_INBOX_POLL_MS ?? "5000", 10),
   },
 };
+
+// ── Production API key guard ────────────────────────────────────────────
+// In production, an empty API key means ALL endpoints are unauthenticated.
+// Refuse to start rather than run wide-open.
+if (process.env.NODE_ENV === "production" && !config.rest.apiKey) {
+  throw new Error(
+    "FATAL: REST_API_KEY is required in production. " +
+    "Set REST_API_KEY in your .env or environment variables.",
+  );
+}
