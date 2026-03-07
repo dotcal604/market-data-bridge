@@ -1,6 +1,9 @@
 import type { EnsembleScore } from "../ensemble/types.js";
 import { evalConfig } from "../config.js";
 import type { DriftReport } from "../drift.js";
+import { logger } from "../../logging.js";
+
+const log = logger.child({ subsystem: "guardrails" });
 
 export interface GuardrailResult {
   allowed: boolean;
@@ -58,8 +61,8 @@ export function runGuardrails(
           break;
         }
       }
-    } catch {
-      // DB might not be initialized yet
+    } catch (e: any) {
+      log.warn({ err: e }, "Loss streak check failed — defaulting to 0 (guardrail bypassed)");
     }
   }
 
@@ -77,8 +80,8 @@ export function runGuardrails(
         flags.push(`insufficient sample: ${sampleSize} trades, metrics unreliable`);
       }
       insufficientSample = sampleSize < evalConfig.minOutcomesHard;
-    } catch {
-      // DB might not be initialized yet
+    } catch (e: any) {
+      log.warn({ err: e }, "Sample size check failed — defaulting to 0 (guardrail bypassed)");
     }
   }
 
@@ -105,8 +108,8 @@ export function runGuardrails(
         regimeShiftDetected = true;
         flags.push("Regime shift detected — model accuracy degrading, consider pausing");
       }
-    } catch {
-      // Drift computation may fail if insufficient data
+    } catch (e: any) {
+      log.warn({ err: e }, "Drift check failed — defaulting to no regime shift (guardrail bypassed)");
     }
   }
 
