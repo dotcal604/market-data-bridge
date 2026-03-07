@@ -102,7 +102,8 @@ export async function placeOrder(params: PlaceOrderParams): Promise<PlaceOrderRe
     });
     logOrder.info({ orderId, symbol: params.symbol, action: params.action, orderType: params.orderType, qty: params.totalQuantity, correlationId }, "Order recorded in DB");
   } catch (e: any) {
-    logOrder.error({ err: e, orderId }, "Failed to write order to DB — continuing with placement");
+    logOrder.error({ err: e, orderId, symbol: params.symbol }, "Failed to write order to DB — blocking placement (fail-closed)");
+    throw new Error(`Order DB insert failed for ${params.symbol} (orderId=${orderId}): ${e.message}`);
   }
 
   return new Promise((resolve, reject) => {
@@ -244,7 +245,8 @@ export async function placeBracketOrder(params: BracketOrderParams): Promise<Bra
     insertOrder({ order_id: slId, symbol: params.symbol, action: reverseAction, order_type: "STP", total_quantity: params.totalQuantity, aux_price: params.stopLossPrice, sec_type: params.secType, exchange: params.exchange, currency: params.currency, parent_order_id: parentId, ...dbFields });
     logOrder.info({ parentId, tpId, slId, symbol: params.symbol, correlationId }, "Bracket order recorded in DB");
   } catch (e: any) {
-    logOrder.error({ err: e, parentId }, "Failed to write bracket order to DB — continuing with placement");
+    logOrder.error({ err: e, parentId, symbol: params.symbol }, "Failed to write bracket order to DB — blocking placement (fail-closed)");
+    throw new Error(`Bracket order DB insert failed for ${params.symbol} (parentId=${parentId}): ${e.message}`);
   }
 
   return new Promise((resolve, reject) => {
@@ -418,7 +420,8 @@ export async function placeAdvancedBracket(params: AdvancedBracketParams): Promi
     insertOrder({ order_id: slId, symbol: params.symbol, action: reverseAction, order_type: slType, total_quantity: params.quantity, aux_price: params.stopLoss.price ?? params.stopLoss.trailingAmount, sec_type: params.secType, exchange: params.exchange, currency: params.currency, parent_order_id: parentId, ...dbFields });
     logOrder.info({ parentId, tpId, slId, ocaGroup, symbol: params.symbol, correlationId }, "Advanced bracket recorded in DB");
   } catch (e: any) {
-    logOrder.error({ err: e, parentId }, "Failed to write advanced bracket to DB — continuing");
+    logOrder.error({ err: e, parentId, symbol: params.symbol }, "Failed to write advanced bracket to DB — blocking placement (fail-closed)");
+    throw new Error(`Advanced bracket DB insert failed for ${params.symbol} (parentId=${parentId}): ${e.message}`);
   }
 
   logOrder.info({ parentOrder, tpOrder, slOrder }, "Submitting advanced bracket to IBKR");

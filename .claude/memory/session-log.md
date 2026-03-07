@@ -213,3 +213,25 @@
   - Updated MEMORY.md Agent Fleet section with Mission Control + collab details
 - Build: clean (tsc --noEmit). Tests: 95/99 pass, 1705/1714 (4 pre-existing divoom widget failures)
 - Next: consider updating ORCHESTRATION.md with new handoff chains; P0 features from FEATURE-PLAN.md
+
+## 2026-03-07 17:00 — worktree (laughing-cori) — Divoom Tier 1 + audit triage + F02/F04 fixes
+
+- **Divoom Tier 1 Runtime Controls completed (8 files):**
+  - Backend: config-store.ts (DeviceSettings tier), updater.ts (timer restart + theme), server.ts (REST routes + composite guard)
+  - Frontend: types.ts, divoom-client.ts, use-divoom.ts, device-control.tsx (NEW), page.tsx
+  - All compile clean, no new TS errors
+- **Silver layer changes committed:** build_silver.py (SPY CTEs), 13_export deprecated, powerbi rewired to Parquet
+- **Repo merge review:**
+  - Closed 3 stale PRs (#393, #392, #362) — all CONFLICTING, lockfile/JSDoc/Mintlify churn
+  - 65 stale remote branches identified for pruning (codex/copilot/claude/jules/v0 agent branches)
+- **Copilot deep audit triage (30 findings → revised):**
+  - F01 (bracket OCA): DISPUTED → native IBKR attached bracket with parentId, not broken. Close.
+  - F05 (model_id): FALSE POSITIVE → code already uses modelIds[i] index mapping correctly. Close.
+  - F06 (API key): DONE → Copilot pushed 450cb02 production guard
+  - F08/F09 (@types): INTENTIONAL → documented trade-off for stricter typing
+  - F02 (DB insert): CONFIRMED P0 → **FIXED** — all 3 order functions now throw on DB failure (fail-closed)
+  - F04 (flatten audit): CONFIRMED P2 → **FIXED** — added WARN-level audit logging to REST flatten endpoint
+  - F10 (WS listener leak): CONFIRMED P1 — still pending
+  - F18 (silent catches): CONFIRMED — Copilot found 65/66 catch blocks silent. Assigned to Copilot CLI.
+- **Copilot CLI prompts provided** for F10, F12, F13, F14, F18, test coverage, repo quality scan
+- Net audit status: 2 false positives closed, 1 already fixed, 2 fixed this session, ~25 remain

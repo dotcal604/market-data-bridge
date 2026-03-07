@@ -109,19 +109,22 @@ export function initWebSocket(httpServer: HttpServer): void {
   _broadcast = broadcast;
 
   // ── Bind IBKR event listeners (only when connected) ──
-  let ibkrBound = false;
+  // Track which IBApi instance we've bound to — prevents listener leak on soft
+  // reconnect (same instance reused) while still re-binding on hard reconnect
+  // (new instance created after destroyIB).
+  let boundToIB: object | null = null;
 
   function bindIBKR(): void {
     if (!isConnected()) return;
-    if (ibkrBound) return;
     try {
       const ib = getIB();
+      if (ib === boundToIB) return; // Same instance — listeners still attached
+      boundToIB = ib;
       ib.on(EventName.openOrder, (...args: unknown[]) => broadcast("orders", args));
       ib.on(EventName.orderStatus, (...args: unknown[]) => broadcast("orders", args));
       (ib as any).on(EventName.updatePortfolio, (...args: unknown[]) => broadcast("positions", args));
       (ib as any).on(EventName.updateAccountValue, (...args: unknown[]) => broadcast("account", args));
       ib.on(EventName.execDetails, (...args: unknown[]) => broadcast("executions", args));
-      ibkrBound = true;
       logWs.info("IBKR event listeners bound to WebSocket broadcast");
     } catch (err) {
       logWs.warn({ err }, "Failed to bind IBKR events — will retry on reconnect");
@@ -131,8 +134,7 @@ export function initWebSocket(httpServer: HttpServer): void {
   // Bind now if already connected, and re-bind on every reconnect
   bindIBKR();
   onReconnect(() => {
-    ibkrBound = false;
-    bindIBKR();
+    bindIBKR(); // Re-binds only if ib instance changed (hard reconnect)
     // Broadcast connection status on reconnect
     broadcast("status", {
       ibkr_connected: true,
@@ -141,12 +143,14 @@ export function initWebSocket(httpServer: HttpServer): void {
   }, "ws/server");
 
   // ── Bind IBKR connection status listeners ──
-  // These must be bound outside bindIBKR() as they need to work when disconnected
-  let statusBound = false;
+  // Same instance-tracking pattern as bindIBKR — re-binds on hard reconnect,
+  // skips on soft reconnect to prevent duplicate listeners.
+  let statusBoundToIB: object | null = null;
   function bindStatusListeners(): void {
-    if (statusBound) return;
     try {
       const ib = getIB();
+      if (ib === statusBoundToIB) return; // Same instance — listeners still attached
+      statusBoundToIB = ib;
       ib.on(EventName.connected, () => {
         broadcast("status", {
           ibkr_connected: true,
@@ -159,7 +163,6 @@ export function initWebSocket(httpServer: HttpServer): void {
           timestamp: new Date().toISOString(),
         });
       });
-      statusBound = true;
       logWs.info("IBKR status listeners bound to WebSocket broadcast");
     } catch (err) {
       logWs.warn({ err }, "Failed to bind IBKR status listeners");
