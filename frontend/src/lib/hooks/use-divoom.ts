@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { divoomClient, type BgClearSettings } from "../api/divoom-client";
-import type { CompositeSettings, ContentSettings, LayoutSettings } from "../api/types";
+import type { DeviceSettings, CompositeSettings, ContentSettings, LayoutSettings } from "../api/types";
 
 export function useDivoomStatus(refetchInterval = 10_000) {
   return useQuery({
@@ -59,6 +59,26 @@ export function useDivoomSetBackground() {
 }
 
 // ─── Config Store Hooks ──────────────────────────────
+
+export function useDivoomDevice() {
+  return useQuery({
+    queryKey: ["divoom", "device"],
+    queryFn: () => divoomClient.getDevice(),
+    refetchInterval: 30_000,
+  });
+}
+
+export function useDivoomSetDevice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (patch: Partial<DeviceSettings>) => divoomClient.setDevice(patch),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["divoom", "device"] });
+      qc.invalidateQueries({ queryKey: ["divoom", "status"] });
+      qc.invalidateQueries({ queryKey: ["divoom", "preview"] });
+    },
+  });
+}
 
 export function useDivoomComposite() {
   return useQuery({

@@ -22,7 +22,8 @@ import { renderAllCharts } from "./charts.js";
 import { isConnected } from "../ibkr/connection.js";
 import { config } from "../config.js";
 import { logger } from "../logging.js";
-import { loadConfig } from "./config-store.js";
+import { loadConfig, getDeviceSettings } from "./config-store.js";
+import { DEFAULT_CONFIG, LIGHT_CONFIG } from "./canvas/types.js";
 
 // Widget engine (feature-flagged via DIVOOM_USE_WIDGET_ENGINE)
 import { renderLayout, CANVAS_W, PAD_X, CONTENT_W } from "./widgets/index.js";
@@ -208,7 +209,9 @@ async function refreshCanvasEngine(): Promise<void> {
   }
 
   // Render full dashboard to JPEG (cached for REST route)
-  await renderCanvasDashboard();
+  const { theme } = getDeviceSettings();
+  const canvasConfig = theme === "light" ? LIGHT_CONFIG : DEFAULT_CONFIG;
+  await renderCanvasDashboard(canvasConfig);
   lastRefreshAt = new Date().toISOString();
 
   // Minimal DispList — device requires at least one element to process
@@ -323,6 +326,8 @@ export interface DivoomState {
   port: number;
   refreshIntervalMs: number;
   brightness: number;
+  theme: "dark" | "light";
+  compositeEnabled: boolean;
   lastSession: string;
   lastIbkrConnected: boolean;
   inCustomMode: boolean;
@@ -333,13 +338,16 @@ export interface DivoomState {
 }
 
 export function getDivoomState(): DivoomState {
+  const deviceSettings = getDeviceSettings();
   return {
     enabled: config.divoom.enabled,
     connected: display !== null,
     deviceIp: config.divoom.deviceIp,
     port: config.divoom.devicePort,
-    refreshIntervalMs: config.divoom.refreshIntervalMs,
+    refreshIntervalMs: deviceSettings.refreshIntervalMs,
     brightness: config.divoom.brightness,
+    theme: deviceSettings.theme,
+    compositeEnabled: deviceSettings.compositeEnabled,
     lastSession,
     lastIbkrConnected,
     inCustomMode: display?.isInCustomMode ?? false,
@@ -348,6 +356,21 @@ export function getDivoomState(): DivoomState {
     preview: lastDashboardData,
     enginePreview: lastEngineResult,
   };
+}
+
+/**
+ * Restart the refresh timer with a new interval.
+ * Called by the admin panel when refreshIntervalMs changes.
+ */
+export function restartRefreshTimer(intervalMs: number): void {
+  if (refreshTimer) {
+    clearInterval(refreshTimer);
+    refreshTimer = null;
+  }
+  if (!display) return;
+  const clamped = Math.max(4000, Math.min(30_000, intervalMs));
+  refreshTimer = setInterval(refreshDashboard, clamped);
+  log.info({ intervalMs: clamped }, "Refresh timer restarted");
 }
 
 /**

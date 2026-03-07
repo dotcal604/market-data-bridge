@@ -19,11 +19,12 @@ import { getMetrics, getRecentIncidents } from "../ops/metrics.js";
 import { isReady } from "../ops/readiness.js";
 import { getCachedChart, getPlaceholderPng } from "../divoom/charts.js";
 import sharp from "sharp";
-import { getDivoomState, getDivoomDisplay, forceRefresh, getBgClearSettings, setBgClearSettings } from "../divoom/updater.js";
+import { getDivoomState, getDivoomDisplay, forceRefresh, getBgClearSettings, setBgClearSettings, restartRefreshTimer } from "../divoom/updater.js";
 import { renderHudBackground } from "../divoom/background.js";
 import { getCachedComposite, clearCompositeCache } from "../divoom/composite.js";
 import { getCachedCanvasJpeg, renderCanvasDashboard } from "../divoom/canvas/cache.js";
 import {
+  getDeviceSettings, setDeviceSettings,
   getCompositeSettings, setCompositeSettings,
   getContentSettings, setContentSettings,
   getLayoutSettings, setLayoutSettings,
@@ -287,6 +288,11 @@ export function createApp(): express.Express {
   // ── Composite background endpoint (unauthenticated — device fetches directly) ──
   // Top/bottom: upper tint (translucent glass behind text) + lower live charts.
   app.get("/api/divoom/charts/composite", async (_req: Request, res: Response) => {
+    // Guard: skip rendering when composite is disabled at the device level
+    if (!getDeviceSettings().compositeEnabled) {
+      res.status(204).end();
+      return;
+    }
     try {
       const bgSettings = getBgClearSettings();
       const buf = await getCachedComposite({
@@ -568,6 +574,27 @@ export function createApp(): express.Express {
   });
 
   // ─── Divoom Config Store ───
+
+  // Tier 0: Device settings (refresh rate, theme, composite toggle)
+  app.get("/api/divoom/config/device", apiKeyAuth, (_req, res) => {
+    res.json({ data: getDeviceSettings() });
+  });
+
+  app.post("/api/divoom/config/device", apiKeyAuth, async (req, res) => {
+    const prev = getDeviceSettings();
+    const updated = setDeviceSettings(req.body ?? {});
+    // Side effects for changed settings
+    if (updated.refreshIntervalMs !== prev.refreshIntervalMs) {
+      restartRefreshTimer(updated.refreshIntervalMs);
+    }
+    if (updated.compositeEnabled !== prev.compositeEnabled && !updated.compositeEnabled) {
+      clearCompositeCache();
+    }
+    if (updated.theme !== prev.theme) {
+      try { await forceRefresh(); } catch { /* non-fatal */ }
+    }
+    res.json({ data: updated });
+  });
 
   app.get("/api/divoom/config/composite", apiKeyAuth, (_req, res) => {
     res.json({ data: getCompositeSettings() });

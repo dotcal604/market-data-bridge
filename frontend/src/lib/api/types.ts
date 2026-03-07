@@ -508,6 +508,8 @@ export interface DivoomStatusData {
   port: number;
   refreshIntervalMs: number;
   brightness: number;
+  theme: "dark" | "light";
+  compositeEnabled: boolean;
   lastSession: string;
   lastIbkrConnected: boolean;
   inCustomMode: boolean;
@@ -607,7 +609,14 @@ export interface WidgetInfo {
   minHeight?: number;
 }
 
+export interface DeviceSettings {
+  refreshIntervalMs: number;
+  theme: "dark" | "light";
+  compositeEnabled: boolean;
+}
+
 export interface ConfigDefaults {
+  device: DeviceSettings;
   composite: CompositeSettings;
   content: ContentSettings;
   layout: LayoutSettings;

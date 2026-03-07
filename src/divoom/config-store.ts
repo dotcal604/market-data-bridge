@@ -3,6 +3,7 @@
  *
  * Three-tier parameterization with debounced JSON file persistence.
  *
+ * Tier 0 — DeviceSettings:    refresh rate, theme, composite toggle.
  * Tier 1 — CompositeSettings: split point, JPEG quality, cache TTL,
  *          per-section enable/height, color palette.
  * Tier 2 — ContentSettings:   sparkline ticker/timeframe/bars, accent colors.
@@ -18,6 +19,23 @@ import path from "node:path";
 import { logger } from "../logging.js";
 
 const log = logger.child({ module: "divoom-config" });
+
+// ─── Tier 0: Device / Runtime Settings ────────────────────
+
+export interface DeviceSettings {
+  /** Refresh interval in milliseconds (4000–30000, default 10000) */
+  refreshIntervalMs: number;
+  /** Canvas color theme: "dark" = transparent glass, "light" = opaque panel */
+  theme: "dark" | "light";
+  /** Whether composite background rendering is enabled */
+  compositeEnabled: boolean;
+}
+
+const DEFAULT_DEVICE: DeviceSettings = {
+  refreshIntervalMs: 10_000,
+  theme: "dark",
+  compositeEnabled: false,
+};
 
 // ─── Tier 1: Composite Renderer Settings ──────────────────
 
@@ -133,6 +151,7 @@ const DEFAULT_LAYOUT: LayoutSettings = {
 // ─── Combined Store ───────────────────────────────────────
 
 interface ConfigStore {
+  device: DeviceSettings;
   composite: CompositeSettings;
   content: ContentSettings;
   layout: LayoutSettings;
@@ -141,6 +160,7 @@ interface ConfigStore {
 const CONFIG_FILE = path.join(process.cwd(), "data", "divoom-config.json");
 
 let store: ConfigStore = {
+  device: structuredClone(DEFAULT_DEVICE),
   composite: structuredClone(DEFAULT_COMPOSITE),
   content: structuredClone(DEFAULT_CONTENT),
   layout: structuredClone(DEFAULT_LAYOUT),
@@ -199,6 +219,9 @@ export async function loadConfig(): Promise<void> {
       const raw = await readFile(CONFIG_FILE, "utf-8");
       const saved = JSON.parse(raw) as Partial<ConfigStore>;
       // Deep merge saved values over defaults so new fields get default values
+      if (saved.device) {
+        store.device = deepMerge(structuredClone(DEFAULT_DEVICE), saved.device);
+      }
       if (saved.composite) {
         store.composite = deepMerge(structuredClone(DEFAULT_COMPOSITE), saved.composite);
       }
@@ -215,6 +238,23 @@ export async function loadConfig(): Promise<void> {
   } catch (err) {
     log.warn({ err }, "Failed to load config — using defaults");
   }
+}
+
+// ── Tier 0: Device ──
+
+export function getDeviceSettings(): DeviceSettings {
+  return structuredClone(store.device);
+}
+
+export function setDeviceSettings(patch: Partial<DeviceSettings>): DeviceSettings {
+  store.device = deepMerge(store.device, patch);
+  store.device.refreshIntervalMs = Math.max(4000, Math.min(30_000, store.device.refreshIntervalMs));
+  if (!["dark", "light"].includes(store.device.theme)) {
+    store.device.theme = "dark";
+  }
+  log.info({ device: store.device }, "Device settings updated");
+  scheduleSave();
+  return structuredClone(store.device);
 }
 
 // ── Tier 1: Composite ──
@@ -266,6 +306,7 @@ export function setLayoutSettings(patch: Partial<LayoutSettings>): LayoutSetting
 
 export function resetConfig(): void {
   store = {
+    device: structuredClone(DEFAULT_DEVICE),
     composite: structuredClone(DEFAULT_COMPOSITE),
     content: structuredClone(DEFAULT_CONTENT),
     layout: structuredClone(DEFAULT_LAYOUT),
@@ -278,6 +319,7 @@ export function resetConfig(): void {
 
 export function getDefaults(): ConfigStore {
   return {
+    device: structuredClone(DEFAULT_DEVICE),
     composite: structuredClone(DEFAULT_COMPOSITE),
     content: structuredClone(DEFAULT_CONTENT),
     layout: structuredClone(DEFAULT_LAYOUT),

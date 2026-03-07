@@ -4,6 +4,7 @@ import { DisplayPreview } from "@/components/divoom/display-preview";
 import { StatusCard } from "@/components/divoom/status-card";
 import { ChartThumbnails } from "@/components/divoom/chart-thumbnails";
 import { BrightnessControl } from "@/components/divoom/brightness-control";
+import { DeviceControl } from "@/components/divoom/device-control";
 import { BackgroundControl } from "@/components/divoom/background-control";
 import { CompositeControl } from "@/components/divoom/composite-control";
 import { ContentControl } from "@/components/divoom/content-control";
@@ -80,6 +81,7 @@ export default function DivoomPage() {
             onBrightnessChange={(v) => brightnessMutation.mutate(v)}
             disabled={!status?.connected}
           />
+          <DeviceControl />
           <BackgroundControl />
           <ChartThumbnails refreshKey={dataUpdatedAt} />
 

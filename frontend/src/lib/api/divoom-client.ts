@@ -1,6 +1,7 @@
 import type {
   DivoomStatusData,
   DivoomPreviewData,
+  DeviceSettings,
   CompositeSettings,
   ContentSettings,
   LayoutSettings,
@@ -45,6 +46,9 @@ export const divoomClient = {
     postJSON<BgClearSettings>(`${API_BASE}/config/background`, patch),
 
   // Config store
+  getDevice: () => fetchJSON<DeviceSettings>(`${API_BASE}/config/device`),
+  setDevice: (patch: Partial<DeviceSettings>) =>
+    postJSON<DeviceSettings>(`${API_BASE}/config/device`, patch),
   getComposite: () => fetchJSON<CompositeSettings>(`${API_BASE}/config/composite`),
   setComposite: (patch: Partial<CompositeSettings>) =>
     postJSON<CompositeSettings>(`${API_BASE}/config/composite`, patch),
