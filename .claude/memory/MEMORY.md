@@ -82,8 +82,30 @@ NEVER set IBKR_CLIENT_ID in .env — causes collision for all MCP clients.
 - Auto-detects provider code from IBKR subscription, caches for session
 - Smart defaults: 24h lookback, `buildNewsDateRange()` helper
 
+### Silver Layer Normalization (Extended)
+- `build_silver.py` now produces 171 columns (up from ~140)
+- Dual-track: vendor_R (from holly_pnl) vs price_exit_R (from entry/exit math)
+- Quality flags: bad_risk_flag, penny_flag, low_price_flag, high_risk_pct_flag, small_cap_flag
+- Stratification: price_bucket (7 bins), hold_bucket (5 bins)
+- Capture ratios, capital efficiency (RON), vendor-price disagreement flag
+
+### Sizing Simulation (30_sizing_simulation.py)
+- 3 engines: baseline (100 shares), fixed_notional, hybrid_risk_cap
+- 36 scenarios, 28,875 trades, 1M+ output rows
+- **Key finding**: vendor baseline $57.8M vs price baseline $79K — holly_pnl ≠ entry→exit math
+- Best hybrid: $100k/0.75% risk/15% cap → $461K total, $15.30 expectancy
+- Live calibration from 17 IBKR fills: cap grid $652/$814/$1,442/$1,508
+
 ### Feature Plan
 - `docs/FEATURE-PLAN.md` — 5 phases, 13 features, 6 agents, ~52h estimated
 - P0: Exit Params MCP tool + direction bug fix
 - P1: Sentiment scoring (Codex) + auto-apply exit rules
 - P2-P4: Unified news, indicator flags, WebSocket streaming, dashboard
+
+### Supabase + NocoDB (Planned)
+- Architecture sketch: `docs/SUPABASE-NOCODB-SKETCH.md`
+- Supabase org: KLFH (ID: mytpjnuenchlloqowkrr), no project created yet
+- Schema: tasks, task_links (junction w/ entity_type enum), research_runs, strategy_notes, agent_sessions
+- NocoDB: spreadsheet UI + MCP server for agent CRUD
+- Free tier sufficient for task management scale
+- Will seed tasks from FEATURE-PLAN.md, backfill research_runs from existing experiments
