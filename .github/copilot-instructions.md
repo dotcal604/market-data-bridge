@@ -2,6 +2,8 @@
 
 ## Project Overview
 
+This document defines preferred standards for new and modified code; legacy areas may not yet conform.
+
 Market Data Bridge is a single-process Node.js/TypeScript server that bridges Interactive Brokers TWS/Gateway to AI assistants via:
 - **MCP Server** (stdio transport) for native Claude Desktop/Code integration
 - **REST API** (Express) for ChatGPT custom actions and external tools
@@ -41,7 +43,7 @@ Market Data Bridge is a single-process Node.js/TypeScript server that bridges In
 2. **No HTTP hops between subsystems**: Eval engine imports Yahoo/IBKR providers as direct function calls, not HTTP
 3. **ESM imports only**: All backend imports use `.js` extension in compiled output (`import { foo } from "./bar.js"`)
 4. **better-sqlite3 only**: No sql.js, no async DB drivers. WAL mode, synchronous API
-5. **Pino logger everywhere**: Use `import { logger } from "../logging.js"`. No console.log
+5. **Pino logger everywhere**: Never write to stdout outside protocol output. Avoid `console.*` in normal runtime code; stderr-only diagnostics are acceptable in rare bootstrap/transport/connection-critical paths. Use `import { logger } from "../logging.js"`
 6. **Zod schema validation**: All external inputs (API requests, model outputs) must be validated
 
 ## Code Standards
@@ -55,7 +57,7 @@ Market Data Bridge is a single-process Node.js/TypeScript server that bridges In
 
 ### Frontend Components
 - Every interactive component starts with `"use client"` directive
-- Named exports only (no default exports)
+- Named exports in application code (config files may use default export when required by tooling)
 - Props interfaces defined in same file or imported from `@/lib/api/types`
 - Use `cn()` from `@/lib/utils` for conditional class merging
 - Font: `font-mono` for numeric/data values, default sans for labels
@@ -140,8 +142,16 @@ npm run build
 # Build frontend
 cd frontend && npm run build && cd ..
 
-# Dev mode (both servers)
+# Dev mode (both servers — backend uses compiled build/, not hot-reload)
 npm run dev
+
+# Start modes
+npm run start:mcp           # MCP-only (stdio, no REST)
+npm run start:mcp-readonly  # MCP read-only (no order tools)
+npm run start:rest          # REST-only (no MCP)
+
+# Build everything (backend + frontend)
+npm run build:all
 
 # Type-check backend
 npx tsc --noEmit
@@ -237,8 +247,8 @@ export function multiModelConsensus(scores: ModelScore[]): ConsensusResult
 - ❌ Do not make HTTP calls between internal subsystems — use direct imports
 - ❌ Do not allow schema drift — Zod schemas are the source of truth
 - ❌ Do not store API keys in code — `.env` only
-- ❌ Do not modify `src/ibkr/orders.ts` execution logic without explicit approval
-- ❌ Do not use default exports for components — named exports only
+- ❌ Do not modify `src/ibkr/orders.ts` execution logic without explicit approval — `orders.ts` is a legacy compatibility shim; new code should target `src/ibkr/orders_impl/*` directly
+- ❌ Do not use default exports in application code — named exports only (config files may use default export when required by tool conventions)
 - ❌ Do not use white backgrounds or light themes — dark mode only
 - ❌ Do not mock better-sqlite3 in tests — use in-memory database
 
@@ -259,17 +269,20 @@ When creating new frontend components:
 
 ```
 src/
-  config.ts           — env vars, ports, API keys
   index.ts            — entry point, starts MCP + REST + IBKR
-  logging.ts          — Pino logger setup
-  
+
   ibkr/               — IBKR TWS client modules
+    orders_impl/      — Order execution (bracket, trailing, OCA)
+    orders.ts         — Legacy compatibility shim (re-exports orders_impl)
   providers/          — Yahoo Finance and market status
   db/                 — SQLite schema and queries
   rest/               — Express server and routes
   mcp/                — MCP server tools
   ws/                 — WebSocket server and broadcaster
   collab/             — AI collaboration channel
+  inbox/              — Agent inbox / check_inbox wiring
+  config.ts           — Environment variables, ports, API keys
+  logging.ts          — Pino logger setup
   eval/               — Multi-model evaluation engine
     features/         — Pure feature computation functions
     models/           — LLM provider integrations
