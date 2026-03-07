@@ -36,8 +36,12 @@ DATA_DIR = PROJECT_ROOT / "data"
 OUTPUT_DIR = ANALYTICS_DIR / "output"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
+# Silver layer (preferred source — canonical, single truth)
+SILVER_DDB = DATA_DIR / "silver" / "holly_trades.duckdb"
+
+# Legacy fallbacks
 HOLLY_CSV = ANALYTICS_DIR / "holly_exit" / "output" / "holly_analytics.csv"
-DB_PATH = DATA_DIR / "market-data-bridge.db"
+DB_PATH = DATA_DIR / "bridge.db"
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -47,12 +51,21 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 def load_holly_trades(days: Optional[int] = None, strategy: Optional[str] = None) -> pd.DataFrame:
-    """Load Holly trades from CSV (primary) or DB (fallback)."""
-    if HOLLY_CSV.exists():
-        logger.info(f"Loading from CSV: {HOLLY_CSV}")
+    """Load Holly trades from Silver DuckDB (preferred), CSV fallback, or SQLite fallback."""
+    if SILVER_DDB.exists():
+        logger.info(f"Loading from Silver DuckDB: {SILVER_DDB}")
+        import duckdb
+        db = duckdb.connect(str(SILVER_DDB), read_only=True)
+        df = db.execute("SELECT * FROM holly_trades").fetchdf()
+        db.close()
+        for col in ["trade_date", "entry_time", "exit_time"]:
+            if col in df.columns:
+                df[col] = pd.to_datetime(df[col])
+    elif HOLLY_CSV.exists():
+        logger.info(f"Silver not found, falling back to CSV: {HOLLY_CSV}")
         df = pd.read_csv(HOLLY_CSV, parse_dates=["trade_date", "entry_time", "exit_time"])
     else:
-        logger.info("CSV not found, trying DB...")
+        logger.info("Silver and CSV not found, trying bridge.db...")
         import sqlite3
         conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
         df = pd.read_sql("SELECT * FROM holly_trades", conn, parse_dates=["trade_date", "entry_time", "exit_time"])
