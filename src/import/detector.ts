@@ -40,6 +40,11 @@ const TRADERSYNC_CSV_MIN_MATCH = 4;
 const IBKR_FLEX_CSV_MARKERS = ["ClientAccountID", "Buy/Sell", "TradeID", "Conid", "AssetClass", "Symbol", "Date/Time"];
 const IBKR_FLEX_CSV_MIN_MATCH = 4;
 
+// IBKR Flex Query multi-section format (Full_Trade_History / Activity Statement)
+// These files have BOF/HEADER/DATA/TRAILER record-type prefixes instead of a flat CSV header
+const IBKR_FLEX_SECTION_MARKERS = ["BOF", "HEADER", "DATA", "TRAILER"];
+const IBKR_FLEX_SECTION_MIN_MATCH = 2; // BOF+DATA or HEADER+DATA is enough
+
 // Holly Alert Logging CSV columns (case-insensitive)
 const HOLLY_ALERT_CSV_MARKERS = ["symbol", "strategy", "entry price", "stop price", "shares"];
 const HOLLY_ALERT_CSV_ALT = ["ticker", "entry time", "alert time", "smart stop"];
@@ -212,11 +217,32 @@ function detectFromCsvContent(content: string): DetectionResult {
     }
   }
 
-  // Parse header columns
+  // Check IBKR Flex multi-section format (BOF/HEADER/DATA/TRAILER prefixes)
+  // Must check BEFORE parsing header — first line may be "BOF,..." not column names
+  const firstFewLines = lines.slice(0, Math.min(lines.length, 10));
+  const recordTypes = firstFewLines
+    .map((l) => l.split(",")[0]?.trim().replace(/^"|"$/g, ""))
+    .filter(Boolean);
+  const sectionMatches = IBKR_FLEX_SECTION_MARKERS.filter((m) => recordTypes.includes(m));
+  if (sectionMatches.length >= IBKR_FLEX_SECTION_MIN_MATCH) {
+    // Confirm it's IBKR by checking if any HEADER or DATA row contains known IBKR columns
+    const headerOrDataLines = firstFewLines.filter((l) => /^"?(HEADER|DATA)"?,/.test(l));
+    const combinedText = headerOrDataLines.join(",");
+    const ibkrColHits = IBKR_FLEX_CSV_MARKERS.filter((m) => combinedText.includes(m));
+    if (ibkrColHits.length >= 2 || sectionMatches.includes("BOF")) {
+      return {
+        format: "ibkr_flex",
+        confidence: Math.min((sectionMatches.length + ibkrColHits.length) / 6, 1),
+        reason: `IBKR Flex multi-section format (${sectionMatches.join("/")} records${ibkrColHits.length > 0 ? `, columns: ${ibkrColHits.join(", ")}` : ""})`,
+      };
+    }
+  }
+
+  // Parse header columns (flat CSV path)
   const headerLine = lines[0];
   const headers = headerLine.split(",").map((h) => h.trim().replace(/^"|"$/g, ""));
 
-  // Check IBKR Flex Query CSV (before TraderSync — both have "Symbol")
+  // Check IBKR Flex Query flat CSV (before TraderSync — both have "Symbol")
   const ibkrMatches = IBKR_FLEX_CSV_MARKERS.filter((m) => headers.some((h) => h === m));
   if (ibkrMatches.length >= IBKR_FLEX_CSV_MIN_MATCH) {
     return {
