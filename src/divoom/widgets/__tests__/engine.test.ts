@@ -10,7 +10,16 @@
  *   6. Final assertion — element counts ≤ 6T/10I/6N
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+
+vi.mock("../types.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../types.js")>();
+  return {
+    ...actual,
+    DEVICE_BUDGET: { text: 6, image: 10, netdata: 6 },
+  };
+});
+
 import { renderLayout } from "../engine.js";
 import { registerWidget, clearRegistry } from "../registry.js";
 import type { Widget, WidgetContext, WidgetOutput, SlotCost } from "../types.js";
@@ -22,7 +31,7 @@ const CTX: WidgetContext = {
   session: "regular",
   ibkrConnected: true,
   chartBaseUrl: "http://localhost:3000",
-  canvas: { width: 800, contentWidth: 768, padX: 16 },
+  canvas: { width: 800, height: 1280, contentWidth: 768, padX: 16 },
 };
 
 function makeTextElement(id: number, y: number, text: string): DisplayElement {

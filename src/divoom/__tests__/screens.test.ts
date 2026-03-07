@@ -238,14 +238,14 @@ describe("screens", () => {
     it("colors green for positive change", async () => {
       mockGetQuote.mockResolvedValue(makeQuote({ changePercent: 0.45 }));
       const data = await fetchDashboardData();
-      expect(data.indices[0].color).toBe("#00FF00");
+      expect(data.indices[0].color).toBe("#2D8B2D");
       expect(data.indices[0].text).toContain("+0.45%");
     });
 
     it("colors red for negative change", async () => {
       mockGetQuote.mockResolvedValue(makeQuote({ changePercent: -0.52 }));
       const data = await fetchDashboardData();
-      expect(data.indices[0].color).toBe("#FF0000");
+      expect(data.indices[0].color).toBe("#CC0000");
     });
 
     it("formats price correctly", async () => {
@@ -342,7 +342,7 @@ describe("screens", () => {
     it("colors rows by change direction", async () => {
       mockGetQuote.mockResolvedValue(makeQuote({ changePercent: 0.8 }));
       const data = await fetchDashboardData();
-      expect(data.sectors.rows[0].color).toBe("#00FF00");
+      expect(data.sectors.rows[0].color).toBe("#00CC00");
     });
   });
 

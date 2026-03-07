@@ -142,10 +142,11 @@ describe("evaluateAllModels", () => {
     const result = await evaluateAllModels("AAPL", "long", 220, 217, baseFeatures);
 
     expect(result.evaluations.filter((e) => e.compliant)).toHaveLength(1);
-    expect(result.evaluations.filter((e) => !e.compliant)).toHaveLength(2);
-    for (const failure of result.evaluations.filter((e) => !e.compliant)) {
+    const failures = result.evaluations.filter((e) => !e.compliant);
+    expect(failures).toHaveLength(2);
+    expect(failures.map(e => e.model_id)).toEqual(["claude", "gemini"]);
+    for (const failure of failures) {
       expect(failure.timestamp).toBeTypeOf("string");
-      expect(failure.model_id).toBe("claude");
     }
   });
 

@@ -150,10 +150,10 @@ describe("TimesFrameDisplay", () => {
       expect(body.DispList[0].FontID).toBe(52);
     });
 
-    it("defaults background URL to empty string", async () => {
+    it("omits background URL when empty", async () => {
       mockOk();
       await display.enterCustomMode([]);
-      expect(parseBody().BackgroudImageAddr).toBe("");
+      expect(parseBody().BackgroudImageAddr).toBeUndefined();
     });
 
     it("sets isInCustomMode to true after entering", async () => {
