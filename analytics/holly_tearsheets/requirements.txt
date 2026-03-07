@@ -1,0 +1,7 @@
+quantstats>=0.0.62
+empyrical-reloaded>=0.5.5
+pandas>=2.0
+numpy>=1.24
+scipy>=1.10
+matplotlib>=3.7
+yfinance>=0.2.18
