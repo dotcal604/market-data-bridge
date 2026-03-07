@@ -58,7 +58,7 @@ Single-process Node.js 22+ TypeScript trading platform: IBKR + Yahoo Finance + 3
 NEVER set IBKR_CLIENT_ID in .env — causes collision for all MCP clients.
 
 ## Current State (Mar 2026)
-- Build: clean, tests: 1,703 passing (98 files)
+- Build: clean, tests: 1,740 passing (101 files), 10 pre-existing failures (divoom widgets, agent-catalog, runner)
 - Branch: main (all feature branches merged)
 - Cloud module: WIP (code complete, not deployed)
 - Divoom charts: shipped (7 chart renderers, REST endpoint, @napi-rs/canvas + chartjs-node-canvas)

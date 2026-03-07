@@ -244,3 +244,22 @@
 - 5-year plan window: 2022–2026 accessible, 2003–2021 = 403 Forbidden
 - Updated MEMORY.md: Silver now 195 columns, 3 Bronze sources wired, PBI rewired, minute flat files documented
 - Remaining Polygon data not yet fetched: trade-level ticks (/v3/trades), NBBO quotes (/v3/quotes)
+
+## 2026-03-07 08:30 — desktop — Agent intake, issue triage, P0 tests committed
+
+- **Reviewed & committed Agent #3's Phase 1a delivery** (exit-params.ts + REST route) — `5285a1c`
+- **Committed P0 test: ibkr/account.ts** — 13 tests from Gemini CLI, all passing — `bcb7327`
+- **Committed analytics pipeline** — daily_data_refresh orchestrator + 2 new fetch scripts — `4b5a035`, `08d97d2`
+- **Fixed divoom silent catches** — 8 catch blocks across screens.ts + 3 widget files — `4abf4d1`
+- **Closed 6 GitHub issues**: F02 (fixed), F04 (fixed), F05 (false positive), #378 (completed), #387 (stale), #391 (stale)
+- **Remaining open issues (8)**: F01 OCA (#396), F03 race condition (#398), F06 API key (#401), F07 rate limit (#402), F08/F09 types (#403), Sprint 1 (#368), D1 (#313), D3 (#314)
+- Tests: 1,740 passing, 10 pre-existing failures (divoom widgets, agent-catalog, runner)
+- Working tree: clean, all pushed to main
+
+## 2026-03-07 09:00 — desktop — Phase 1a complete, MCP wired, Agent #3 typing work landed
+
+- **Agent #3 delivered** `as any` audit: 19 casts replaced in agent.ts + database.ts (commit `c0c09cf`)
+- **MCP tools wired** for Phase 1a: `get_holly_exit_params` + `get_strategy_exit_config` registered in server.ts — `98c8f42`
+- Phase 1a fully complete: exit-params.ts → REST route → MCP tools → all working
+- 109 MCP tests passing, tsc clean
+- **Open issues (8)**: F01 OCA (#396), F03 race (#398), F06 API key (#401), F07 rate limit (#402), F08/F09 types (#403), Sprint 1 (#368), D1 (#313), D3 (#314)
