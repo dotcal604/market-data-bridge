@@ -4,15 +4,16 @@
 
 1. **New Report**: File > New > Blank Report
 2. **Import Theme**: View > Themes > Browse for themes > select `holly-dark-theme.json`
-3. **Load Data**: Home > Get Data > Excel Workbook > select `holly_analytics.xlsx`
-4. **Power Query**: Transform Data > open Advanced Editor > paste code from `data-prep.pq` (Query 1: main table)
-5. **Date Table**: New blank query > paste Query 2 from `data-prep.pq` (uncomment the code)
-6. **Measures Table**: New blank query > paste Query 3 from `data-prep.pq` (uncomment the code)
-7. **Close & Apply**: Close Power Query editor
-8. **Relationships**: Model view > drag `DateTable[Date]` to `holly_analytics[trade_date]`
-9. **Mark Date Table**: Select DateTable > Table tools > Mark as date table > `Date` column
-10. **Enter DAX Measures**: Select Measures table > New Measure > paste each measure from `dax-measures.dax`
-11. **Build Pages**: Follow page-by-page instructions below
+3. **Rebuild Silver** (if stale): `python analytics/build_silver.py` → produces `data/silver/holly_trades.parquet`
+4. **Load Data**: Home > Get Data > Parquet > select `data/silver/holly_trades.parquet`
+5. **Power Query**: Transform Data > open Advanced Editor > paste code from `data-prep.pq` (Query 1: main table)
+6. **Date Table**: New blank query > paste Query 2 from `data-prep.pq` (uncomment the code)
+7. **Measures Table**: New blank query > paste Query 3 from `data-prep.pq` (uncomment the code)
+8. **Close & Apply**: Close Power Query editor
+9. **Relationships**: Model view > drag `DateTable[Date]` to `holly_analytics[trade_date]`
+10. **Mark Date Table**: Select DateTable > Table tools > Mark as date table > `Date` column
+11. **Enter DAX Measures**: Select Measures table > New Measure > paste each measure from `dax-measures.dax`
+12. **Build Pages**: Follow page-by-page instructions below
 
 ## Report Setup
 

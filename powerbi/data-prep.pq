@@ -6,19 +6,31 @@
 // 2. For each section below, click "New Source > Blank Query"
 // 3. Click "Advanced Editor" and paste the code
 // 4. Rename the query as indicated
+//
+// DATA SOURCE: Silver layer Parquet (canonical single-source-of-truth)
+// Built by: python analytics/build_silver.py
 // ============================================================
 
 
 // ============================================================
 // QUERY 1: "holly_analytics" — Main Data Table
 // ============================================================
-// Steps: Load Excel > Type columns > Replace nulls > Add calculated columns
+// Steps: Load Parquet > Type columns > Replace nulls > Add calculated columns
+//
+// NOTE: This now reads from the Silver layer Parquet file instead of xlsx.
+// The Silver Parquet has ~171+ columns pre-computed (dual-track R, quality
+// flags, stratification buckets, ETF relative strength, market breadth).
+// Most Power Query transforms below are still useful for PBI-specific typing.
 
 let
-    // UPDATE THIS PATH to your actual file location
-    Source = Excel.Workbook(File.Contents("C:\Users\dotca\source\market-data-bridge\powerbi\holly_analytics.xlsx"), null, true),
-    Sheet1 = Source{[Item="Sheet1",Kind="Sheet"]}[Data],
-    PromotedHeaders = Table.PromoteHeaders(Sheet1, [PromoteAllScalars=true]),
+    // Silver layer Parquet — canonical source (replaces holly_analytics.xlsx)
+    // To rebuild: python analytics/build_silver.py
+    Source = Parquet.Document(File.Contents("C:\Users\dotca\source\market-data-bridge\data\silver\holly_trades.parquet")),
+
+    // Legacy xlsx path (kept as fallback reference — remove after validation):
+    // Source = Excel.Workbook(File.Contents("C:\Users\dotca\source\market-data-bridge\powerbi\holly_analytics.xlsx"), null, true),
+    // Sheet1 = Source{[Item="Sheet1",Kind="Sheet"]}[Data],
+    // PromotedHeaders = Table.PromoteHeaders(Sheet1, [PromoteAllScalars=true]),
 
     // ----- Type Conversions -----
     TypedColumns = Table.TransformColumnTypes(PromotedHeaders, {

@@ -78,7 +78,133 @@ def extract_from_holly_ddb() -> pd.DataFrame:
     logger.info(f"Connecting to Bronze: {HOLLY_DDB}")
     db = duckdb.connect(str(HOLLY_DDB), read_only=True)
 
-    df = db.execute("""
+    # Check which optional Bronze tables exist
+    existing_tables = {r[0] for r in db.execute("SHOW TABLES").fetchall()}
+    has_etf_bars = "etf_bars" in existing_tables
+    has_market_daily = "market_daily" in existing_tables
+    has_daily_bars_flat = "daily_bars_flat" in existing_tables
+    logger.info(f"Optional tables: etf_bars={has_etf_bars}, market_daily={has_market_daily}, daily_bars_flat={has_daily_bars_flat}")
+
+    # Build optional CTE stubs for missing tables
+    spy_cte = """
+        -- SPY open price per day (first bar of the day)
+        spy_daily_open AS (
+            SELECT DISTINCT ON (CAST(bar_time AS DATE))
+                CAST(bar_time AS DATE) AS spy_date,
+                open AS spy_open_price
+            FROM etf_bars
+            WHERE symbol = 'SPY'
+            ORDER BY CAST(bar_time AS DATE), bar_time ASC
+        ),
+        -- SPY bar closest to (but not after) each trade entry
+        trade_spy AS (
+            SELECT
+                t.trade_id,
+                e.close AS spy_price_at_entry,
+                sdo.spy_open_price,
+                ROUND((e.close - sdo.spy_open_price)
+                    / NULLIF(sdo.spy_open_price, 0) * 100, 4) AS spy_intraday_pct_at_entry,
+                e.volume AS spy_volume_at_entry
+            FROM trades t
+            LEFT JOIN (
+                SELECT trade_id, close, volume
+                FROM (
+                    SELECT t2.trade_id, eb.close, eb.volume,
+                        ROW_NUMBER() OVER (PARTITION BY t2.trade_id ORDER BY eb.bar_time DESC) AS rn
+                    FROM trades t2
+                    JOIN etf_bars eb
+                        ON eb.symbol = 'SPY'
+                        AND CAST(eb.bar_time AS DATE) = CAST(t2.entry_time AS DATE)
+                        AND eb.bar_time <= t2.entry_time
+                )
+                WHERE rn = 1
+            ) e ON e.trade_id = t.trade_id
+            LEFT JOIN spy_daily_open sdo
+                ON sdo.spy_date = CAST(t.entry_time AS DATE)
+        ),
+    """ if has_etf_bars else """
+        trade_spy AS (
+            SELECT trade_id,
+                NULL::DOUBLE AS spy_price_at_entry,
+                NULL::DOUBLE AS spy_open_price,
+                NULL::DOUBLE AS spy_intraday_pct_at_entry,
+                NULL::BIGINT AS spy_volume_at_entry
+            FROM trades
+        ),
+    """
+
+    breadth_cte = """
+        -- Market breadth from grouped daily bars (advance/decline on trade date)
+        trade_breadth AS (
+            SELECT
+                t.trade_id,
+                COUNT(*) AS mkt_total_stocks,
+                COUNT(CASE WHEN md.close > md.open THEN 1 END) AS mkt_advancers,
+                COUNT(CASE WHEN md.close < md.open THEN 1 END) AS mkt_decliners,
+                ROUND(
+                    COUNT(CASE WHEN md.close > md.open THEN 1 END) * 1.0
+                    / NULLIF(COUNT(*), 0), 4
+                ) AS mkt_advance_ratio,
+                SUM(md.volume) AS mkt_total_volume
+            FROM trades t
+            LEFT JOIN market_daily md
+                ON md.bar_date = CAST(t.entry_time AS DATE)
+            GROUP BY t.trade_id
+        ),
+    """ if has_market_daily else """
+        trade_breadth AS (
+            SELECT trade_id,
+                NULL::BIGINT AS mkt_total_stocks,
+                NULL::BIGINT AS mkt_advancers,
+                NULL::BIGINT AS mkt_decliners,
+                NULL::DOUBLE AS mkt_advance_ratio,
+                NULL::BIGINT AS mkt_total_volume
+            FROM trades
+        ),
+    """
+
+    daily_context_cte = """
+        -- Same-symbol daily bar for prior day (for gap calculation + relative perf)
+        trade_daily_context AS (
+            SELECT
+                t.trade_id,
+                dbf.close AS prior_day_close,
+                dbf.volume AS prior_day_volume,
+                dbf.high AS prior_day_high,
+                dbf.low AS prior_day_low,
+                ROUND((t.entry_price - dbf.close) / NULLIF(dbf.close, 0) * 100, 4)
+                    AS entry_gap_pct,
+                spy_daily.close AS spy_prior_close
+            FROM trades t
+            LEFT JOIN daily_bars_flat dbf
+                ON dbf.ticker = t.symbol
+                AND dbf.bar_time = (
+                    SELECT MAX(bar_time) FROM daily_bars_flat
+                    WHERE ticker = t.symbol
+                    AND CAST(bar_time AS DATE) < CAST(t.entry_time AS DATE)
+                )
+            LEFT JOIN daily_bars_flat spy_daily
+                ON spy_daily.ticker = 'SPY'
+                AND spy_daily.bar_time = (
+                    SELECT MAX(bar_time) FROM daily_bars_flat
+                    WHERE ticker = 'SPY'
+                    AND CAST(bar_time AS DATE) < CAST(t.entry_time AS DATE)
+                )
+        )
+    """ if has_daily_bars_flat else """
+        trade_daily_context AS (
+            SELECT trade_id,
+                NULL::DOUBLE AS prior_day_close,
+                NULL::BIGINT AS prior_day_volume,
+                NULL::DOUBLE AS prior_day_high,
+                NULL::DOUBLE AS prior_day_low,
+                NULL::DOUBLE AS entry_gap_pct,
+                NULL::DOUBLE AS spy_prior_close
+            FROM trades
+        )
+    """
+
+    df = db.execute(f"""
         WITH trade_financials AS (
             SELECT
                 t.trade_id,
@@ -137,7 +263,10 @@ def extract_from_holly_ddb() -> pd.DataFrame:
                     CAST(t.entry_time AS TIMESTAMP) - INTERVAL 24 HOUR
                     AND CAST(t.entry_time AS TIMESTAMP)
             GROUP BY t.trade_id
-        )
+        ),
+        {spy_cte}
+        {breadth_cte}
+        {daily_context_cte}
         SELECT
             t.trade_id,
             t.symbol,
@@ -247,6 +376,24 @@ def extract_from_holly_ddb() -> pd.DataFrame:
             m.yield_curve_regime AS macro_yield_curve_regime,
             m.rate_regime AS macro_rate_regime,
             m.rate_direction AS macro_rate_direction,
+            -- SPY relative strength at entry
+            ts.spy_price_at_entry,
+            ts.spy_open_price,
+            ts.spy_intraday_pct_at_entry,
+            ts.spy_volume_at_entry,
+            -- Market breadth (trade date)
+            tb.mkt_total_stocks,
+            tb.mkt_advancers,
+            tb.mkt_decliners,
+            tb.mkt_advance_ratio,
+            tb.mkt_total_volume,
+            -- Prior-day context (gap, volume, range)
+            tdc.prior_day_close,
+            tdc.prior_day_volume,
+            tdc.prior_day_high,
+            tdc.prior_day_low,
+            tdc.entry_gap_pct,
+            tdc.spy_prior_close,
             -- Coverage flags
             CASE WHEN EXISTS (
                 SELECT 1 FROM bars b
@@ -254,7 +401,13 @@ def extract_from_holly_ddb() -> pd.DataFrame:
                 AND CAST(b.bar_time AS DATE) = CAST(t.entry_time AS DATE)
             ) THEN TRUE ELSE FALSE END AS has_minute_bars,
             CASE WHEN r.trade_id IS NOT NULL
-                THEN TRUE ELSE FALSE END AS has_regime_data
+                THEN TRUE ELSE FALSE END AS has_regime_data,
+            CASE WHEN ts.spy_price_at_entry IS NOT NULL
+                THEN TRUE ELSE FALSE END AS has_spy_context,
+            CASE WHEN tb.mkt_total_stocks IS NOT NULL
+                THEN TRUE ELSE FALSE END AS has_breadth_data,
+            CASE WHEN tdc.prior_day_close IS NOT NULL
+                THEN TRUE ELSE FALSE END AS has_prior_day
         FROM trades t
         LEFT JOIN trade_regime r ON t.trade_id = r.trade_id
         LEFT JOIN ticker_details td ON t.symbol = td.symbol
@@ -268,6 +421,10 @@ def extract_from_holly_ddb() -> pd.DataFrame:
         LEFT JOIN trade_fin_prev tfp ON tfp.trade_id = t.trade_id AND tfp.rn = 1
         LEFT JOIN trade_news tn ON tn.trade_id = t.trade_id
         LEFT JOIN fred_macro_daily m ON m.date = CAST(t.entry_time AS DATE)
+        -- New Bronze sources
+        LEFT JOIN trade_spy ts ON ts.trade_id = t.trade_id
+        LEFT JOIN trade_breadth tb ON tb.trade_id = t.trade_id
+        LEFT JOIN trade_daily_context tdc ON tdc.trade_id = t.trade_id
         ORDER BY t.entry_time
     """).fetchdf()
 
@@ -367,6 +524,41 @@ def transform(df: pd.DataFrame) -> pd.DataFrame:
     df["small_cap_flag"] = (
         df["market_cap"].notna() & (df["market_cap"] < 300_000_000)
     ) if "market_cap" in df.columns else False
+
+    # ── Relative strength vs SPY ────────────────────────────────
+    if "spy_price_at_entry" in df.columns and "spy_prior_close" in df.columns:
+        spy_prior_safe = df["spy_prior_close"].replace(0, float("nan"))
+        # SPY daily return through entry time
+        df["spy_daily_return_pct"] = (
+            (df["spy_price_at_entry"] - df["spy_prior_close"]) / spy_prior_safe * 100
+        ).round(4)
+        # Relative return vs SPY (trade return minus SPY return)
+        df["relative_return_vs_spy"] = (df["pct_return"] - df["spy_daily_return_pct"]).round(4)
+
+    # ── Market breadth derived metrics ────────────────────────────
+    if "mkt_advancers" in df.columns and "mkt_decliners" in df.columns:
+        adv_safe = df["mkt_advancers"].replace(0, float("nan"))
+        dec_safe = df["mkt_decliners"].replace(0, float("nan"))
+        df["mkt_ad_ratio"] = (df["mkt_advancers"] / dec_safe).round(2)
+        df["mkt_breadth_regime"] = pd.cut(
+            df["mkt_advance_ratio"],
+            bins=[0, 0.35, 0.45, 0.55, 0.65, 1.0],
+            labels=["bearish", "weak", "neutral", "strong", "bullish"],
+            right=True,
+        )
+
+    # ── Gap context ──────────────────────────────────────────────
+    if "entry_gap_pct" in df.columns:
+        df["gap_bucket"] = pd.cut(
+            df["entry_gap_pct"].abs(),
+            bins=[0, 1, 3, 5, 10, float("inf")],
+            labels=["<1%", "1-3%", "3-5%", "5-10%", "10%+"],
+            right=False,
+        )
+        df["gap_direction"] = np.where(
+            df["entry_gap_pct"] > 0.1, "gap_up",
+            np.where(df["entry_gap_pct"] < -0.1, "gap_down", "flat")
+        )
 
     # ── Price buckets for stratification ──────────────────────────
     df["price_bucket"] = pd.cut(
@@ -600,6 +792,12 @@ def print_stats(df: pd.DataFrame, load_result: dict, duration_s: float) -> None:
         print(f"  With macro data:   {df['macro_vix'].notna().sum():,}")
     if "prob_edge_verdict" in df.columns:
         print(f"  With prob data:    {df['prob_edge_verdict'].notna().sum():,}")
+    if "has_spy_context" in df.columns:
+        print(f"  With SPY context:  {df['has_spy_context'].sum():,}")
+    if "has_breadth_data" in df.columns:
+        print(f"  With breadth data: {df['has_breadth_data'].sum():,}")
+    if "has_prior_day" in df.columns:
+        print(f"  With prior day:    {df['has_prior_day'].sum():,}")
 
     # Date range
     dates = pd.to_datetime(df["trade_date"])

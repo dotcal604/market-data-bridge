@@ -1,23 +1,33 @@
 """
-13_export_analytics.py — Export denormalized analytics file for Tableau/Power BI.
+13_export_analytics.py — DEPRECATED — Use build_silver.py instead.
 
-Joins trades + regime features + optimization results + ticker details +
-FRED macro data into a single flat Parquet (and CSV) file for BI tool consumption.
+⚠️  This script is superseded by analytics/build_silver.py (the Silver layer).
+    Silver produces the same denormalized output + additional columns (dual-track R,
+    quality flags, stratification buckets, ETF relative strength, market breadth)
+    and writes to a canonical DuckDB + Parquet store.
 
-Enrichments added post-query:
-  - Time-of-day 30-min bucket with conditional win rate & expectancy
-  - Strategy-level edge metrics (Bayesian WR, Kelly, edge verdict)
-  - Sector-conditional win rates
-  - Regime-conditional win rates
-  - Macro regime-conditional win rates (VIX, yield curve, rate cycle)
-  - Rolling strategy performance (20-trade trailing WR/PnL)
+    Run instead:
+        python analytics/build_silver.py
+        # or via MCP:
+        run_analytics script="build_silver"
 
-Usage:
+    Silver output:
+        data/silver/holly_trades.duckdb
+        data/silver/holly_trades.parquet
+
+    This file is kept for reference only. It will be removed in a future cleanup.
+
+Legacy description:
+    Joins trades + regime features + optimization results + ticker details +
+    FRED macro data into a single flat Parquet (and CSV) file for BI tool consumption.
+
+Usage (deprecated):
     python scripts/13_export_analytics.py
 """
 
 import json
 import sys
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -32,6 +42,17 @@ PROB_JSON = Path(__file__).parent.parent.parent / "output" / "statistical_probab
 
 
 def main():
+    warnings.warn(
+        "\n" + "=" * 60 + "\n"
+        "⚠️  13_export_analytics.py is DEPRECATED.\n"
+        "    Use analytics/build_silver.py instead:\n"
+        "      python analytics/build_silver.py\n"
+        "      run_analytics script=\"build_silver\"\n"
+        "    Output: data/silver/holly_trades.duckdb + .parquet\n"
+        + "=" * 60,
+        DeprecationWarning,
+        stacklevel=2,
+    )
     db = get_db()
 
     # ── Build denormalized trade + regime + optimization view ──────────
