@@ -308,6 +308,80 @@ def transform(df: pd.DataFrame) -> pd.DataFrame:
     df["mfe_r"] = (df["mfe"] / risk_safe).round(2)
     df["mae_r"] = (df["mae"] / risk_safe).round(2)
 
+    # ── Dual-track normalization (vendor vs price) ────────────────
+    # Price track: direction-adjusted entry→exit math
+    is_long = df["direction"] == "Long"
+    df["signed_exit_move_ps"] = np.where(
+        is_long,
+        df["exit_price"] - df["entry_price"],
+        df["entry_price"] - df["exit_price"],
+    ).round(4)
+    df["risk_pct"] = (risk / df["entry_price"].replace(0, float("nan")) * 100).round(4)
+    df["price_return_pct"] = (
+        df["signed_exit_move_ps"] / df["entry_price"].replace(0, float("nan")) * 100
+    ).round(4)
+    df["price_exit_R"] = (df["signed_exit_move_ps"] / risk_safe).round(4)
+
+    # Vendor track: holly_pnl-derived (may differ from price track)
+    df["vendor_pnl_ps"] = df["pnl_per_share"]  # already computed above
+    df["vendor_R"] = (df["vendor_pnl_ps"] / risk_safe).round(4)
+
+    # Per-share excursions
+    shares_safe = df["shares"].replace(0, 1)
+    df["mfe_ps"] = (df["mfe"] / shares_safe).round(4)
+    df["mae_ps"] = (df["mae"] / shares_safe).round(4)
+    df["mfe_R"] = df["mfe_r"]  # alias for clarity in dual-track reports
+    df["mae_R"] = df["mae_r"]
+
+    # Capture ratios: how much of MFE was actually captured?
+    mfe_r_safe = df["mfe_r"].replace(0, float("nan"))
+    df["vendor_capture_ratio"] = np.where(
+        df["mfe_r"] > 0,
+        (df["vendor_R"] / mfe_r_safe).round(4),
+        np.nan,
+    )
+    df["price_capture_ratio"] = np.where(
+        df["mfe_r"] > 0,
+        (df["price_exit_R"] / mfe_r_safe).round(4),
+        np.nan,
+    )
+
+    # Capital-efficiency on 100-share baseline
+    baseline_notional = df["shares"] * df["entry_price"]
+    notional_safe = baseline_notional.replace(0, float("nan"))
+    df["baseline_notional"] = baseline_notional.round(2)
+    df["baseline_vendor_ron"] = (df["holly_pnl"] / notional_safe * 100).round(4)
+    df["baseline_price_ron"] = (
+        (df["signed_exit_move_ps"] * df["shares"]) / notional_safe * 100
+    ).round(4)
+
+    # Vendor vs price track disagreement
+    df["vendor_price_delta_R"] = (df["vendor_R"] - df["price_exit_R"]).abs().round(4)
+    df["vendor_price_disagree"] = df["vendor_price_delta_R"] > 0.25
+
+    # ── Quality-control flags ─────────────────────────────────────
+    df["bad_risk_flag"] = (risk <= 0) | risk.isna()
+    df["penny_flag"] = df["entry_price"] < 2
+    df["low_price_flag"] = df["entry_price"] < 5
+    df["high_risk_pct_flag"] = df["risk_pct"] > 8.0  # >8% risk-to-entry
+    df["small_cap_flag"] = (
+        df["market_cap"].notna() & (df["market_cap"] < 300_000_000)
+    ) if "market_cap" in df.columns else False
+
+    # ── Price buckets for stratification ──────────────────────────
+    df["price_bucket"] = pd.cut(
+        df["entry_price"],
+        bins=[0, 2, 5, 10, 20, 50, 100, float("inf")],
+        labels=["<$2", "$2-5", "$5-10", "$10-20", "$20-50", "$50-100", "$100+"],
+        right=False,
+    )
+    df["hold_bucket"] = pd.cut(
+        df["hold_minutes"],
+        bins=[0, 15, 30, 60, 120, float("inf")],
+        labels=["0-15m", "15-30m", "30-60m", "1-2h", "2h+"],
+        right=False,
+    )
+
     # ── Risk-budget sizing simulation ────────────────────────────
     shares_from_risk = (SIM_RISK_PER_TRADE / risk_safe).round(0)
     shares_from_capital = (SIM_MAX_CAPITAL / df["entry_price"].replace(0, float("nan"))).round(0)
