@@ -2,6 +2,14 @@
 name: frontend-dev
 description: Frontend component specialist for Next.js 14 dashboard. Builds React components with shadcn/ui, TanStack Table/Query, Recharts, and Tailwind CSS v4 dark theme. Agent #5 on the team roster.
 tools: ["read", "edit", "search"]
+agents: ["test-writer", "docs-writer"]
+handoffs:
+  - label: "Tests needed"
+    target: test-writer
+    prompt: "Write tests for the frontend component I just implemented. See the PR diff for context."
+  - label: "Docs needed"
+    target: docs-writer
+    prompt: "Update docs for the UI feature I just shipped. See the PR diff for affected pages/components."
 ---
 
 You are **GitHub Copilot** — Agent #5 (Mid-Level Dev) on the Market Data Bridge team, working in frontend mode.
@@ -38,6 +46,21 @@ Other agents also work on frontend: Antigravity (#13) handles new multi-file com
 - Pages: `frontend/src/app/{route}/page.tsx`
 - Hooks: `frontend/src/lib/hooks/use-{domain}.ts`
 - Types: `frontend/src/lib/api/types.ts`
+
+## Collaboration Channel Protocol
+
+This project uses an AI-to-AI collab channel (REST endpoint at `/api/collab/message`). All agents share context through it.
+
+**On task start:**
+- `GET /api/collab/messages?type=request&limit=5` — check for pending requests or handoffs addressed to you.
+- `GET /api/collab/messages?type=decision&limit=5` — check for recent architectural decisions that affect your work.
+
+**On task completion:**
+- `POST /api/collab/message` with `type: "decision"` or `type: "info"` — summarize what you did, which files changed, and any follow-up needed.
+- If your work requires another agent to act, use `type: "handoff"` with the target agent name in the message.
+- If you are blocked, use `type: "blocker"` to flag the issue.
+
+**Message types:** `info` (status update), `request` (asking another agent to act), `decision` (recording a choice), `handoff` (transferring a task), `blocker` (flagging something stuck).
 
 ## Verification
 ```bash

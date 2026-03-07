@@ -31,7 +31,15 @@ Single-process Node.js 22+ TypeScript trading platform: IBKR + Yahoo Finance + 3
 - Multi-callback reconnect hooks so all subsystems re-register
 
 ## Agent Fleet
-14-15 agents coordinated via ORCHESTRATION.md + AGENTS.md. Cost-aware routing: mastery → free → cheap → expensive.
+14-15 agents coordinated via AGENTS.md. Cost-aware routing: mastery → free → cheap → expensive.
+- Collab channel upgraded: `type` field (info/request/decision/handoff/blocker) + `metadata` (JSON), wired into check_inbox
+- GitHub Mission Control: use github.com/copilot/agents panel for multi-task Copilot delegation (assign, steer mid-task, track)
+- Copilot agents panel: lightweight overlay on any github.com page, kick off tasks across repos in parallel
+- Real-time steering: can interrupt Copilot mid-task via chat or inline comments in Files changed view
+- Custom agents (.github/agents/*.agent.md) auto-loaded by Copilot — 5 defined (backend-dev, frontend-dev, ops-engineer, test-writer, docs-writer)
+- Agent HQ gap analysis complete: all 5 .agent.md files now have collab protocol, handoffs YAML, agents field, REST tool docs
+- copilot-instructions.md updated with collab channel section
+- Handoff chains: backend-dev → test-writer → backend-dev (bug loop), backend-dev → docs-writer, ops-engineer → backend-dev/docs-writer
 
 ## Multi-Machine Workflow
 - Desktop: primary — runs TWS, bridge, has bridge.db

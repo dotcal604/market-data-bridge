@@ -189,3 +189,27 @@
 - Updated .gitignore: holly_exports/, analytics raw data, debug screenshots, xlsx files
 - Build: clean (tsc --noEmit). Tests: 96/99 pass, 1698/1706 (8 pre-existing divoom widget failures)
 - Next: visual report pages need manual PBI Desktop construction (TOM can't create visuals — follow 07-visual-specs.md)
+
+## 2026-03-07 02:30 — desktop — Collab channel upgrade + Agent HQ gap analysis + gap-closing
+
+- **Collab channel performative messaging (all 4 priorities completed):**
+  - Added `type` field (info/request/decision/handoff/blocker) to collab store, DB, MCP, REST, agent catalog
+  - Added `metadata` field (JSON) for structured machine-parseable context
+  - Wired `check_inbox` to surface pending collab (request/handoff/blocker messages)
+  - Updated GPT instructions with 3 mandatory first steps (status + inbox + collab_read)
+  - Added DB migration via addColumnIfMissing for existing databases
+  - 53 collab tests passing, all layers verified
+- **Agent HQ gap analysis (reviewed against GitHub "Welcome Home, Agents" blog post):**
+  - Scored 10 dimensions: ahead on cost routing, collab channel, cross-surface coordination, dynamic instructions
+  - Behind on: .agent.md collab references, handoffs YAML, subagent invocation, MCP tool docs
+- **Gap-closing actions (all 5 completed):**
+  1. Added collab protocol section to all 5 .agent.md file bodies (startup read + completion post)
+  2. Added `handoffs` YAML to all 5 .agent.md files (backend→test-writer→backend loop, backend→docs, ops→backend/docs)
+  3. Added `agents` field to all 5 .agent.md files for subagent delegation
+  4. Added collab channel section to copilot-instructions.md (REST API reference)
+  5. Added REST tool tables to backend-dev and ops-engineer .agent.md; added run_shell_command to backend-dev and test-writer
+- **Mission Control patterns internalized:**
+  - Updated AGENTS.md with Mission Control workflow, steering tips, drift detection signals
+  - Updated MEMORY.md Agent Fleet section with Mission Control + collab details
+- Build: clean (tsc --noEmit). Tests: 95/99 pass, 1705/1714 (4 pre-existing divoom widget failures)
+- Next: consider updating ORCHESTRATION.md with new handoff chains; P0 features from FEATURE-PLAN.md

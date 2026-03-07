@@ -162,16 +162,31 @@ Tier 4 — Human-only
     require human review + paper test before production
 ```
 
-### Parallel Execution Model
+### Parallel Execution Model (Mission Control)
+
+GitHub Mission Control ([github.com/copilot/agents](https://github.com/copilot/agents)) is the orchestration surface for Copilot tasks. Use the **Agents panel** (header button on any github.com page) to kick off tasks across repos without leaving your current context.
 
 On any given workday, the human can have up to 5 agents working simultaneously:
 - **Claude Code:** active in terminal (interactive)
 - **Codex:** async task queue (fire and forget, check back)
-- **Copilot:** assigned to a GitHub issue (async PR)
+- **Copilot:** assigned via Mission Control or GitHub issue (async PR) — **steer mid-task** via chat or inline comments in Files changed view
 - **Jules:** async task at jules.google (async PR)
 - **Antigravity:** async in Antigravity IDE (async PR)
 
 This gives a 1:5 effective parallelism ratio without context-switching overhead, because only Claude Code requires active human attention. The others produce PRs that get batch-reviewed.
+
+**Mission Control workflow:**
+1. **Assign** — describe goal, select repo + branch, pick custom agent (e.g. `@copilot/backend-dev`)
+2. **Monitor** — session logs show agent reasoning live, next to Overview + Files changed tabs
+3. **Steer** — catch drift early (wrong files, scope creep, circular behavior) → provide specific directional feedback, not vague corrections
+4. **Review** — session logs first (understand reasoning), then Files changed (verify correctness), then Checks (test results)
+
+**When to parallelize vs sequence:**
+- **Parallel:** independent modules, docs, tests, security reviews, different repos
+- **Sequential:** dependent tasks, unfamiliar territory, validating assumptions between steps
+- **Warning:** agents working in parallel can create merge conflicts if they touch the same files
+
+**Prompt quality matters:** include file paths, acceptance criteria, screenshots, code snippets. Vague prompts waste compute. Reference issues/PRs for context (e.g. "Fix #877 using PR #855 as an example").
 
 ### Viability Assessment
 
@@ -184,9 +199,10 @@ With 13 coding agents, the bottleneck is human review bandwidth, not compute. Mi
 
 ### Weekly Rhythm
 
-- **Monday:** plan week, write detailed issues for Codex/Jules/Copilot
-- **Tue-Thu:** Claude Code + Antigravity on complex work, async agents on queue
-- **Friday:** batch-review async PRs, merge, retro on agent performance
+- **Monday:** plan week, write detailed issues for Codex/Jules/Copilot, batch-assign via Mission Control
+- **Tue-Thu:** Claude Code + Antigravity on complex work, async agents on queue. Monitor Mission Control for drift — steer early (5 min catch saves 1 hr rework)
+- **Friday:** batch-review async PRs (session logs → files changed → checks), merge, retro on agent performance
+- **Mobile:** assign backlog issues to Copilot from phone during downtime (GitHub Mobile agents page)
 
 ## Windsurf Architectural Positioning
 
@@ -773,11 +789,15 @@ npm install && cd frontend && npm install && cd ..
 
 Copilot creates draft PRs from assigned issues. Pattern-matches from existing code — best when there's a similar module to follow.
 
-**Trigger:** Assign Copilot to an issue via GitHub web UI, or use custom agents via `@copilot/{agent-name}`.
+**Trigger:** Assign Copilot to an issue via GitHub web UI, Mission Control agents panel, or use custom agents via `@copilot/{agent-name}`.
+
+**Mission Control:** Use [github.com/copilot/agents](https://github.com/copilot/agents) to assign multiple Copilot tasks in parallel, steer mid-task, and review from one view. Can also use the Agents panel button in the github.com header from any page.
 
 **Best for:** Tests, boilerplate, features with clear patterns, ops work.
 
 **Limitations:** Can be superficial on complex logic, sometimes ignores edge cases. Review carefully.
+
+**Steering tips:** Watch session logs for drift signals (wrong files, scope creep, circular behavior). Steer via chat or inline comments — Copilot adapts after its current tool call completes. Specific feedback beats vague corrections.
 
 **Note:** Copilot's GitHub Actions firewall blocks `fonts.googleapis.com` — cosmetic only, builds succeed.
 

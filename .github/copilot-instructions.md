@@ -294,6 +294,17 @@ frontend/
       utils/          — Formatters, colors, helpers
 ```
 
+## AI Collaboration Channel
+
+This project has an AI-to-AI collab channel for cross-agent communication. When the bridge is running, agents can exchange context through the REST API:
+
+- **Read messages:** `GET /api/collab/messages` — query params: `limit`, `author`, `type` (info/request/decision/handoff/blocker)
+- **Post message:** `POST /api/collab/message` — body: `{ author, content, type?, tags?, metadata? }`
+
+**Protocol:** On task start, check for pending requests and handoffs (`?type=request` and `?type=handoff`). On task completion, post a summary with `type: "decision"` or `type: "info"` so other agents can pick up context.
+
+See each agent's `.agent.md` file for agent-specific collab instructions.
+
 ## Additional Resources
 
 - **Agent-specific workflows**: See `AGENTS.md` for coding agent conventions and custom agent profiles
