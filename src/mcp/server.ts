@@ -120,6 +120,7 @@ import type { ExitPlanState, OverrideReason } from "../exit-plan/types.js";
 import { getRecalibrationStatus } from "../eval/ensemble/recalibration-hook.js";
 import { classifyVolatilityRegime } from "../eval/features/volatility-regime.js";
 import { suggestExits, getOptimalExitSummary, getOptimalExitMeta, reloadOptimalParams } from "../holly/suggest-exits.js";
+import { getExitParams, getStrategyExitConfig } from "../holly/exit-params.js";
 
 const log = logger.child({ subsystem: "mcp" });
 
@@ -3049,6 +3050,37 @@ export function createMcpServer(opts?: { readonly?: boolean }): McpServer {
     withErrorHandling("optimal_exit_reload", async () => {
       const ok = reloadOptimalParams();
       return { content: [{ type: "text", text: ok ? "Optimizer data reloaded successfully." : "Failed to reload — file not found or invalid." }] };
+    })
+  );
+
+  // --- Tool: get_holly_exit_params --- Full exit optimizer dataset
+  server.tool(
+    "get_holly_exit_params",
+    "Get all optimized exit parameters from the Holly exit optimizer pipeline. " +
+    "Returns strategy-level exit rules, params, baseline vs optimized metrics (win rate, PnL, profit factor, sharpe, max drawdown). " +
+    "Data is cached for 1 hour. Use optimal_exit_reload to force refresh after re-running the pipeline.",
+    {},
+    withErrorHandling("get_holly_exit_params", async () => {
+      const data = await getExitParams();
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    })
+  );
+
+  // --- Tool: get_strategy_exit_config --- Single strategy exit config
+  server.tool(
+    "get_strategy_exit_config",
+    "Get optimized exit configuration for a specific strategy by name. " +
+    "Returns exit rule, parameters, and baseline vs optimized performance metrics. " +
+    "Returns null if strategy not found in optimizer output.",
+    {
+      strategy_name: z.string().describe("Strategy name exactly as it appears in the optimizer output (e.g., 'Bull Flag', 'VWAP Reclaim')"),
+    },
+    withErrorHandling("get_strategy_exit_config", async ({ strategy_name }) => {
+      const config = await getStrategyExitConfig(strategy_name);
+      if (!config) {
+        return { content: [{ type: "text", text: `No exit config found for strategy "${strategy_name}". Use get_holly_exit_params to see all available strategies.` }] };
+      }
+      return { content: [{ type: "text", text: JSON.stringify({ strategy: strategy_name, ...config }, null, 2) }] };
     })
   );
 
