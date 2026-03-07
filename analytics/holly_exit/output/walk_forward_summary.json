@@ -1,0 +1,91 @@
+{
+  "generated_at": "2026-03-07T12:00:00Z",
+  "strategies": {
+    "momentum_breakout": {
+      "windows": [
+        {
+          "train_start": "2024-09-01",
+          "train_end": "2025-06-30",
+          "test_start": "2025-07-01",
+          "test_end": "2025-09-30",
+          "train_size": 120,
+          "test_size": 35,
+          "test_win_rate": 0.571,
+          "test_avg_r": 0.12,
+          "test_sharpe": 0.85,
+          "optimal_weights": { "claude": 0.40, "gpt4o": 0.35, "gemini": 0.15, "k": 0.10 }
+        },
+        {
+          "train_start": "2024-12-01",
+          "train_end": "2025-09-30",
+          "test_start": "2025-10-01",
+          "test_end": "2025-12-31",
+          "train_size": 145,
+          "test_size": 42,
+          "test_win_rate": 0.548,
+          "test_avg_r": 0.09,
+          "test_sharpe": 0.72,
+          "optimal_weights": { "claude": 0.38, "gpt4o": 0.32, "gemini": 0.18, "k": 0.12 }
+        },
+        {
+          "train_start": "2025-03-01",
+          "train_end": "2025-12-31",
+          "test_start": "2026-01-01",
+          "test_end": "2026-03-07",
+          "train_size": 160,
+          "test_size": 28,
+          "test_win_rate": 0.536,
+          "test_avg_r": 0.07,
+          "test_sharpe": 0.61,
+          "optimal_weights": { "claude": 0.42, "gpt4o": 0.30, "gemini": 0.17, "k": 0.11 }
+        }
+      ],
+      "aggregate": {
+        "oos_win_rate": 0.552,
+        "oos_avg_r": 0.093,
+        "oos_sharpe": 0.73,
+        "total_oos_trades": 105,
+        "total_windows": 3,
+        "edge_stable": true,
+        "edge_decay_detected": false
+      }
+    },
+    "mean_reversion": {
+      "windows": [
+        {
+          "train_start": "2024-09-01",
+          "train_end": "2025-06-30",
+          "test_start": "2025-07-01",
+          "test_end": "2025-09-30",
+          "train_size": 95,
+          "test_size": 22,
+          "test_win_rate": 0.636,
+          "test_avg_r": 0.15,
+          "test_sharpe": 1.1,
+          "optimal_weights": { "claude": 0.45, "gpt4o": 0.30, "gemini": 0.15, "k": 0.10 }
+        },
+        {
+          "train_start": "2024-12-01",
+          "train_end": "2025-09-30",
+          "test_start": "2025-10-01",
+          "test_end": "2025-12-31",
+          "train_size": 110,
+          "test_size": 30,
+          "test_win_rate": 0.500,
+          "test_avg_r": 0.02,
+          "test_sharpe": 0.15,
+          "optimal_weights": { "claude": 0.40, "gpt4o": 0.35, "gemini": 0.15, "k": 0.10 }
+        }
+      ],
+      "aggregate": {
+        "oos_win_rate": 0.558,
+        "oos_avg_r": 0.075,
+        "oos_sharpe": 0.55,
+        "total_oos_trades": 52,
+        "total_windows": 2,
+        "edge_stable": true,
+        "edge_decay_detected": true
+      }
+    }
+  }
+}

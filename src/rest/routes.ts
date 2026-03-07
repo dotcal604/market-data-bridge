@@ -68,6 +68,7 @@ import {
   upsertRiskConfig,
   queryAccountSnapshots,
 } from "../db/database.js";
+import { getWalkForwardSummary, getStrategyWalkForward } from "../holly/walk-forward-summary.js";
 
 function qs(val: unknown, fallback: string): string {
   if (typeof val === "string") return val;
@@ -1618,4 +1619,22 @@ router.get("/indicators/:symbol", (req, res) => {
 router.get("/indicators", (_req, res) => {
   const snapshots = getAllIndicatorSnapshots();
   res.json({ count: snapshots.length, snapshots });
+});
+
+// =====================================================================
+// HOLLY — Walk-Forward Summary
+// =====================================================================
+
+// GET /api/holly/walk-forward — Full walk-forward summary (all strategies)
+router.get("/holly/walk-forward", (_req, res) => {
+  const summary = getWalkForwardSummary();
+  if (!summary) { res.status(404).json({ error: "Walk-forward summary not yet generated" }); return; }
+  res.json(summary);
+});
+
+// GET /api/holly/walk-forward/:strategy — Walk-forward for a single strategy
+router.get("/holly/walk-forward/:strategy", (req, res) => {
+  const result = getStrategyWalkForward(req.params.strategy);
+  if (!result) { res.status(404).json({ error: `No walk-forward data for strategy '${req.params.strategy}'` }); return; }
+  res.json(result);
 });
