@@ -83,6 +83,9 @@ NEVER set IBKR_CLIENT_ID in .env — causes collision for all MCP clients.
 - Output files: `analytics/holly_exit/output/` (optimal_exit_params.json, walk_forward_summary.json)
 - **Known bug:** direction inference for `direction_int=0` trades produces unrealistic P&L (Bull Trap $1.85B, Count De Monet -$1.37B) — fix before production use
 - Polygon API: paid Starter tier, unlimited rate, `MIN_DATE=2021-03-04`
+- **Polygon flat files (S3):** daily fully loaded to `daily_bars_flat` DuckDB table
+- **Minute flat files:** 1,047 files, 20.78 GB on disk (2022-01-03 → 2026-03-06), NOT in DuckDB (too large, query .csv.gz directly)
+- 5-year plan window: currently 2022–2026 accessible, 2003–2021 = 403 Forbidden
 
 ### Benzinga News Integration
 - 3 new MCP tools: `get_benzinga_news`, `get_benzinga_article`, `get_benzinga_providers`
@@ -91,11 +94,16 @@ NEVER set IBKR_CLIENT_ID in .env — causes collision for all MCP clients.
 - Smart defaults: 24h lookback, `buildNewsDateRange()` helper
 
 ### Silver Layer Normalization (Extended)
-- `build_silver.py` now produces 171 columns (up from ~140)
+- `build_silver.py` now produces **195 columns** (up from 171)
 - Dual-track: vendor_R (from holly_pnl) vs price_exit_R (from entry/exit math)
 - Quality flags: bad_risk_flag, penny_flag, low_price_flag, high_risk_pct_flag, small_cap_flag
 - Stratification: price_bucket (7 bins), hold_bucket (5 bins)
 - Capture ratios, capital efficiency (RON), vendor-price disagreement flag
+- **3 Bronze sources wired in:** etf_bars (SPY context), market_daily (breadth), daily_bars_flat (prior day/gaps)
+- New dimensions: relative_return_vs_spy, mkt_ad_ratio, mkt_breadth_regime, gap_bucket, gap_direction
+- Coverage flags: has_spy_context (6,544), has_breadth_data (28,875), has_prior_day (6,543)
+- PBI rewired: `powerbi/data-prep.pq` now reads Silver Parquet (was holly_analytics.xlsx)
+- `13_export_analytics.py` deprecated with runtime DeprecationWarning → use build_silver.py
 
 ### Sizing Simulation (30_sizing_simulation.py)
 - 3 engines: baseline (100 shares), fixed_notional, hybrid_risk_cap

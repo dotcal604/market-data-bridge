@@ -235,3 +235,12 @@
   - F18 (silent catches): CONFIRMED — Copilot found 65/66 catch blocks silent. Assigned to Copilot CLI.
 - **Copilot CLI prompts provided** for F10, F12, F13, F14, F18, test coverage, repo quality scan
 - Net audit status: 2 false positives closed, 1 already fixed, 2 fixed this session, ~25 remain
+
+## 2026-03-07 21:00 — desktop — Polygon minute flat files + MEMORY update
+
+- Verified minute flat files already downloaded from prior session
+- Ran `23_fetch_flat_files.py --type minute --no-duckdb` — 1 new file (2026-03-06), 1,046 skipped
+- **Minute flat files inventory:** 1,047 files, 20.78 GB, 2022-01-03 → 2026-03-06
+- 5-year plan window: 2022–2026 accessible, 2003–2021 = 403 Forbidden
+- Updated MEMORY.md: Silver now 195 columns, 3 Bronze sources wired, PBI rewired, minute flat files documented
+- Remaining Polygon data not yet fetched: trade-level ticks (/v3/trades), NBBO quotes (/v3/quotes)
