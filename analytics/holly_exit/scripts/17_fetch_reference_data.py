@@ -49,13 +49,15 @@ async def fetch_splits(client: httpx.AsyncClient) -> pd.DataFrame:
         return df
 
     all_results = []
-    url = f"{POLYGON_BASE}/v3/reference/splits"
-    params = {"limit": 1000, "apiKey": POLYGON_API_KEY}
+    url: str | None = (
+        f"{POLYGON_BASE}/v3/reference/splits"
+        f"?limit=1000&apiKey={POLYGON_API_KEY}"
+    )
     page = 0
 
     while url:
         page += 1
-        resp = await client.get(url, params=params, timeout=30)
+        resp = await client.get(url, timeout=30)
         if resp.status_code != 200:
             print(f"  ERROR: HTTP {resp.status_code}")
             break
@@ -65,15 +67,8 @@ async def fetch_splits(client: httpx.AsyncClient) -> pd.DataFrame:
         all_results.extend(results)
         print(f"  Page {page}: {len(results)} splits (total: {len(all_results):,})", flush=True)
 
-        # Pagination — next_url contains full URL with cursor
         next_url = data.get("next_url")
-        if next_url:
-            # Append limit and apiKey to next_url
-            sep = "&" if "?" in next_url else "?"
-            url = f"{next_url}{sep}limit=1000&apiKey={POLYGON_API_KEY}"
-            params = {}  # params are baked into url now
-        else:
-            url = None
+        url = f"{next_url}&apiKey={POLYGON_API_KEY}" if next_url else None
 
     if not all_results:
         print("  No splits found!")
@@ -103,13 +98,15 @@ async def fetch_dividends(client: httpx.AsyncClient) -> pd.DataFrame:
         return df
 
     all_results = []
-    url = f"{POLYGON_BASE}/v3/reference/dividends"
-    params = {"limit": 1000, "apiKey": POLYGON_API_KEY}
+    url: str | None = (
+        f"{POLYGON_BASE}/v3/reference/dividends"
+        f"?limit=1000&apiKey={POLYGON_API_KEY}"
+    )
     page = 0
 
     while url:
         page += 1
-        resp = await client.get(url, params=params, timeout=30)
+        resp = await client.get(url, timeout=30)
         if resp.status_code != 200:
             print(f"  ERROR: HTTP {resp.status_code}")
             break
@@ -122,12 +119,7 @@ async def fetch_dividends(client: httpx.AsyncClient) -> pd.DataFrame:
             print(f"  Page {page}: {len(results)} dividends (total: {len(all_results):,})", flush=True)
 
         next_url = data.get("next_url")
-        if next_url:
-            sep = "&" if "?" in next_url else "?"
-            url = f"{next_url}{sep}limit=1000&apiKey={POLYGON_API_KEY}"
-            params = {}
-        else:
-            url = None
+        url = f"{next_url}&apiKey={POLYGON_API_KEY}" if next_url else None
 
     if not all_results:
         print("  No dividends found!")
@@ -137,6 +129,109 @@ async def fetch_dividends(client: httpx.AsyncClient) -> pd.DataFrame:
     REF_DIR.mkdir(parents=True, exist_ok=True)
     pq.write_table(pa.Table.from_pandas(df), str(out_file))
     print(f"  Saved: {len(df):,} dividends -> {out_file.name}")
+    return df
+
+
+# ═════════════════════════════════════════════════════════════
+# 2b. TICKER UNIVERSE (bulk paginated — ALL tickers)
+# ═════════════════════════════════════════════════════════════
+
+async def fetch_ticker_universe(client: httpx.AsyncClient) -> pd.DataFrame:
+    """Fetch full ticker universe via paginated bulk endpoint.
+
+    Unlike fetch_ticker_details (per-symbol), this uses the bulk /v3/reference/tickers
+    endpoint to get ALL active + delisted US stock tickers with metadata.
+    """
+    print("\n" + "=" * 60)
+    print("Fetching ticker universe (bulk paginated)...")
+    print("=" * 60)
+
+    out_file = REF_DIR / "ticker_universe.parquet"
+    if out_file.exists():
+        df = pd.read_parquet(out_file)
+        print(f"  Cached: {len(df):,} tickers")
+        return df
+
+    all_results = []
+
+    # Fetch active tickers first, then delisted
+    for active in [True, False]:
+        status = "active" if active else "delisted"
+        print(f"\n  Fetching {status} tickers...")
+
+        url = (
+            f"{POLYGON_BASE}/v3/reference/tickers"
+            f"?market=stocks&locale=us&active={'true' if active else 'false'}"
+            f"&limit=1000&order=asc&sort=ticker"
+            f"&apiKey={POLYGON_API_KEY}"
+        )
+        page = 0
+
+        while url:
+            page += 1
+
+            for attempt in range(3):
+                try:
+                    resp = await client.get(url, timeout=30)
+
+                    if resp.status_code == 429:
+                        await asyncio.sleep(2 ** (attempt + 1))
+                        continue
+                    if resp.status_code != 200:
+                        print(f"  ERROR: HTTP {resp.status_code} on page {page}")
+                        url = None
+                        break
+
+                    data = resp.json()
+                    results = data.get("results", [])
+                    for r in results:
+                        r["active"] = active  # tag it
+                    all_results.extend(results)
+
+                    if page % 10 == 0 or page <= 2 or len(results) < 1000:
+                        print(
+                            f"    Page {page}: {len(results)} ({status}, "
+                            f"total: {len(all_results):,})",
+                            flush=True,
+                        )
+
+                    next_url = data.get("next_url")
+                    if next_url:
+                        url = f"{next_url}&apiKey={POLYGON_API_KEY}"
+                    else:
+                        url = None
+
+                    break  # success
+
+                except (httpx.TimeoutException, httpx.ConnectError):
+                    if attempt < 2:
+                        await asyncio.sleep(2 ** (attempt + 1))
+                        continue
+                    print(f"  TIMEOUT on page {page}")
+                    url = None
+                    break
+
+    if not all_results:
+        print("  No tickers found!")
+        return pd.DataFrame()
+
+    df = pd.DataFrame(all_results)
+
+    # Keep useful columns only
+    keep_cols = [
+        "ticker", "name", "market", "locale", "primary_exchange",
+        "type", "active", "currency_name", "cik", "composite_figi",
+        "share_class_figi", "last_updated_utc",
+    ]
+    df = df[[c for c in keep_cols if c in df.columns]]
+
+    REF_DIR.mkdir(parents=True, exist_ok=True)
+    pq.write_table(pa.Table.from_pandas(df), str(out_file))
+
+    n_active = df["active"].sum()
+    n_delisted = len(df) - n_active
+    print(f"\n  Saved: {len(df):,} tickers ({n_active:,} active, {n_delisted:,} delisted)")
+    print(f"  -> {out_file.name}")
     return df
 
 
@@ -332,6 +427,17 @@ def load_to_duckdb():
         cnt = con.execute("SELECT COUNT(*) FROM ticker_details").fetchone()[0]
         print(f"  ticker_details: {cnt:,} rows")
 
+    # Ticker universe
+    tu_file = REF_DIR / "ticker_universe.parquet"
+    if tu_file.exists():
+        con.execute("DROP TABLE IF EXISTS ticker_universe")
+        con.execute(f"""
+            CREATE TABLE ticker_universe AS
+            SELECT * FROM read_parquet('{tu_file}')
+        """)
+        cnt = con.execute("SELECT COUNT(*) FROM ticker_universe").fetchone()[0]
+        print(f"  ticker_universe: {cnt:,} rows")
+
     # Summary
     print("\n  DuckDB tables:")
     for r in con.execute("SHOW TABLES").fetchall():
@@ -366,6 +472,9 @@ async def main_async(only: str | None = None):
         if only in (None, "tickers"):
             await fetch_ticker_details(client)
 
+        if only in (None, "universe"):
+            await fetch_ticker_universe(client)
+
     # Load everything into DuckDB
     load_to_duckdb()
 
@@ -376,7 +485,7 @@ async def main_async(only: str | None = None):
 
 def main():
     parser = argparse.ArgumentParser(description="Fetch Polygon reference data")
-    parser.add_argument("--only", choices=["splits", "dividends", "tickers"], default=None)
+    parser.add_argument("--only", choices=["splits", "dividends", "tickers", "universe"], default=None)
     args = parser.parse_args()
     asyncio.run(main_async(only=args.only))
 

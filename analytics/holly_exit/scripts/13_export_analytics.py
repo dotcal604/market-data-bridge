@@ -1,14 +1,15 @@
 """
 13_export_analytics.py — Export denormalized analytics file for Tableau/Power BI.
 
-Joins trades + regime features + optimization results + ticker details into a
-single flat Parquet (and CSV) file for BI tool consumption.
+Joins trades + regime features + optimization results + ticker details +
+FRED macro data into a single flat Parquet (and CSV) file for BI tool consumption.
 
 Enrichments added post-query:
   - Time-of-day 30-min bucket with conditional win rate & expectancy
   - Strategy-level edge metrics (Bayesian WR, Kelly, edge verdict)
   - Sector-conditional win rates
   - Regime-conditional win rates
+  - Macro regime-conditional win rates (VIX, yield curve, rate cycle)
   - Rolling strategy performance (20-trade trailing WR/PnL)
 
 Usage:
@@ -35,6 +36,68 @@ def main():
 
     # ── Build denormalized trade + regime + optimization view ──────────
     df = db.execute("""
+        WITH trade_financials AS (
+            -- For each trade, find the most recent quarterly filing before trade date
+            SELECT
+                t.trade_id,
+                f.revenues,
+                f.net_income,
+                f.eps_diluted,
+                f.operating_income,
+                f.gross_profit,
+                f.total_assets,
+                f.total_liabilities,
+                f.total_equity,
+                f.operating_cash_flow,
+                f.fiscal_period,
+                f.fiscal_year,
+                f.filing_date,
+                ROW_NUMBER() OVER (
+                    PARTITION BY t.trade_id
+                    ORDER BY TRY_CAST(f.filing_date AS DATE) DESC
+                ) AS rn
+            FROM trades t
+            JOIN financials f
+                ON f.ticker = t.symbol
+                AND f.timeframe = 'quarterly'
+                AND TRY_CAST(f.filing_date AS DATE) <= CAST(t.entry_time AS DATE)
+        ),
+        trade_fin_prev AS (
+            -- For YoY growth: same quarter, prior year
+            SELECT
+                tf.trade_id,
+                fp.revenues AS prev_revenues,
+                ROW_NUMBER() OVER (
+                    PARTITION BY tf.trade_id
+                    ORDER BY TRY_CAST(fp.filing_date AS DATE) DESC
+                ) AS rn
+            FROM trade_financials tf
+            JOIN financials fp
+                ON fp.ticker = (SELECT t2.symbol FROM trades t2 WHERE t2.trade_id = tf.trade_id)
+                AND fp.timeframe = 'quarterly'
+                AND fp.fiscal_period = tf.fiscal_period
+                AND TRY_CAST(fp.fiscal_year AS INTEGER) = TRY_CAST(tf.fiscal_year AS INTEGER) - 1
+            WHERE tf.rn = 1
+        ),
+        trade_news AS (
+            -- News coverage in 24h before trade entry
+            SELECT
+                t.trade_id,
+                COUNT(n.id) AS news_count_24h,
+                COUNT(CASE WHEN n.publisher_name IN (
+                    'Benzinga', 'MarketWatch', 'Reuters', 'Bloomberg',
+                    'The Wall Street Journal', 'CNBC', 'Barron''s'
+                ) THEN 1 END) AS news_institutional_count,
+                COUNT(CASE WHEN CAST(n.published_utc AS DATE) = CAST(t.entry_time AS DATE)
+                    THEN 1 END) AS news_same_day_count
+            FROM trades t
+            LEFT JOIN news n
+                ON n.tickers LIKE '%' || t.symbol || '%'
+                AND CAST(n.published_utc AS TIMESTAMP) BETWEEN
+                    CAST(t.entry_time AS TIMESTAMP) - INTERVAL 24 HOUR
+                    AND CAST(t.entry_time AS TIMESTAMP)
+            GROUP BY t.trade_id
+        )
         SELECT
             t.trade_id,
             t.symbol,
@@ -90,6 +153,60 @@ def main():
             td.total_employees,
             td.address_state,
             td.list_date AS ipo_date,
+            -- Fundamental data (most recent quarterly filing before trade date)
+            tf.revenues AS fin_revenue,
+            tf.net_income AS fin_net_income,
+            tf.eps_diluted AS fin_eps,
+            tf.operating_income AS fin_operating_income,
+            tf.gross_profit AS fin_gross_profit,
+            tf.total_assets AS fin_total_assets,
+            tf.total_liabilities AS fin_total_liabilities,
+            tf.total_equity AS fin_total_equity,
+            tf.operating_cash_flow AS fin_operating_cf,
+            tf.fiscal_period AS fin_fiscal_period,
+            tf.fiscal_year AS fin_fiscal_year,
+            tf.filing_date AS fin_filing_date,
+            -- Derived fundamental ratios
+            CASE WHEN tf.total_equity > 0
+                THEN ROUND(tf.total_liabilities / tf.total_equity, 2)
+            END AS fin_debt_to_equity,
+            CASE WHEN tf.revenues > 0
+                THEN ROUND(tf.operating_income / tf.revenues * 100, 2)
+            END AS fin_operating_margin_pct,
+            CASE WHEN tf.revenues > 0
+                THEN ROUND(tf.gross_profit / tf.revenues * 100, 2)
+            END AS fin_gross_margin_pct,
+            -- YoY revenue growth (compare to same quarter prior year)
+            CASE WHEN tfp.prev_revenues > 0
+                THEN ROUND((tf.revenues - tfp.prev_revenues) / tfp.prev_revenues * 100, 2)
+            END AS fin_revenue_growth_yoy,
+            -- Days since IPO
+            CASE WHEN td.list_date IS NOT NULL AND td.list_date != ''
+                THEN CAST(t.entry_time AS DATE) - TRY_CAST(td.list_date AS DATE)
+            END AS days_since_ipo,
+            -- News features (24h before entry)
+            COALESCE(tn.news_count_24h, 0) AS news_count_24h,
+            COALESCE(tn.news_institutional_count, 0) AS news_institutional_count,
+            COALESCE(tn.news_same_day_count, 0) AS news_same_day_count,
+            CASE WHEN COALESCE(tn.news_count_24h, 0) >= 6 THEN 'high'
+                 WHEN COALESCE(tn.news_count_24h, 0) >= 3 THEN 'medium'
+                 WHEN COALESCE(tn.news_count_24h, 0) >= 1 THEN 'low'
+                 ELSE 'none'
+            END AS news_volume_bucket,
+            CASE WHEN COALESCE(tn.news_institutional_count, 0) > 0
+                THEN TRUE ELSE FALSE
+            END AS news_has_institutional,
+            -- FRED macro features (100% trade coverage)
+            m.vix AS macro_vix,
+            m.yield_spread_10y2y AS macro_yield_spread,
+            m.yield_10y AS macro_yield_10y,
+            m.yield_2y AS macro_yield_2y,
+            m.fed_funds_rate AS macro_fed_funds,
+            m.vix_5d_change AS macro_vix_momentum,
+            m.vix_regime AS macro_vix_regime,
+            m.yield_curve_regime AS macro_yield_curve_regime,
+            m.rate_regime AS macro_rate_regime,
+            m.rate_direction AS macro_rate_direction,
             -- Bar coverage flag
             CASE WHEN EXISTS (
                 SELECT 1 FROM bars b
@@ -108,6 +225,14 @@ def main():
                    ROW_NUMBER() OVER (PARTITION BY strategy_filter ORDER BY profit_factor DESC) AS rn
             FROM optimization_results
         ) o ON t.strategy = o.strategy_filter AND o.rn = 1
+        -- Fundamentals: most recent quarterly filing before trade
+        LEFT JOIN trade_financials tf ON tf.trade_id = t.trade_id AND tf.rn = 1
+        -- YoY revenue comparison
+        LEFT JOIN trade_fin_prev tfp ON tfp.trade_id = t.trade_id AND tfp.rn = 1
+        -- News coverage
+        LEFT JOIN trade_news tn ON tn.trade_id = t.trade_id
+        -- FRED macro data
+        LEFT JOIN fred_macro_daily m ON m.date = CAST(t.entry_time AS DATE)
         ORDER BY t.entry_time
     """).fetchdf()
 
@@ -200,6 +325,23 @@ def main():
             ).round(4)
             df = df.merge(regime_stats, left_on=regime_col, right_index=True, how="left")
 
+    # ── Macro regime-conditional win rates ─────────────────────────
+    macro_cond_map = {
+        "macro_vix_regime": "vix",
+        "macro_yield_curve_regime": "yield_curve",
+        "macro_rate_regime": "rate_level",
+        "macro_rate_direction": "rate_dir",
+    }
+    for macro_col, prefix in macro_cond_map.items():
+        if macro_col in df.columns:
+            mask = df[macro_col].notna()
+            mstats = df.loc[mask].groupby(macro_col).agg(
+                **{f"macro_{prefix}_cond_wr": ("is_winner", "mean"),
+                   f"macro_{prefix}_cond_avg_pnl": ("holly_pnl", "mean"),
+                   f"macro_{prefix}_cond_trades": ("holly_pnl", "count")},
+            ).round(4)
+            df = df.merge(mstats, left_on=macro_col, right_index=True, how="left")
+
     # ── Rolling 20-trade trailing metrics per strategy ─────────────
     df = df.sort_values(["strategy", "entry_time"])
     df["strat_rolling_wr_20"] = (
@@ -266,6 +408,21 @@ def main():
     print(f"  With regime data: {df['has_regime_data'].sum():,}")
     print(f"  With optimization: {df['opt_exit_rule'].notna().sum():,}")
     print(f"  With sector data:  {df['sector'].notna().sum():,}")
+    if "fin_revenue" in df.columns:
+        print(f"  With fundamentals: {df['fin_revenue'].notna().sum():,}")
+        print(f"  With rev growth:   {df['fin_revenue_growth_yoy'].notna().sum():,}")
+    if "news_count_24h" in df.columns:
+        has_news = (df["news_count_24h"] > 0).sum()
+        has_inst = (df["news_institutional_count"] > 0).sum()
+        print(f"  With news (24h):   {has_news:,}")
+        print(f"  With institutional: {has_inst:,}")
+    if "macro_vix" in df.columns:
+        has_macro = df["macro_vix"].notna().sum()
+        print(f"  With macro data:   {has_macro:,}")
+        if "macro_vix_regime" in df.columns:
+            vix_dist = df["macro_vix_regime"].dropna().value_counts()
+            for regime, cnt in vix_dist.items():
+                print(f"    VIX {regime}: {cnt:,}")
     if "prob_edge_verdict" in df.columns:
         print(f"  With prob data:    {df['prob_edge_verdict'].notna().sum():,}")
         # Show edge verdict distribution
@@ -289,11 +446,28 @@ def main():
                         "opt_profit_factor", "opt_win_rate", "opt_sharpe",
                         "opt_max_drawdown", "opt_total_trades"],
         "Ticker": ["company_name", "sic_code", "sector", "primary_exchange",
-                   "market_cap", "total_employees", "address_state", "ipo_date"],
+                   "market_cap", "total_employees", "address_state", "ipo_date",
+                   "days_since_ipo"],
+        "Fundamentals": ["fin_revenue", "fin_net_income", "fin_eps",
+                        "fin_operating_income", "fin_gross_profit",
+                        "fin_total_assets", "fin_total_liabilities", "fin_total_equity",
+                        "fin_operating_cf", "fin_fiscal_period", "fin_fiscal_year",
+                        "fin_filing_date", "fin_debt_to_equity",
+                        "fin_operating_margin_pct", "fin_gross_margin_pct",
+                        "fin_revenue_growth_yoy"],
+        "News": ["news_count_24h", "news_institutional_count",
+                 "news_same_day_count", "news_volume_bucket",
+                 "news_has_institutional"],
+        "Macro": ["macro_vix", "macro_yield_spread", "macro_yield_10y",
+                  "macro_yield_2y", "macro_fed_funds", "macro_vix_momentum",
+                  "macro_vix_regime", "macro_yield_curve_regime",
+                  "macro_rate_regime", "macro_rate_direction"],
         "Computed": ["hold_minutes", "pnl_per_share", "is_winner", "is_loser",
                      "risk_per_share", "r_multiple", "has_minute_bars", "has_regime_data"],
-        "Conditional (new)": [c for c in df.columns if c.startswith(("tod_", "strat_", "sector_",
-                             "trend_cond", "vol_cond", "momentum_cond", "prob_"))],
+        "Conditional (new)": [c for c in df.columns if c.startswith(
+                             ("tod_", "strat_", "sector_", "trend_cond",
+                              "vol_cond", "momentum_cond", "prob_"))
+                             or ("_cond_" in c and c.startswith("macro_"))],
     }
     listed = set()
     for cat, cols in categories.items():
