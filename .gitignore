@@ -48,6 +48,9 @@ hud-test.jpg
 treemap-*.png
 .playwright-mcp/
 
+# Data inbox (user drops raw CSV/exports here for ingestion)
+data/inbox/
+
 # Holly raw data exports (large CSV batches)
 holly_exports/
 analytics/holly_exit/data/raw/

@@ -11,6 +11,7 @@ export type FileFormat =
   | "tradersync"         // TraderSync trade_data.csv export
   | "holly_alerts"       // Trade Ideas Alert Logging CSV
   | "holly_trades"       // Trade Ideas Holly trade export (non-standard CSV)
+  | "ibkr_flex"          // IBKR Flex Query trade confirmation CSV
   // Data types (from any source format)
   | "tradersync_json"    // TraderSync-shaped trade objects
   | "holly_alerts_json"  // Holly alert objects
@@ -34,6 +35,10 @@ export interface DetectionResult {
 // TraderSync CSV has these distinctive columns
 const TRADERSYNC_CSV_MARKERS = ["Status", "Symbol", "Open Date", "Close Date", "Entry Price", "Exit Price", "R-Multiple"];
 const TRADERSYNC_CSV_MIN_MATCH = 4;
+
+// IBKR Flex Query CSV markers (Trade Confirmation report)
+const IBKR_FLEX_CSV_MARKERS = ["ClientAccountID", "Buy/Sell", "TradeID", "Conid", "AssetClass", "Symbol", "Date/Time"];
+const IBKR_FLEX_CSV_MIN_MATCH = 4;
 
 // Holly Alert Logging CSV columns (case-insensitive)
 const HOLLY_ALERT_CSV_MARKERS = ["symbol", "strategy", "entry price", "stop price", "shares"];
@@ -210,6 +215,16 @@ function detectFromCsvContent(content: string): DetectionResult {
   // Parse header columns
   const headerLine = lines[0];
   const headers = headerLine.split(",").map((h) => h.trim().replace(/^"|"$/g, ""));
+
+  // Check IBKR Flex Query CSV (before TraderSync — both have "Symbol")
+  const ibkrMatches = IBKR_FLEX_CSV_MARKERS.filter((m) => headers.some((h) => h === m));
+  if (ibkrMatches.length >= IBKR_FLEX_CSV_MIN_MATCH) {
+    return {
+      format: "ibkr_flex",
+      confidence: Math.min(ibkrMatches.length / IBKR_FLEX_CSV_MARKERS.length, 1),
+      reason: `Matched ${ibkrMatches.length}/${IBKR_FLEX_CSV_MARKERS.length} IBKR Flex Query columns: ${ibkrMatches.join(", ")}`,
+    };
+  }
 
   // Check TraderSync CSV
   const tsMatches = TRADERSYNC_CSV_MARKERS.filter((m) => headers.some((h) => h === m));
