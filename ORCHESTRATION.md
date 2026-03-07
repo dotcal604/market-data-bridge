@@ -1,423 +1,352 @@
-# Market Data Bridge — Agent Orchestration
+# Market Data Bridge — Orchestration Guide
 
-> 14-agent fleet managed via **GitHub Agent HQ** + external tool-specific instruction files.
->
-> Agent HQ provides unified Mission Control across GitHub, VS Code, and CLI. Custom agent profiles live in `.github/agents/`. File-based conditional instructions in `.github/instructions/`. See `AGENTS.md` for the full team roster, cost routing, and authority matrix.
+How agents collaborate, hand off work, and integrate with the CI/CD pipeline.
 
-## Agent Fleet
-
-### Core Agents (GitHub Agent HQ)
-
-| Agent | Role | Model | Interface | Reads AGENTS.md |
-|-------|------|-------|-----------|-----------------|
-| **Claude Code** | Staff Engineer / Tech Lead — execution-critical code, integration, planning, MCP tools | Claude Opus 4.6 | CLI (local) | Yes (via CLAUDE.md) |
-| **GitHub Copilot** | Mid-Level Dev — ops, tests, features following existing patterns | GPT-4.1 / Claude 3.5 | GitHub Issues → Draft PRs, 5 custom agent modes | Via `.github/agents/` |
-| **OpenAI Codex** | Junior Dev (spec executor) — single-file changes, schemas, docs | GPT-5.2-Codex | chatgpt.com/codex, @codex on issues | Yes (auto-discovery) |
-
-### Extended Fleet (External Tools)
-
-| Agent | Role | Interface | Instructions File |
-|-------|------|-----------|-------------------|
-| **Claude Code (Pair)** | Senior Dev (pair programming) | Cloud session | `HANDSHAKE.md` card |
-| **ChatGPT** | Senior Consultant / Architect | Chat UI | `HANDSHAKE.md` card |
-| **Google Jules** | Junior Dev (probationary) | jules.google | `HANDSHAKE.md` card |
-| **Qodo Gen** | QA Automation Engineer | IDE Extension | Reads codebase |
-| **Windsurf** | Senior Dev (IDE-native) | Windsurf IDE | `WINDSURF.md` |
-| **v0 by Vercel** | UI/UX Designer | v0.dev | Component specs |
-| **GHAS** | Security Auditor | CI/CD | Auto-configured |
-| **NotebookLM** | Internal Librarian | notebooklm.google.com | `GEMINI.md` |
-| **Google Antigravity** | Senior Dev / 2nd Staff Engineer | Antigravity IDE | `GEMINI.md` |
-| **Mintlify AI** | Technical Writer / Docs Owner | mintlify.com | `docs/` directory |
-
-### Instruction Files Architecture
-
-```
-.github/
-├── copilot-instructions.md          ← Always-on (all chat requests)
-├── agents/
-│   ├── backend-dev.agent.md         ← @copilot/backend-dev
-│   ├── frontend-dev.agent.md        ← @copilot/frontend-dev
-│   ├── test-writer.agent.md         ← @copilot/test-writer
-│   ├── ops-engineer.agent.md        ← @copilot/ops-engineer
-│   └── docs-writer.agent.md         ← @copilot/docs-writer
-├── instructions/
-│   ├── typescript.instructions.md   ← Applies to src/**/*.ts
-│   ├── frontend.instructions.md     ← Applies to frontend/**/*.tsx,*.ts
-│   ├── tests.instructions.md        ← Applies to **/*.test.ts
-│   └── docs.instructions.md         ← Applies to docs/**/*.mdx
-└── workflows/
-    ├── ci.yml
-    ├── api-audit.yml
-    └── agent-auto-merge.yml
-
-AGENTS.md          ← Always-on (multi-agent, read by all AI tools)
-CLAUDE.md          ← Always-on (Claude compatibility)
-GEMINI.md          ← Antigravity + NotebookLM
-WINDSURF.md        ← Windsurf IDE / Cascade
-HANDSHAKE.md       ← Agent cards for manual paste (Claude Code Pair, ChatGPT, Jules, etc.)
-```
-
-## Decision Tree
-
-```
-New task arrives
-  │
-  ├─ Touches 3+ files or wires subsystems together?
-  │   └─ YES → Claude Code (orchestrator)
-  │
-  ├─ Self-contained UI component with clear props/API?
-  │   └─ YES → GitHub Copilot (via issue + assign)
-  │
-  ├─ Long-running feature, complex refactor, or needs 7+ hours?
-  │   └─ YES → OpenAI Codex (cloud sandbox, parallel tasks)
-  │
-  ├─ Backend route + frontend page + DB migration?
-  │   └─ Claude Code builds backend, creates issue for Copilot/Codex
-  │
-  ├─ Want to compare agent outputs?
-  │   └─ Assign multiple agents to same issue via Agent HQ
-  │
-  └─ Unsure?
-      └─ Claude Code scopes the work, then delegates
-```
-
-## GitHub Agent HQ
-
-Agent HQ is GitHub's unified control plane for managing multiple AI coding agents. Announced at Universe 2025, expanded Feb 2026.
-
-### What It Provides
-
-- **Mission Control** — single dashboard to see, steer, and approve work across all agents (GitHub web, VS Code, Mobile, CLI)
-- **Multi-agent assignment** — assign Copilot, Codex, Claude, or multiple agents to the same issue
-- **Custom agent profiles** — `.github/agents/*.agent.md` files for specialized roles (e.g. `@copilot/frontend-dev`, `@copilot/test-writer`)
-- **Plan Mode** — agents ask clarifying questions before writing code, reducing wasted effort
-- **Enterprise controls** — granular permissions, sandboxed execution, branch protection
-
-### Custom Agent Profiles
-
-Located in `.github/agents/`. Each file defines a specialized agent role:
-
-```yaml
----
-name: frontend-dev
-description: Frontend component specialist for Next.js dashboard
-tools: ["read", "edit", "search"]
----
-
-{Behavioral instructions in markdown}
-```
-
-Invoke via `@copilot/frontend-dev` when assigning issues.
-
-See `.github/agents/` for this repo's custom profiles:
-- `frontend-dev.agent.md` — Next.js dashboard components
-- `backend-dev.agent.md` — Express/TypeScript backend tasks
-- `test-writer.agent.md` — Vitest unit test generation
-- `ops-engineer.agent.md` — PM2, ecosystem.config, deploy scripts
-- `docs-writer.agent.md` — Mintlify docs + repo documentation
-
-### Setup
-
-1. **Copilot Pro+ or Enterprise** subscription required for Agent HQ
-2. Navigate to repo → Issues → assign agent (Copilot, Codex, or Claude)
-3. Monitor via Mission Control in GitHub web UI or VS Code
-4. Custom agents auto-discovered from `.github/agents/`
+For the full team roster, cost routing, and authority matrix, see [AGENTS.md](AGENTS.md).
+For MCP-specific instructions and session protocols, see [CLAUDE.md](CLAUDE.md).
 
 ---
 
-## Issue Template: Copilot
+## 1. Issue-to-Agent Pipeline
 
-Copilot produces the best results when issues include **exact file paths, props interfaces, API endpoints, and acceptance criteria**. Derived from successful PRs #11, #12, #13.
+Every piece of work flows through this pipeline, from idea to merged code.
 
-```markdown
-## Component: `frontend/src/components/{category}/{name}.tsx`
+```
+ IDEA                ISSUE               ASSIGN              EXECUTE
+  │                   │                   │                    │
+  │  Human writes     │  Pick template:   │  Route to agent    │  Agent creates
+  │  a spec with      │  copilot-task     │  based on:         │  branch, writes
+  │  file paths +     │  codex-task       │  1. Mastery domain │  code, verifies
+  │  acceptance       │  bug-report       │  2. Cost tier      │  locally (tsc +
+  │  criteria         │  feature-request  │  3. Capacity       │  vitest)
+  │                   │                   │                    │
+  v                   v                   v                    v
 
-{One-sentence description of what this component does.}
-
-### Props Interface
-\`\`\`tsx
-interface {Name}Props {
-  // Exact TypeScript interface — Copilot will implement this verbatim
-}
-\`\`\`
-
-### API Endpoints Used
-- `GET /api/{endpoint}` — {what it returns}
-- `POST /api/{endpoint}` — {what it accepts}
-
-### Requirements
-- {Specific UI library}: `recharts`, `@tanstack/react-table`, shadcn/ui primitives
-- {Behavior}: sorting, filtering, auto-refresh interval, form validation rules
-- {Styling}: dark theme, model colors from `@/lib/utils/colors`, `font-mono` for numbers
-- `"use client"` directive at top
-- Named export `{ComponentName}`
-- Wrap in `Card` from `@/components/ui/card`
-
-### Files to Create/Modify
-- **Create**: `frontend/src/components/{category}/{name}.tsx`
-- **Modify** (if needed): `frontend/src/app/{route}/page.tsx` — mount the component
-- **Modify** (if needed): `frontend/src/lib/hooks/use-{domain}.ts` — add React Query hook
-
-### Dependencies
-Already in `frontend/package.json`: {list installed packages}
-Need to install: {list if any — prefer avoiding new deps}
-
-### Acceptance Criteria
-- [ ] Component renders with sample/mock data
-- [ ] {Specific behavior verified}
-- [ ] Dark theme compatible (no white backgrounds, correct text colors)
-- [ ] TypeScript compiles clean: `cd frontend && npx tsc --noEmit`
-- [ ] No `console.log` in committed code
-
-### Context
-- Design reference: {link to comparable UI, screenshot, or description}
-- Related issues: #{number}
-- Backend endpoint source: `src/rest/routes.ts` lines {X-Y}
+ REVIEW              FIX                 MERGE                VERIFY
+  │                   │                   │                    │
+  │  Qodo auto-       │  Same agent       │  Human gives       │  CI confirms:
+  │  reviews PR       │  gets feedback    │  final approval    │  tsc --noEmit
+  │  (quality gate)   │  and fixes        │  Squash merge      │  vitest run
+  │  CI runs          │                   │  to main           │  npm run build
+  │  (ci.yml +        │                   │                    │  (ci-build.yml)
+  │  ci-build.yml)    │                   │                    │
+  v                   v                   v                    v
 ```
 
-### What Makes a Good Copilot Issue
+### Step-by-step
 
-From PRs #11 (score scatter), #12 (weight sliders), #13 (time-of-day chart):
+1. **Create issue** using `copilot-task` or `codex-task` template. Include exact file paths, TypeScript interfaces, API endpoints used, and acceptance criteria. Vague specs waste tokens.
+2. **Select agent profile** (for copilot-task): `@copilot` (default), `@copilot/frontend-dev`, `@copilot/backend-dev`, `@copilot/test-writer`, `@copilot/ops-engineer`, or `@copilot/docs-writer`.
+3. **Agent picks up issue**, reads `AGENTS.md` + `CLAUDE.md`, creates a branch following naming conventions (see Section 3).
+4. **Agent implements**, runs local verification (`npx tsc --noEmit`, `npx vitest run`), then pushes a PR with `Fixes #N` in the description.
+5. **Qodo auto-reviews PR** — checks for bugs, logic gaps, missing tests, security issues.
+6. **CI runs** two pipelines:
+   - `ci.yml` — type-check (backend + frontend) + vitest (fast correctness gate, runs on PR and push to main)
+   - `ci-build.yml` — full build verification: `npm run build` + `next build` + tests (PR only, confirms artifacts compile)
+7. **Human reviews and approves** — exec-critical files (`orders.ts`, `risk-gate.ts`, `connection.ts`, `reconcile.ts`) always require human review regardless of agent tier.
+8. **Squash merge to main** — one clean commit per feature.
 
-**Worked well:**
-- Exact props interface in the issue body — Copilot implements it verbatim
-- Specific file paths (`frontend/src/components/analytics/score-scatter.tsx`)
-- Library imports spelled out (`ScatterChart`, `Scatter`, `XAxis`, `YAxis`)
-- Color values hardcoded (`emerald-400`, `#10b981`)
-- Acceptance criteria as checkbox list
-- Screenshots in PR descriptions (Copilot generates these automatically)
+### Template Selection Guide
 
-**Watch out for:**
-- Copilot's firewall blocks `fonts.googleapis.com` — cosmetic, builds succeed
-- Copilot creates demo pages (e.g. `/weights/demo`) — review whether to keep or remove
-- Put all conventions in the issue itself — don't assume Copilot knows the data shape
-
-## Issue Template: Codex
-
-Codex excels at **long-running, complex tasks** that benefit from parallel cloud execution. Tag `@codex` on issues/PRs, or start tasks at chatgpt.com/codex.
-
-```markdown
-## Task: {description}
-
-{What needs to be built or changed.}
-
-### Files Involved
-- `{path/to/file.ts}` — {what to change}
-- `{path/to/new-file.ts}` — {what to create}
-
-### Requirements
-- {Specific behavior, edge cases, error handling}
-- Read AGENTS.md for project conventions
-- Two package.json files: root (backend) + frontend/
-
-### Verification
-\`\`\`bash
-# Backend
-npx tsc --noEmit
-
-# Frontend
-cd frontend && npx tsc --noEmit
-\`\`\`
-
-### Acceptance Criteria
-- [ ] {Specific testable outcomes}
-- [ ] TypeScript compiles clean
-- [ ] No `console.log` — use Pino logger for backend
-```
-
-## Issue Template: Docs Writer
-
-Documentation PRs must be evidence-backed. No vibes-based claims.
-
-```markdown
-## Doc Change: `docs/{path}.mdx` or `{path}.md`
-
-{One-sentence description of the documentation update.}
-
-### Requirements
-- **Evidence-backed claims**: all runtime descriptions must link to code or config.
-- **Cite code path**: `src/{path}/{file}.ts` lines {X-Y}
-- **Cite endpoint**: `GET /api/{endpoint}` (if applicable)
-- **Cite env var**: `{ENV_VAR_NAME}` (if applicable)
-
-### Files to Modify
-- **Modify**: `docs/{path}.mdx`
-- **Modify** (if new page): `docs/docs.json` (update navigation)
-
-### Style Guidelines
-- Use Mintlify `<Warning>`, `<Info>`, or `<Steps>` if appropriate
-- Keep tone professional and direct
-- If behavior is uncertain, use: **"TBD (verify in code)"**
-
-### Acceptance Criteria
-- [ ] Claims verified against current codebase
-- [ ] Links and anchors are correct
-- [ ] No hallucinations about future or unreleased features
-- [ ] Mintlify dev preview looks clean: `cd docs && npx mint dev`
-```
-
-### Codex Cloud Environment
-
-Configure at [chatgpt.com/codex/settings/environments](https://chatgpt.com/codex/settings/environments):
-
-**Setup script:**
-```bash
-npm install && cd frontend && npm install && cd ..
-```
-
-**Key capabilities:**
-- Tasks run in cloud sandboxes (container state cached 12 hours)
-- Parallel task execution across issues
-- GPT-5.2-Codex model (optimized for agentic coding)
-- Internet access configurable per task
-- Reads AGENTS.md via auto-discovery chain
-
-**Historical note:** Early Codex (PRs #3, #23) had broken PR bodies and no env setup. Current Codex (GPT-5.2) resolves all previous issues — reads AGENTS.md, supports setup scripts, generates proper PR descriptions.
-
-## Agent Comparison
-
-| Scenario | Copilot | Codex |
-|----------|---------|-------|
-| Self-contained UI component | Best | Good |
-| Multi-file component + page wiring | Proved (PRs #11-13) | Good |
-| Long-running complex feature (7+ hours) | No | Best |
-| Parallel tasks across issues | Via separate issues | Native (cloud) |
-| Python scripts / analytics | Possible | Good |
-| Needs exact issue spec | Yes (verbatim) | Natural language OK |
-| Reads AGENTS.md | Via issue body | Auto-discovery |
-| Build verification | GitHub Actions sandbox | Cloud sandbox |
-| Cost | Copilot Pro+ | ChatGPT Pro/Plus |
+| Template | When to Use | Best For |
+|----------|------------|----------|
+| `copilot-task` | Pattern-following features with clear specs | Frontend components, backend routes, ops scripts, tests, docs |
+| `codex-task` | Isolated async work, single-file changes | Zod schemas, JSDoc, TypeScript refactors, docs |
+| Bug Report | Runtime issues, unexpected behavior | Any agent based on file ownership |
+| Feature Request | New capabilities, design discussions | Triage first, then delegate |
 
 ---
 
-## Phase Orchestration Pattern
+## 2. Handoff Protocol
 
-Each roadmap phase uses a **parent meta-issue** that tracks child issues:
+When one agent needs to pass work to another, use the collaboration channel and GitHub handoff mechanisms.
 
-```markdown
-## Phase {N}: {Name}
+### Collaboration Channel
 
-Tracking issue for all {Phase Name} work.
-
-### Issues
-- [ ] #{id} — {title} (assigned: @copilot)
-- [ ] #{id} — {title} (assigned: @codex)
-
-### Dependencies
-- Blocked by: Phase {N-1} completion
-- Blocks: Phase {N+1}
-
-### Definition of Done
-- All child issues closed
-- `cd frontend && npx tsc --noEmit` passes
-- New pages accessible from sidebar nav
-- No regressions in existing pages
-```
-
-## Review Workflow
+All agents share context through the AI-to-AI collab channel:
 
 ```
-1. Agent creates draft PR from issue (Copilot/Codex)
-2. Claude Code reviews (or human reviews):
-   - Does it follow AGENTS.md conventions?
-   - Does TypeScript compile clean?
-   - Is the component wired into the page layout?
-   - Are there unnecessary files (demo pages, test fixtures)?
-3. Request changes or approve
-4. Human merges (no auto-merge)
-5. Close the linked issue
+Post:   POST /api/collab/message
+Read:   GET  /api/collab/messages?type={type}&limit={n}&author={agent}
 ```
 
-## Labels
+Claude Code agents use the MCP tools directly: `collab_read` / `collab_post`.
+Copilot agents use the REST API with `X-API-Key` header.
 
-**Agent routing** (who works on it):
-| Label | Purpose |
-|-------|---------|
-| `agent:claude` | Assigned to Claude Code (#2) |
-| `agent:claude-pair` | Review by Claude Code Pair (#3) |
-| `agent:copilot` | Assigned to GitHub Copilot (#5) |
-| `agent:codex` | Assigned to OpenAI Codex (#6) |
-| `agent:jules` | Assigned to Google Jules (#7) |
-| `agent:windsurf` | Assigned to Windsurf (#9) |
-| `agent:v0` | Assigned to v0 (#10) |
-| `agent:antigravity` | Assigned to Google Antigravity (#13) |
+**Message types:**
+- `info` — status update, FYI
+- `request` — asking another agent to act
+- `decision` — recording an architectural or implementation choice
+- `handoff` — transferring ownership of a task
+- `blocker` — flagging something stuck and needing help
 
-**Scope** (what part of the system):
-| Label | Purpose |
-|-------|---------|
-| `scope:frontend` | Next.js dashboard |
-| `scope:backend` | Express/MCP server |
-| `scope:eval` | Eval engine (ensemble, features) |
-| `scope:ibkr` | IBKR integration (orders, connection) |
-| `scope:docs` | Documentation |
-| `scope:ops` | Operations, deployment, CI |
+### Standard Handoff Chains
 
-**Priority & workflow**:
-| Label | Purpose |
-|-------|---------|
-| `priority:high` / `priority:medium` / `priority:low` | Task priority |
-| `agent-task` | Any agent-delegated work |
-| `acceptance-test` | Agent handshake verification |
-| `phase-0` through `phase-8` | Roadmap phase tracking |
-| `api-audit` | Automated API audit findings |
-| `blocked` | Waiting on dependency |
-| `needs-review` | PR ready for review |
+```
+backend-dev ──(tests needed)──> test-writer
+backend-dev ──(docs needed)───> docs-writer
 
-### Native Agent Assignment (Agent HQ)
+frontend-dev ──(tests needed)──> test-writer
+frontend-dev ──(docs needed)───> docs-writer
 
-For agents with GitHub integration, use the **Assignees dropdown** on issues:
+ops-engineer ──(code fix needed)──> backend-dev
+ops-engineer ──(runbook update)───> docs-writer
 
-1. **Create issue** using a template (Copilot Task, Codex Task, Bug Report, Feature Request)
-2. **Add labels**: `agent:{name}` + `scope:{area}` + `priority:{level}`
-3. **Assign agent** via Assignees: `@copilot`, `@codex`, or `@claude`
-4. Agent auto-starts, works in a branch, opens a draft PR
-5. **Review** via PR comments: `@copilot`, `@codex`, or `@claude` respond to feedback
-6. **Human merges** after approval
+test-writer ──(code bug found)──> backend-dev
 
-For non-GitHub agents (Jules, Windsurf, v0, NotebookLM, ChatGPT), use labels for tracking but assign work through their native interfaces. See `HANDSHAKE.md` for per-agent instructions.
+docs-writer ──(code sample verify)──> backend-dev or frontend-dev
+```
 
-## Backend Additions (Claude Code)
+### Handoff Procedure
 
-Some frontend work requires new or modified backend endpoints. Claude Code handles these directly before creating agent issues:
+1. **Sending agent** completes its work, pushes PR.
+2. **Sending agent** posts to collab channel:
+   ```json
+   {
+     "author": "backend-dev",
+     "type": "handoff",
+     "content": "Implemented GET /api/eval/history. Tests needed for edge cases (empty DB, invalid params). See PR #42.",
+     "metadata": { "pr": 42, "files": ["src/rest/routes.ts"], "target": "test-writer" }
+   }
+   ```
+3. **Receiving agent** checks collab channel on task start (`GET /api/collab/messages?type=handoff&limit=5`), acknowledges, and creates a follow-up PR.
+4. **Receiving agent** posts completion summary back to collab channel with `type: "info"`.
 
-| Phase | Backend Work | Then Agent Builds |
-|-------|-------------|-------------------|
-| Phase 2 | `GET /api/eval/outcomes` (evals + outcomes joined) | Score scatter with real data |
-| Phase 2 | `POST /api/eval/weights/simulate` (re-score with custom weights) | Weight slider "what if" preview |
-| Phase 3 | None — all endpoints exist | Account, positions, orders pages |
-| Phase 4 | None — all endpoints exist | Journal + collab feed |
-| Phase 5 | None — all endpoints exist | Market data tools |
+### External Handoffs (Manual)
 
-## Firewall Configuration
+These agents are not on the GitHub collab channel. The human coordinates manually:
 
-Copilot's GitHub Actions environment blocks external network by default. To allow:
+| Need | Target | Process |
+|------|--------|---------|
+| UI design from mockup | v0.dev (Agent #10) | Human pastes spec at v0.dev, exports code, creates issue for frontend-dev |
+| Architecture review | ChatGPT (Agent #4) | Human opens chat, pastes context, records decision in collab channel |
+| Knowledge query | NotebookLM (Agent #12) | Human queries at notebooklm.google.com, posts findings to collab channel |
+| Multi-file feature | Antigravity (Agent #13) | Human assigns in Antigravity IDE, reviews PR |
 
-1. Go to repo Settings → Copilot → Coding Agent
-2. Add to custom allowlist:
-   - `fonts.googleapis.com` (if using Google Fonts)
-   - `registry.npmjs.org` (already allowed for npm install)
+---
 
-Currently not blocking builds — the `fonts.googleapis.com` warning in PRs #11-13 is cosmetic.
+## 3. Branch Naming Conventions
 
-## Agent Setup Checklist
+```
+Format: {type}/{agent-name}/{short-description}
 
-### OpenAI Codex
-1. Go to [chatgpt.com/codex](https://chatgpt.com/codex) → connect GitHub account
-2. Select `dotcal604/market-data-bridge` repository
-3. Configure environment setup script: `npm install && cd frontend && npm install && cd ..`
-4. AGENTS.md auto-discovered — no additional config needed
-5. Test: create a task from chatgpt.com/codex or tag `@codex` on an issue
+Examples:
+  feat/backend-dev/eval-history-endpoint
+  fix/ops-engineer/ci-cache-invalidation
+  docs/docs-writer/api-reference-update
+  test/test-writer/risk-gate-edge-cases
+```
 
-### GitHub Copilot (Agent HQ)
-1. Copilot Pro+ or Enterprise subscription required
-2. Assign Copilot to issues via GitHub web UI (cannot be done via CLI)
-3. Custom agent profiles in `.github/agents/` auto-discovered
-4. Monitor via Mission Control in GitHub web UI or VS Code
+### Prefixes
 
-### Custom Agent Profiles
-Located in `.github/agents/`. See files for specialized roles:
-- `frontend-dev.agent.md` — Next.js dashboard components
-- `backend-dev.agent.md` — Express/TypeScript backend tasks
-- `test-writer.agent.md` — Vitest unit test generation
-- `ops-engineer.agent.md` — PM2, ecosystem.config, deploy scripts
-- `docs-writer.agent.md` — Mintlify docs + repo documentation
+| Prefix | Use Case |
+|--------|----------|
+| `feat/` | New features, components, endpoints |
+| `fix/` | Bug fixes, error handling corrections |
+| `docs/` | Documentation changes only |
+| `test/` | Test additions or modifications only |
+| `chore/` | Dependency updates, config changes, cleanup |
+| `refactor/` | Code restructuring without behavior change |
+
+### Agent Name Slugs
+
+| Agent | Slug |
+|-------|------|
+| GitHub Copilot (default) | `copilot` |
+| Copilot backend-dev | `backend-dev` |
+| Copilot frontend-dev | `frontend-dev` |
+| Copilot test-writer | `test-writer` |
+| Copilot ops-engineer | `ops-engineer` |
+| Copilot docs-writer | `docs-writer` |
+| OpenAI Codex | `codex` |
+| Google Jules | `jules` |
+| Claude Code | `claude` |
+| Windsurf | `windsurf` |
+| Antigravity | `antigravity` |
+
+### Claude Code Worktrees
+
+Claude Code uses git worktrees for isolated parallel work:
+
+```
+.claude/worktrees/{name}/       # Temporary worktree directory
+```
+
+These are ephemeral and cleaned up after the session. They do not follow the branch naming convention above — the worktree name is auto-generated.
+
+---
+
+## 4. PR Review Flow
+
+```
+ Agent pushes PR
+       │
+       v
+ ┌─────────────────────┐
+ │  Qodo Merge reviews  │  Automated quality gate:
+ │  (PR Agent)           │  - Bug detection
+ │                       │  - Logic gap analysis
+ │                       │  - Missing test coverage
+ │                       │  - Security flags
+ └──────────┬────────────┘
+            │
+            v
+ ┌─────────────────────┐
+ │  CI pipeline runs    │  Two workflows triggered on PR:
+ │                      │
+ │  ci.yml:             │  ci-build.yml:
+ │  ├─ npm ci           │  ├─ npm install
+ │  ├─ tsc --noEmit     │  ├─ tsc --noEmit
+ │  ├─ vitest run       │  ├─ npm run build
+ │  ├─ frontend npm ci  │  ├─ npm test
+ │  └─ frontend tsc     │  ├─ frontend tsc
+ │                      │  └─ frontend next build
+ └──────────┬───────────┘
+            │
+            ├── CI FAILS ──> Agent fixes and pushes again.
+            │                Future: Jules API auto-attempts
+            │                fix on CI failure.
+            │
+            v (CI PASSES)
+ ┌─────────────────────┐
+ │  Human final review  │  Required for ALL merges.
+ │                      │  Exec-critical files require
+ │                      │  paper account test before
+ │                      │  production deployment.
+ └──────────┬───────────┘
+            │ APPROVED
+            v
+ ┌─────────────────────┐
+ │  Squash merge        │  One commit per feature.
+ │  to main             │  Branch auto-deleted.
+ └──────────────────────┘
+```
+
+### Review Checklist
+
+- PR description includes `Fixes #N`
+- TypeScript compiles clean (backend + frontend)
+- Tests pass and cover new code paths
+- No `console.log` in committed code (use Pino logger for backend)
+- Agent stayed within its file scope (check against AGENTS.md)
+- Exec-critical files NOT modified without human approval
+- Dark theme compliance (frontend PRs)
+- Named exports, ESM `.js` extensions (backend PRs)
+
+### CI Pipeline Details
+
+| Workflow | Trigger | Steps | Purpose |
+|----------|---------|-------|---------|
+| `ci.yml` | PR to main + push to main | `tsc --noEmit` (backend + frontend) + `vitest run` | Fast correctness gate |
+| `ci-build.yml` | PR to main only | `npm run build` + `npm test` + `next build` | Full build artifact verification |
+
+Both must pass green before merge is allowed.
+
+---
+
+## 5. Scheduled Task Integration
+
+Scheduled tasks run on a recurring basis and feed issues into the agent pipeline when they detect problems.
+
+### Task-to-Issue Routing
+
+| Scheduled Task | Trigger | On Failure/Warning | Assigned To |
+|---------------|---------|-------------------|-------------|
+| `nightly-tests` | Daily | Test failure creates issue with failing test names and logs | `@copilot/test-writer` |
+| `weekly-api-audit` | Weekly | API coverage gaps create issue with endpoint inventory | `@copilot/backend-dev` |
+| `weekly-ops-check` | Weekly | Infrastructure warnings create issue with health report | `@copilot/ops-engineer` |
+| `pre-market-scan` | Weekdays, pre-market | Writes scan results to `.claude/memory/` for session prep | N/A (data only) |
+
+### Flow
+
+```
+Scheduled task runs
+       │
+       ├── SUCCESS ──> Log result to collab channel (type: "info"), no issue created
+       │
+       └── FAILURE / WARNING
+              │
+              v
+       Create GitHub issue with structured spec:
+       ├─ What failed (test names, endpoint gaps, health warnings)
+       ├─ Relevant logs or output
+       ├─ Suggested fix (if deterministic)
+       └─ Assign to responsible agent profile
+              │
+              v
+       Issue enters normal pipeline (Section 1)
+```
+
+### Memory Integration
+
+The `pre-market-scan` task and session activity write to `.claude/memory/` for cross-session continuity:
+
+```
+.claude/memory/
+├── MEMORY.md          # Project overview, architecture decisions, current state
+├── patterns.md        # Code conventions, calculation definitions, testing patterns
+└── session-log.md     # Append-only log of session activity
+```
+
+All agents and Claude Code sessions read `.claude/memory/` on start to pick up context from previous sessions across machines. See CLAUDE.md for the session-log format.
+
+---
+
+## 6. Emergency Procedures
+
+### Production Incident
+
+```
+INCIDENT DETECTED
+       │
+       v
+  Human takes control immediately.
+  All agent work PAUSED — do not assign new tasks.
+       │
+       v
+  Assess severity:
+  ├── Data issue       ──> Check data/bridge.db integrity (PRAGMA integrity_check)
+  ├── Process crash    ──> Check logs/pm2-error.log, restart via PM2
+  ├── TWS disconnect   ──> Restart TWS, verify connection via get_status
+  └── Order issue      ──> STOP. Human-only resolution. No agent involvement.
+       │
+       v
+  Fix applied by human (or Claude Code under direct human supervision).
+  Post-incident: ops-engineer creates issue for preventive fix.
+```
+
+### Position Flattening
+
+**ALWAYS human-only.** No agent may call `flatten_positions` or modify `flatten_config` autonomously.
+
+The `flatten_positions` MCP tool flattens all positions to cash immediately. This is a last-resort action triggered only by the human operator via Claude Code in an interactive session. No scheduled task, no automation, no exception.
+
+### Database Recovery
+
+1. **Stop the bridge process** — `pm2 stop all` or kill the process
+2. **Restore from backup** — nightly backups in `data/backups/`
+3. **Verify integrity** — `PRAGMA integrity_check` on restored database
+4. **Restart bridge** — `pm2 start ecosystem.config.cjs`
+5. **ops-engineer investigates** — create issue with root cause analysis, assign to `@copilot/ops-engineer`
+
+### Escalation Path
+
+When an agent cannot resolve an issue, escalate up the seniority chain:
+
+```
+Jules/Codex ──> Copilot ──> Windsurf ──> Antigravity ──> Claude Code ──> Human
+  (Junior)      (Mid)       (Senior)     (2nd Staff)     (Staff Eng)    (EM)
+```
+
+For exec-critical files (`orders.ts`, `risk-gate.ts`, `connection.ts`, `reconcile.ts`), skip directly to **Claude Code + Human**. No junior or mid-level agent touches these files.
+
+### Exec-Critical File List
+
+These files require **human review + paper account test** before any merge:
+
+- `src/ibkr/orders.ts` / `src/ibkr/orders_impl/*`
+- `src/ibkr/risk-gate.ts`
+- `src/ibkr/connection.ts`
+- `src/db/reconcile.ts`
+
+No agent may modify these without explicit human approval in the PR.
