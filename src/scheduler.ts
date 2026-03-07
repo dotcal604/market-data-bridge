@@ -282,6 +282,8 @@ const ANALYTICS_SCHEDULE: ScheduledScript[] = [
   { script: "regime",              hour: 16, minute: 10, label: "post-close regime detection" },
   { script: "daily_exit_refresh",  hour: 16, minute: 30, label: "post-close exit optimization refresh",
     timeoutMs: 45 * 60 * 1000 },  // 45 min — runs full pipeline (fetch + optimize + walk-forward)
+  { script: "daily_data_refresh",  hour: 17, minute: 15, label: "post-close data refresh (flat files + benchmarks + news + silver)",
+    timeoutMs: 90 * 60 * 1000 },  // 90 min — full incremental data pull + silver rebuild
 ];
 
 const analyticsFiredToday = new Map<string, string>(); // script → dateET
