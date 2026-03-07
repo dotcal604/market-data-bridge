@@ -873,4 +873,50 @@ describe("WebSocket Server", () => {
       ws.close();
     });
   });
+
+  // ── Rate Limiting Tests ───────────────────────────────────────────────────
+
+  describe("Rate Limiting", () => {
+    it("should disconnect client that sends more than 100 messages per minute", async () => {
+      const ws = await connectClient(port, "test-key-123");
+
+      // auth counts as message 1. Send 100 more subscribe messages so the
+      // total reaches 101, which exceeds RATE_LIMIT_MAX (100) and triggers
+      // the enforcement path (msgCount > 100).
+      const received: any[] = [];
+      ws.on("message", (data) => {
+        received.push(JSON.parse(data.toString()));
+      });
+
+      for (let i = 0; i < 100; i++) {
+        ws.send(JSON.stringify({ type: "subscribe", channel: "positions" }));
+      }
+
+      // Server must close the connection with code 1008
+      const closeEvent = await waitForClose(ws, 3000);
+      expect(closeEvent.code).toBe(1008);
+      expect(closeEvent.reason).toContain("Rate limit exceeded");
+
+      // Server must send an error frame before closing
+      const errorMsg = received.find((m) => m.type === "error");
+      expect(errorMsg).toBeDefined();
+      expect(errorMsg.message).toContain("Rate limit exceeded");
+    });
+
+    it("should allow exactly 100 messages without disconnecting", async () => {
+      const ws = await connectClient(port, "test-key-123");
+
+      // auth = message 1; send 99 more → total 100, which equals the limit
+      // (msgCount === 100, not > 100) so no disconnect should occur.
+      for (let i = 0; i < 99; i++) {
+        ws.send(JSON.stringify({ type: "subscribe", channel: "positions" }));
+        await waitForMessage(ws);
+      }
+
+      // Connection must still be open at the limit boundary
+      expect(ws.readyState).toBe(WebSocket.OPEN);
+
+      ws.close();
+    });
+  });
 });
