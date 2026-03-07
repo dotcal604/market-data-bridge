@@ -178,7 +178,21 @@ export function createApp(): express.Express {
   // Log session recovery on startup
   logSessionRecovery();
 
-  app.use(cors());
+  const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? "http://localhost:3001")
+    .split(",")
+    .map((o) => o.trim());
+
+  app.use(cors({
+    origin(requestOrigin, callback) {
+      // Allow requests with no origin (curl, MCP stdio, server-to-server)
+      if (!requestOrigin || allowedOrigins.includes(requestOrigin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`Origin ${requestOrigin} not allowed by CORS`));
+      }
+    },
+    credentials: true,
+  }));
   app.use(express.json());
 
   // Request logging
