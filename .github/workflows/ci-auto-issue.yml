@@ -1,0 +1,93 @@
+name: CI — Auto-Issue on Main Failure
+
+# Only fires on push to main (not PRs) — if tests break on main, something slipped through.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  test-and-report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Type check
+        id: typecheck
+        continue-on-error: true
+        run: npx tsc --noEmit 2>&1 | tee /tmp/tsc-output.txt
+
+      - name: Test
+        id: test
+        continue-on-error: true
+        run: npx vitest run 2>&1 | tee /tmp/test-output.txt
+
+      - name: Create issue on failure
+        if: steps.typecheck.outcome == 'failure' || steps.test.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const tscFailed = '${{ steps.typecheck.outcome }}' === 'failure';
+            const testFailed = '${{ steps.test.outcome }}' === 'failure';
+            const commit = context.sha.substring(0, 7);
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
+            let body = `## CI Failure on Main — ${new Date().toISOString().split('T')[0]}\n\n`;
+            body += `**Commit:** \`${commit}\`\n`;
+            body += `**Run:** [View logs](${runUrl})\n\n`;
+
+            if (tscFailed) {
+              body += `### TypeScript Compilation: FAILED\n`;
+              body += `\`npx tsc --noEmit\` returned errors. Check the [CI logs](${runUrl}) for details.\n\n`;
+            }
+            if (testFailed) {
+              body += `### Tests: FAILED\n`;
+              body += `\`npx vitest run\` returned failures. Check the [CI logs](${runUrl}) for details.\n\n`;
+            }
+
+            body += `### Assignment\n`;
+            body += `\`@copilot/test-writer\` — investigate and fix the failing tests.\n`;
+            body += `If the failure is a code bug (not test bug), hand off to \`@copilot/backend-dev\`.\n`;
+
+            // Check if there's already an open CI failure issue to avoid duplicates
+            const { data: existing } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'ci-failure',
+              per_page: 1
+            });
+
+            if (existing.length > 0) {
+              // Comment on existing issue instead of creating a new one
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing[0].number,
+                body: body
+              });
+              console.log(`Commented on existing issue #${existing[0].number}`);
+            } else {
+              const { data: issue } = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: `[CI] Test/build failure on main — ${commit}`,
+                body: body,
+                labels: ['bug', 'ci-failure', 'priority:high', 'scope:tests', 'agent:copilot']
+              });
+              console.log(`Created issue #${issue.number}`);
+            }
+
+      - name: Fail the workflow
+        if: steps.typecheck.outcome == 'failure' || steps.test.outcome == 'failure'
+        run: exit 1

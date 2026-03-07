@@ -32,6 +32,11 @@ Single-process Node.js 22+ TypeScript trading platform: IBKR + Yahoo Finance + 3
 
 ## Agent Fleet
 14-15 agents coordinated via AGENTS.md. Cost-aware routing: mastery → free → cheap → expensive.
+
+### Agent CLI Tool Capabilities (Tested)
+- **Copilot CLI** (`gh copilot -p`): Proven on this repo. Can read files, write files, run shell commands. Good for mechanical pattern fixes (e.g., F18 silent catches — 65 edits in one run). Use for bulk find-replace, adding logging, simple pattern work.
+- **Gemini CLI** (`gemini -i`): Use interactive mode (`-i`), NOT `-p`. Non-interactive mode (`-p`) is read-only on Windows — cannot write files or run commands. Even in `-i` mode, verify it has write/shell access before assigning write-heavy tasks. Better than Copilot for type narrowing and multi-file reasoning (larger context window).
+- **Gemini CLI known failure**: `-p` mode face-plants on Windows — no write_file, no run_shell_command, spirals trying tool names that don't exist. Always use `-i` for tasks that require file creation or modification.
 - Collab channel upgraded: `type` field (info/request/decision/handoff/blocker) + `metadata` (JSON), wired into check_inbox
 - GitHub Mission Control: use github.com/copilot/agents panel for multi-task Copilot delegation (assign, steer mid-task, track)
 - Copilot agents panel: lightweight overlay on any github.com page, kick off tasks across repos in parallel

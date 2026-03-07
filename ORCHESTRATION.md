@@ -123,6 +123,17 @@ These agents are not on the GitHub collab channel. The human coordinates manuall
 | Knowledge query | NotebookLM (Agent #12) | Human queries at notebooklm.google.com, posts findings to collab channel |
 | Multi-file feature | Antigravity (Agent #13) | Human assigns in Antigravity IDE, reviews PR |
 
+### Collab Channel Reachability
+
+Not all agents can reach the collab channel. This table shows actual reachability:
+
+| Agent | Collab Access | Method | Notes |
+|-------|--------------|--------|-------|
+| Claude Code (#2) | **Direct** | MCP tools (`collab_read`/`collab_post`) | Full access, primary user |
+| ChatGPT (#4) | **Direct** | REST API via action catalog | 3 mandatory startup steps |
+| Copilot agents (#5) | **Indirect** | REST instructions in `.agent.md` | Runs in GitHub sandbox — can't reach localhost. Collab protocol is aspirational until Copilot gets network access or MCP support |
+| Other agents | **None** | Human relays via collab channel | v0, Jules, Codex, NotebookLM — no programmatic access |
+
 ---
 
 ## 3. Branch Naming Conventions
@@ -204,8 +215,9 @@ These are ephemeral and cleaned up after the session. They do not follow the bra
  └──────────┬───────────┘
             │
             ├── CI FAILS ──> Agent fixes and pushes again.
-            │                Future: Jules API auto-attempts
-            │                fix on CI failure.
+            │                On main: ci-auto-issue.yml creates
+            │                a GitHub issue with failing test names
+            │                and assigns to @copilot/test-writer.
             │
             v (CI PASSES)
  ┌─────────────────────┐
@@ -239,8 +251,10 @@ These are ephemeral and cleaned up after the session. They do not follow the bra
 |----------|---------|-------|---------|
 | `ci.yml` | PR to main + push to main | `tsc --noEmit` (backend + frontend) + `vitest run` | Fast correctness gate |
 | `ci-build.yml` | PR to main only | `npm run build` + `npm test` + `next build` | Full build artifact verification |
+| `ci-auto-issue.yml` | Push to main only | Same as ci.yml + auto-creates GitHub issue on failure | Catches regressions that slip through PR review |
+| `api-audit.yml` | Weekly (Monday 9 AM ET) + manual | `npm audit` + endpoint coverage scan | Dependency + API quality gate |
 
-Both must pass green before merge is allowed.
+Both `ci.yml` and `ci-build.yml` must pass green before merge is allowed.
 
 ---
 
@@ -248,14 +262,17 @@ Both must pass green before merge is allowed.
 
 Scheduled tasks run on a recurring basis and feed issues into the agent pipeline when they detect problems.
 
-### Task-to-Issue Routing
+### Active Scheduled Tasks
 
-| Scheduled Task | Trigger | On Failure/Warning | Assigned To |
-|---------------|---------|-------------------|-------------|
-| `nightly-tests` | Daily | Test failure creates issue with failing test names and logs | `@copilot/test-writer` |
-| `weekly-api-audit` | Weekly | API coverage gaps create issue with endpoint inventory | `@copilot/backend-dev` |
-| `weekly-ops-check` | Weekly | Infrastructure warnings create issue with health report | `@copilot/ops-engineer` |
-| `pre-market-scan` | Weekdays, pre-market | Writes scan results to `.claude/memory/` for session prep | N/A (data only) |
+All tasks run via Claude Code scheduled tasks (`~/.claude/scheduled-tasks/`). Results post to the collab channel and create GitHub issues on failure.
+
+| Scheduled Task | Schedule | What It Does | On Failure | Assigned To |
+|---------------|----------|-------------|------------|-------------|
+| `nightly-tests` | Daily 2 AM | `tsc --noEmit` + `vitest run` | Creates issue + collab blocker | `@copilot/test-writer` |
+| `nightly-backup` | Daily 3 AM | Database backup with 7-day retention | Creates issue | `@copilot/ops-engineer` |
+| `weekly-api-audit` | Monday 9 AM | Endpoint coverage + dependency audit | Creates issue | `@copilot/backend-dev` |
+| `weekly-ops-check` | Monday 10 AM | DB integrity, log errors, npm audit, git status | Creates issue + collab blocker | `@copilot/ops-engineer` |
+| `pre-market-scan` | Weekdays 8:30 AM | Gap scanner + watchlist builder | Writes to `.claude/memory/` | N/A (data only) |
 
 ### Flow
 
