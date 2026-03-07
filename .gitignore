@@ -28,10 +28,10 @@ coverage/
 # Python analytics venv
 analytics/.venv/
 analytics/holly_exit/.venv/
-analytics/holly_exit/data/parquet/
-analytics/holly_exit/data/duckdb/
+analytics/holly_exit/data/
 analytics/holly_exit/output/
 analytics/holly_exit/.env
+analytics/holly_tearsheets/output/
 __pycache__/
 *.pyc
 
@@ -53,10 +53,11 @@ data/inbox/
 
 # Holly raw data exports (large CSV batches)
 holly_exports/
-analytics/holly_exit/data/raw/
-analytics/holly_exit/data/reference/
 analytics/holly_exit/fetch_lookback.log
 analytics/output/
+
+# Temp/scratch analysis scripts
+analytics/holly_exit/scripts/_tmp_*
 
 # Holly export bot artifacts
 scripts/debug_screenshots/
