@@ -25,6 +25,9 @@ import type { Widget, WidgetContext, WidgetOutput, SlotCost } from "./types.js";
 import { textEl, PANEL_PORTFOLIO_H, SectionBg } from "./helpers.js";
 import { C, changeColor } from "../screens.js";
 import { registerWidget } from "./registry.js";
+import { logger } from "../../logging.js";
+
+const log = logger.child({ module: "widget-portfolio" });
 
 const FONT_SIZE = 48;
 const MAX_POSITION_LINES = 3;
@@ -164,7 +167,8 @@ export const portfolioWidget: Widget = {
       if (netLiq > 0) {
         exposure = Math.round((grossPos / netLiq) * 100);
       }
-    } catch {
+    } catch (e: any) {
+      log.warn({ err: e }, 'Portfolio PnL/Summary fetch failed');
       // IBKR connected but data fetch failed — show zeroes with neutral color
     }
 
@@ -178,7 +182,8 @@ export const portfolioWidget: Widget = {
       positionLines = positions
         .slice(0, MAX_POSITION_LINES)
         .map(fmtPositionLine);
-    } catch {
+    } catch (e: any) {
+      log.warn({ err: e }, 'Portfolio positions fetch failed');
       // Position fetch failed — fall back to exposure bar
     }
 

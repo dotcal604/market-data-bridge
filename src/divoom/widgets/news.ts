@@ -31,6 +31,9 @@ import { renderNewsPanel, setCachedChart } from "../charts.js";
 import { getNews } from "../../providers/yahoo.js";
 import { getContentSettings } from "../config-store.js";
 import { registerWidget } from "./registry.js";
+import { logger } from "../../logging.js";
+
+const log = logger.child({ module: "widget-news" });
 
 // ─── Image-mode constants ─────────────────────────────────────
 const IMAGE_FONT = 18;
@@ -79,7 +82,8 @@ export const newsWidget: Widget = {
       if (news.length > 0) {
         headlines = news.slice(0, 3).map((n) => n.title);
       }
-    } catch {
+    } catch (e: any) {
+      log.warn({ err: e }, 'News fetch failed');
       // empty headlines triggers fallback styling
     }
 

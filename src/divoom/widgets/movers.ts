@@ -36,6 +36,9 @@ import { C, changeColor, fmtPrice, fmtPct, trim } from "../screens.js";
 import { renderDataTable, setCachedChart } from "../charts.js";
 import { runScreener } from "../../providers/yahoo.js";
 import { registerWidget } from "./registry.js";
+import { logger } from "../../logging.js";
+
+const log = logger.child({ module: "widget-movers" });
 
 // ─── Image-mode constants ─────────────────────────────────────
 const COL_DIR = 40;       // "▲" or "▼" — small fixed width
@@ -156,7 +159,8 @@ export const moversWidget: Widget = {
       ]);
       gainers = g;
       losers = l;
-    } catch {
+    } catch (e: any) {
+      log.warn({ err: e }, 'Movers screener fetch failed');
       // screeners failed — empty arrays trigger fallback styling
     }
 

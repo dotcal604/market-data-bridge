@@ -129,7 +129,8 @@ export async function smartQuote(symbol: string): Promise<SmartQuoteResult | nul
           source: q.delayed ? "DLY" : "LIVE",
         };
       }
-    } catch {
+    } catch (e: any) {
+      log.warn({ err: e }, 'IBKR smart quote failed');
       // fall through to Yahoo
     }
   }
@@ -147,7 +148,8 @@ export async function smartQuote(symbol: string): Promise<SmartQuoteResult | nul
         source: "DLY",
       };
     }
-  } catch {
+  } catch (e: any) {
+    log.warn({ err: e }, 'Yahoo smart quote failed');
     // no data
   }
 
@@ -509,7 +511,8 @@ async function fetchPnlChartData(): Promise<{ values: number[]; labels: string[]
       return { values: [0, pnl.dailyPnL], labels: ["Open", "Now"] };
     }
     return null;
-  } catch {
+  } catch (e: any) {
+    log.warn({ err: e }, 'PnL chart data fetch failed');
     return null;
   }
 }
@@ -531,13 +534,19 @@ export async function fetchIndicatorValues(): Promise<{
       const snap = getSnapshot(tracked[0]);
       if (snap?.rsi_14 != null) rsi = snap.rsi_14;
     }
-  } catch { /* no indicator data */ }
+  } catch (e: any) {
+    log.warn({ err: e }, 'Indicator engine fetch failed');
+    /* no indicator data */
+  }
 
   // VIX
   try {
     const vixQuote = await smartQuote("^VIX");
     if (vixQuote) vix = vixQuote.last;
-  } catch { /* no VIX data */ }
+  } catch (e: any) {
+    log.warn({ err: e }, 'VIX quote fetch failed');
+    /* no VIX data */
+  }
 
   // Volume bars for major indices
   const volSymbols = ["SPY", "QQQ", "DIA", "IWM"];
