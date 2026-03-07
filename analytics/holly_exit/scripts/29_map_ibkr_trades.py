@@ -509,6 +509,40 @@ def _score_match(
     return round(time_score * 0.6 + price_score * 0.4, 4)
 
 
+def _filter_holly_day(positions: pd.DataFrame, holly: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Pre-filter: keep only IBKR positions where a Holly alert fired for that
+    symbol on the same trading day. Removes non-Holly trades (manual, Finviz, etc.)
+
+    Returns (kept, removed) DataFrames.
+    """
+    # Build set of (symbol, date_str) from Holly
+    holly_days = set()
+    for _, h in holly.iterrows():
+        dt = h["entry_time"]
+        if pd.notna(dt):
+            holly_days.add((h["symbol"], str(dt.date())))
+
+    # Tag each position
+    def has_holly(row):
+        et = row["entry_time"]
+        if pd.isna(et):
+            return False
+        return (row["symbol"], str(et.date())) in holly_days
+
+    mask = positions.apply(has_holly, axis=1)
+    kept = positions[mask].copy()
+    removed = positions[~mask].copy()
+
+    print(f"\n  Holly same-day filter:")
+    print(f"    Positions with Holly alert same day:  {len(kept)}")
+    print(f"    Positions WITHOUT (removed):          {len(removed)}")
+    if len(removed) > 0:
+        top = removed.groupby("symbol").size().sort_values(ascending=False).head(5)
+        print(f"    Top removed: {', '.join(f'{s}({c})' for s, c in top.items())}")
+
+    return kept, removed
+
+
 def match_positions_to_holly(
     positions: pd.DataFrame,
     holly: pd.DataFrame,
@@ -516,25 +550,64 @@ def match_positions_to_holly(
 ) -> pd.DataFrame:
     """Match IBKR positions to Holly trades with confidence scoring.
 
-    For each IBKR position:
+    Pre-filter: removes positions where no Holly alert fired for that symbol
+    on the same trading day (manual/Finviz/other trades).
+
+    For each remaining IBKR position:
       1. Find all Holly candidates: same symbol, same direction, within window
       2. Score each candidate
       3. Accept best if above MIN_AUTO_CONFIDENCE
       4. Flag ambiguous/low-confidence for review
 
     Categories:
-      - matched:     IBKR position best-matched to Holly alert
-      - ibkr_only:   IBKR position with no Holly candidate
+      - matched:      IBKR position best-matched to Holly alert
+      - ibkr_only:    IBKR position with Holly same day but no time/direction match
+      - non_holly:    IBKR position with NO Holly alert that day (filtered out)
       - holly_missed: Holly alert with no IBKR match (computed after)
     """
     if positions.empty or holly.empty:
         print("  No data to match.")
         return pd.DataFrame()
 
+    # Pre-filter: only keep positions where Holly fired that day
+    holly_positions, non_holly_positions = _filter_holly_day(positions, holly)
+
+    # Non-Holly trades go straight to results as "non_holly" category
     results = []
+    for _, pos in non_holly_positions.iterrows():
+        results.append({
+            "symbol": pos["symbol"],
+            "direction": pos["direction"],
+            "ibkr_entry_time": pos["entry_time"],
+            "ibkr_entry_price": pos["entry_price"],
+            "ibkr_exit_time": pos["exit_time"],
+            "ibkr_exit_price": pos["exit_price"],
+            "ibkr_shares": pos["entry_shares"],
+            "ibkr_gross_pnl": pos["gross_pnl"],
+            "ibkr_net_pnl": pos["net_pnl"],
+            "ibkr_commission": pos["total_commission"],
+            "ibkr_hold_minutes": pos["hold_minutes"],
+            "ibkr_entry_fills": pos["entry_fills"],
+            "ibkr_exit_fills": pos.get("exit_fills", 0),
+            "ibkr_entry_order_type": pos["entry_order_type"],
+            "ibkr_status": pos["status"],
+            "currency": pos["currency"],
+            "category": "non_holly",
+            "match_confidence": 0.0, "n_candidates": 0,
+            "holly_trade_id": None, "strategy": None,
+            "holly_entry_time": None, "holly_entry_price": None,
+            "holly_exit_time": None, "holly_exit_price": None,
+            "holly_stop_price": None, "holly_target_price": None,
+            "holly_shares": None, "holly_pnl": None,
+            "entry_slippage_$": None, "entry_slippage_%": None,
+            "entry_slippage_R": None, "exit_slippage_$": None,
+            "exit_slippage_%": None,
+            "time_delta_sec": None, "risk_per_share": None, "pnl_diff": None,
+        })
+
     holly_used = set()
 
-    for _, pos in positions.iterrows():
+    for _, pos in holly_positions.iterrows():
         sym = pos["symbol"]
         direction = pos["direction"]
         entry_t = pos["entry_time"]
@@ -696,12 +769,15 @@ def compute_analytics(matched: pd.DataFrame, holly_all: pd.DataFrame,
     confirmed = matched[matched["category"] == "matched"].copy()
     ibkr_only = matched[matched["category"] == "ibkr_only"].copy()
     review = matched[matched["category"] == "review"].copy()
+    non_holly = matched[matched["category"] == "non_holly"].copy()
 
     results["summary"] = {
         "total_ibkr_positions": len(matched),
+        "holly_attributable": len(matched) - len(non_holly),
         "matched": len(confirmed),
         "ibkr_only": len(ibkr_only),
         "review_queue": len(review),
+        "non_holly": len(non_holly),
         "total_holly_alerts": len(holly_all),
     }
 
@@ -815,10 +891,12 @@ def print_report(analytics: dict, matched: pd.DataFrame):
     print("=" * 70)
 
     s = analytics.get("summary", {})
-    print(f"\n  IBKR positions:   {s.get('total_ibkr_positions', 0)}")
-    print(f"  Best-matched:     {s.get('matched', 0)}")
-    print(f"  IBKR-only:        {s.get('ibkr_only', 0)}")
-    print(f"  Review queue:     {s.get('review_queue', 0)}")
+    print(f"\n  IBKR positions:       {s.get('total_ibkr_positions', 0)}")
+    print(f"  Holly-attributable:   {s.get('holly_attributable', 0)}")
+    print(f"    Best-matched:       {s.get('matched', 0)}")
+    print(f"    IBKR-only:          {s.get('ibkr_only', 0)}")
+    print(f"    Review queue:       {s.get('review_queue', 0)}")
+    print(f"  Non-Holly trades:     {s.get('non_holly', 0)}")
 
     if "coverage" in analytics:
         c = analytics["coverage"]
@@ -891,6 +969,13 @@ def export_reports(matched: pd.DataFrame, analytics: dict, positions: pd.DataFra
     rt = REPORT_DIR / "ibkr_round_trips.csv"
     positions.to_csv(rt, index=False)
     print(f"  Exported: {rt}")
+
+    # Non-Holly trades (no Holly alert fired that day)
+    non_holly = matched[matched["category"] == "non_holly"]
+    if len(non_holly) > 0:
+        nh = REPORT_DIR / "non_holly_trades.csv"
+        non_holly.to_csv(nh, index=False)
+        print(f"  Exported: {nh} ({len(non_holly)} trades without Holly alert same day)")
 
     # Strategy summary
     if "by_strategy" in analytics:
