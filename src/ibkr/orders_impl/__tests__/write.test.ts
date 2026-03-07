@@ -48,6 +48,8 @@ vi.mock(import("../../../logging.js"), () => ({
 }));
 
 const { cancelAllOrders, cancelOrder, modifyOrder, placeBracketOrder, placeOrder } = await import("../write.js");
+const { insertOrder } = await import("../../../db/database.js");
+const { getNextValidOrderId } = await import("../read.js");
 
 describe("orders_impl/write", () => {
   beforeEach(() => {
@@ -114,5 +116,63 @@ describe("orders_impl/write", () => {
     await Promise.resolve();
     mockState.emit(mockState.EventName.error, new Error("boom"), 500, 300);
     await expect(pending).rejects.toThrow("Place order error (500): boom");
+  });
+
+  // ── F02: DB failure must abort order (fail-closed) ──────────────────
+
+  it("placeOrder aborts if DB insert fails — order never sent to IBKR", async () => {
+    (insertOrder as ReturnType<typeof vi.fn>).mockImplementationOnce(() => {
+      throw new Error("SQLITE_FULL: database or disk is full");
+    });
+    await expect(
+      placeOrder({ symbol: "AAPL", action: "BUY", orderType: "MKT", totalQuantity: 10 }),
+    ).rejects.toThrow("SQLITE_FULL");
+    expect(mockState.mockIb.placeOrder).not.toHaveBeenCalled();
+  });
+
+  it("placeBracketOrder aborts if DB insert fails — no orders sent to IBKR", async () => {
+    (insertOrder as ReturnType<typeof vi.fn>).mockImplementationOnce(() => {
+      throw new Error("SQLITE_FULL: database or disk is full");
+    });
+    await expect(
+      placeBracketOrder({ symbol: "TSLA", action: "BUY", totalQuantity: 10, entryType: "LMT", entryPrice: 180, takeProfitPrice: 190, stopLossPrice: 175 }),
+    ).rejects.toThrow("SQLITE_FULL");
+    expect(mockState.mockIb.placeOrder).not.toHaveBeenCalled();
+  });
+
+  // ── Bracket mutex: concurrent brackets get distinct IDs ─────────────
+
+  it("concurrent brackets are serialized by mutex — no ID collisions", async () => {
+    let idCounter = 400;
+    (getNextValidOrderId as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      const id = idCounter;
+      idCounter += 3; // simulate IBKR advancing by 3 per bracket
+      return Promise.resolve(id);
+    });
+
+    // Launch two brackets concurrently
+    const p1 = placeBracketOrder({ symbol: "AAPL", action: "BUY", totalQuantity: 10, entryType: "LMT", entryPrice: 180, takeProfitPrice: 190, stopLossPrice: 175 });
+    const p2 = placeBracketOrder({ symbol: "TSLA", action: "BUY", totalQuantity: 5, entryType: "LMT", entryPrice: 250, takeProfitPrice: 270, stopLossPrice: 240 });
+
+    // Resolve first bracket
+    await Promise.resolve();
+    await Promise.resolve();
+    mockState.emit(mockState.EventName.orderStatus, 400, "Submitted");
+    await p1;
+
+    // Resolve second bracket
+    await Promise.resolve();
+    await Promise.resolve();
+    mockState.emit(mockState.EventName.orderStatus, 403, "Submitted");
+    await p2;
+
+    // Verify 6 total orders placed, with no overlapping IDs
+    expect(mockState.mockIb.placeOrder).toHaveBeenCalledTimes(6);
+    const allOrderIds = mockState.mockIb.placeOrder.mock.calls.map((c: unknown[]) => (c[2] as Record<string, unknown>).orderId);
+    const uniqueIds = new Set(allOrderIds);
+    expect(uniqueIds.size).toBe(6);
+
+    // First bracket: 400, 401, 402. Second bracket: 403, 404, 405.
+    expect(allOrderIds).toEqual([400, 401, 402, 403, 404, 405]);
   });
 });

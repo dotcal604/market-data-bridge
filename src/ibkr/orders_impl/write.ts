@@ -15,6 +15,28 @@ import {
 } from "../../db/database.js";
 import { logOrder } from "../../logging.js";
 import { config } from "../../config.js";
+
+// ── Order Mutex ──────────────────────────────────────────────────────────
+// Prevents concurrent bracket placements from colliding on order IDs.
+// getNextValidOrderId() returns N from IBKR; brackets derive N+1, N+2.
+// Without serialization, two concurrent brackets can get overlapping IDs.
+
+let orderMutexLocked = false;
+const orderMutexQueue: Array<() => void> = [];
+
+async function withOrderMutex<T>(fn: () => Promise<T>): Promise<T> {
+  if (orderMutexLocked) {
+    await new Promise<void>((resolve) => orderMutexQueue.push(resolve));
+  }
+  orderMutexLocked = true;
+  try {
+    return await fn();
+  } finally {
+    orderMutexLocked = false;
+    const next = orderMutexQueue.shift();
+    if (next) next();
+  }
+}
 import { getOpenOrders } from "./read.js";
 import { getPositions } from "../account.js";
 import type {
@@ -78,32 +100,28 @@ export async function placeOrder(params: PlaceOrderParams): Promise<PlaceOrderRe
 
   logOrder.info({ orderId, symbol: params.symbol, orderType: params.orderType, order }, "Submitting order to IBKR");
 
-  // Write to DB before sending to IBKR
-  try {
-    insertOrder({
-      order_id: orderId,
-      symbol: params.symbol,
-      action: params.action,
-      order_type: params.orderType,
-      total_quantity: params.totalQuantity,
-      lmt_price: params.lmtPrice,
-      aux_price: params.auxPrice,
-      tif: params.tif,
-      sec_type: params.secType,
-      exchange: params.exchange,
-      currency: params.currency,
-      strategy_version: params.strategy_version ?? "manual",
-      order_source: params.order_source ?? "manual",
-      ai_confidence: params.ai_confidence,
-      correlation_id: correlationId,
-      journal_id: params.journal_id,
-      parent_order_id: params.parentId,
-      eval_id: params.eval_id,
-    });
-    logOrder.info({ orderId, symbol: params.symbol, action: params.action, orderType: params.orderType, qty: params.totalQuantity, correlationId }, "Order recorded in DB");
-  } catch (e: any) {
-    logOrder.error({ err: e, orderId }, "Failed to write order to DB — continuing with placement");
-  }
+  // Write to DB before sending to IBKR — fail-closed: if DB write fails, abort order
+  insertOrder({
+    order_id: orderId,
+    symbol: params.symbol,
+    action: params.action,
+    order_type: params.orderType,
+    total_quantity: params.totalQuantity,
+    lmt_price: params.lmtPrice,
+    aux_price: params.auxPrice,
+    tif: params.tif,
+    sec_type: params.secType,
+    exchange: params.exchange,
+    currency: params.currency,
+    strategy_version: params.strategy_version ?? "manual",
+    order_source: params.order_source ?? "manual",
+    ai_confidence: params.ai_confidence,
+    correlation_id: correlationId,
+    journal_id: params.journal_id,
+    parent_order_id: params.parentId,
+    eval_id: params.eval_id,
+  });
+  logOrder.info({ orderId, symbol: params.symbol, action: params.action, orderType: params.orderType, qty: params.totalQuantity, correlationId }, "Order recorded in DB");
 
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -179,6 +197,10 @@ export async function placeOrder(params: PlaceOrderParams): Promise<PlaceOrderRe
  * @returns Promise resolving to bracket details (parent/child IDs)
  */
 export async function placeBracketOrder(params: BracketOrderParams): Promise<BracketOrderResult> {
+  return withOrderMutex(() => placeBracketOrderInner(params));
+}
+
+async function placeBracketOrderInner(params: BracketOrderParams): Promise<BracketOrderResult> {
   const ib = getIB();
   const parentId = await getNextValidOrderId();
   const tpId = parentId + 1;
@@ -238,14 +260,11 @@ export async function placeBracketOrder(params: BracketOrderParams): Promise<Bra
     journal_id: params.journal_id,
     eval_id: params.eval_id,
   };
-  try {
-    insertOrder({ order_id: parentId, symbol: params.symbol, action: params.action, order_type: params.entryType, total_quantity: params.totalQuantity, lmt_price: params.entryPrice, sec_type: params.secType, exchange: params.exchange, currency: params.currency, ...dbFields });
-    insertOrder({ order_id: tpId, symbol: params.symbol, action: reverseAction, order_type: "LMT", total_quantity: params.totalQuantity, lmt_price: params.takeProfitPrice, sec_type: params.secType, exchange: params.exchange, currency: params.currency, parent_order_id: parentId, ...dbFields });
-    insertOrder({ order_id: slId, symbol: params.symbol, action: reverseAction, order_type: "STP", total_quantity: params.totalQuantity, aux_price: params.stopLossPrice, sec_type: params.secType, exchange: params.exchange, currency: params.currency, parent_order_id: parentId, ...dbFields });
-    logOrder.info({ parentId, tpId, slId, symbol: params.symbol, correlationId }, "Bracket order recorded in DB");
-  } catch (e: any) {
-    logOrder.error({ err: e, parentId }, "Failed to write bracket order to DB — continuing with placement");
-  }
+  // Fail-closed: all 3 DB inserts must succeed before sending to IBKR
+  insertOrder({ order_id: parentId, symbol: params.symbol, action: params.action, order_type: params.entryType, total_quantity: params.totalQuantity, lmt_price: params.entryPrice, sec_type: params.secType, exchange: params.exchange, currency: params.currency, ...dbFields });
+  insertOrder({ order_id: tpId, symbol: params.symbol, action: reverseAction, order_type: "LMT", total_quantity: params.totalQuantity, lmt_price: params.takeProfitPrice, sec_type: params.secType, exchange: params.exchange, currency: params.currency, parent_order_id: parentId, ...dbFields });
+  insertOrder({ order_id: slId, symbol: params.symbol, action: reverseAction, order_type: "STP", total_quantity: params.totalQuantity, aux_price: params.stopLossPrice, sec_type: params.secType, exchange: params.exchange, currency: params.currency, parent_order_id: parentId, ...dbFields });
+  logOrder.info({ parentId, tpId, slId, symbol: params.symbol, correlationId }, "Bracket order recorded in DB");
 
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -332,6 +351,10 @@ export async function placeBracketOrder(params: BracketOrderParams): Promise<Bra
  * @returns Promise resolving to bracket details
  */
 export async function placeAdvancedBracket(params: AdvancedBracketParams): Promise<AdvancedBracketResult> {
+  return withOrderMutex(() => placeAdvancedBracketInner(params));
+}
+
+async function placeAdvancedBracketInner(params: AdvancedBracketParams): Promise<AdvancedBracketResult> {
   const ib = getIB();
   const parentId = await getNextValidOrderId();
   const tpId = parentId + 1;
@@ -412,14 +435,11 @@ export async function placeAdvancedBracket(params: AdvancedBracketParams): Promi
     journal_id: params.journal_id,
     eval_id: params.eval_id,
   };
-  try {
-    insertOrder({ order_id: parentId, symbol: params.symbol, action: params.action, order_type: params.entry.type, total_quantity: params.quantity, lmt_price: params.entry.price, sec_type: params.secType, exchange: params.exchange, currency: params.currency, ...dbFields });
-    insertOrder({ order_id: tpId, symbol: params.symbol, action: reverseAction, order_type: params.takeProfit.type, total_quantity: params.quantity, lmt_price: params.takeProfit.price, sec_type: params.secType, exchange: params.exchange, currency: params.currency, parent_order_id: parentId, ...dbFields });
-    insertOrder({ order_id: slId, symbol: params.symbol, action: reverseAction, order_type: slType, total_quantity: params.quantity, aux_price: params.stopLoss.price ?? params.stopLoss.trailingAmount, sec_type: params.secType, exchange: params.exchange, currency: params.currency, parent_order_id: parentId, ...dbFields });
-    logOrder.info({ parentId, tpId, slId, ocaGroup, symbol: params.symbol, correlationId }, "Advanced bracket recorded in DB");
-  } catch (e: any) {
-    logOrder.error({ err: e, parentId }, "Failed to write advanced bracket to DB — continuing");
-  }
+  // Fail-closed: all 3 DB inserts must succeed before sending to IBKR
+  insertOrder({ order_id: parentId, symbol: params.symbol, action: params.action, order_type: params.entry.type, total_quantity: params.quantity, lmt_price: params.entry.price, sec_type: params.secType, exchange: params.exchange, currency: params.currency, ...dbFields });
+  insertOrder({ order_id: tpId, symbol: params.symbol, action: reverseAction, order_type: params.takeProfit.type, total_quantity: params.quantity, lmt_price: params.takeProfit.price, sec_type: params.secType, exchange: params.exchange, currency: params.currency, parent_order_id: parentId, ...dbFields });
+  insertOrder({ order_id: slId, symbol: params.symbol, action: reverseAction, order_type: slType, total_quantity: params.quantity, aux_price: params.stopLoss.price ?? params.stopLoss.trailingAmount, sec_type: params.secType, exchange: params.exchange, currency: params.currency, parent_order_id: parentId, ...dbFields });
+  logOrder.info({ parentId, tpId, slId, ocaGroup, symbol: params.symbol, correlationId }, "Advanced bracket recorded in DB");
 
   logOrder.info({ parentOrder, tpOrder, slOrder }, "Submitting advanced bracket to IBKR");
 
