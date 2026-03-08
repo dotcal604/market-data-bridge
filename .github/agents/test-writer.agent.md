@@ -38,21 +38,6 @@ Qodo Gen (Agent #8, QA Automation Engineer) also generates tests — it speciali
 - No `console.log` in tests — use Vitest assertions
 - ESM imports with `.js` extensions for backend modules
 
-## Collaboration Channel Protocol
-
-This project uses an AI-to-AI collab channel (REST endpoint at `/api/collab/message`). All agents share context through it.
-
-**On task start:**
-- `GET /api/collab/messages?type=handoff&limit=5` — check for handoffs from backend-dev or frontend-dev requesting tests.
-- `GET /api/collab/messages?type=decision&limit=5` — check for recent decisions about what was implemented (so you test the right things).
-
-**On task completion:**
-- `POST /api/collab/message` with `type: "info"` — summarize test results: how many tests added, coverage gaps found, any failures.
-- If tests reveal a code bug, use `type: "handoff"` targeting backend-dev with the failing test details.
-- If you are blocked (e.g., missing exports, unclear behavior), use `type: "blocker"`.
-
-**Message types:** `info` (status update), `request` (asking another agent to act), `decision` (recording a choice), `handoff` (transferring a task), `blocker` (flagging something stuck).
-
 ## Verification
 ```bash
 npx vitest run

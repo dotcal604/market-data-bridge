@@ -55,84 +55,25 @@ Every piece of work flows through this pipeline, from idea to merged code.
 | Bug Report | Runtime issues, unexpected behavior | Any agent based on file ownership |
 | Feature Request | New capabilities, design discussions | Triage first, then delegate |
 
+### Issue Quality Matters More Than Coordination Protocol
+
+GitHub-hosted agents (Copilot, Codex) cannot be steered mid-flight. Once an agent picks up an issue, the issue body is the only context it gets. Vague issues produce haunted PRs.
+
+**Every issue should include:**
+- Exact file paths to modify
+- TypeScript interfaces or function signatures involved
+- Acceptance criteria (what "done" looks like)
+- Off-limits files (if near exec-critical boundaries)
+
+**Labels route for humans; agent profiles route behavior for agents.** Use labels (`scope:backend`, `priority:high`) for triage. Use agent profile assignment (`@copilot/backend-dev`) for behavior.
+
 ---
 
-## 2. Handoff Protocol
+## 2. Cross-Agent Coordination
 
-When one agent needs to pass work to another, use the collaboration channel and GitHub handoff mechanisms.
+**Agent-to-agent handoffs are not supported today.** Copilot agents run in GitHub's cloud sandbox and cannot reach localhost or the collab channel. All cross-agent work is coordinated by the human dispatcher through GitHub issues.
 
-### Collaboration Channel
-
-All agents share context through the AI-to-AI collab channel:
-
-```
-Post:   POST /api/collab/message
-Read:   GET  /api/collab/messages?type={type}&limit={n}&author={agent}
-```
-
-Claude Code agents use the MCP tools directly: `collab_read` / `collab_post`.
-Copilot agents use the REST API with `X-API-Key` header.
-
-**Message types:**
-- `info` — status update, FYI
-- `request` — asking another agent to act
-- `decision` — recording an architectural or implementation choice
-- `handoff` — transferring ownership of a task
-- `blocker` — flagging something stuck and needing help
-
-### Standard Handoff Chains
-
-```
-backend-dev ──(tests needed)──> test-writer
-backend-dev ──(docs needed)───> docs-writer
-
-frontend-dev ──(tests needed)──> test-writer
-frontend-dev ──(docs needed)───> docs-writer
-
-ops-engineer ──(code fix needed)──> backend-dev
-ops-engineer ──(runbook update)───> docs-writer
-
-test-writer ──(code bug found)──> backend-dev
-
-docs-writer ──(code sample verify)──> backend-dev or frontend-dev
-```
-
-### Handoff Procedure
-
-1. **Sending agent** completes its work, pushes PR.
-2. **Sending agent** posts to collab channel:
-   ```json
-   {
-     "author": "backend-dev",
-     "type": "handoff",
-     "content": "Implemented GET /api/eval/history. Tests needed for edge cases (empty DB, invalid params). See PR #42.",
-     "metadata": { "pr": 42, "files": ["src/rest/routes.ts"], "target": "test-writer" }
-   }
-   ```
-3. **Receiving agent** checks collab channel on task start (`GET /api/collab/messages?type=handoff&limit=5`), acknowledges, and creates a follow-up PR.
-4. **Receiving agent** posts completion summary back to collab channel with `type: "info"`.
-
-### External Handoffs (Manual)
-
-These agents are not on the GitHub collab channel. The human coordinates manually:
-
-| Need | Target | Process |
-|------|--------|---------|
-| UI design from mockup | v0.dev (Agent #10) | Human pastes spec at v0.dev, exports code, creates issue for frontend-dev |
-| Architecture review | ChatGPT (Agent #4) | Human opens chat, pastes context, records decision in collab channel |
-| Knowledge query | NotebookLM (Agent #12) | Human queries at notebooklm.google.com, posts findings to collab channel |
-| Multi-file feature | Antigravity (Agent #13) | Human assigns in Antigravity IDE, reviews PR |
-
-### Collab Channel Reachability
-
-Not all agents can reach the collab channel. This table shows actual reachability:
-
-| Agent | Collab Access | Method | Notes |
-|-------|--------------|--------|-------|
-| Claude Code (#2) | **Direct** | MCP tools (`collab_read`/`collab_post`) | Full access, primary user |
-| ChatGPT (#4) | **Direct** | REST API via action catalog | 3 mandatory startup steps |
-| Copilot agents (#5) | **Indirect** | REST instructions in `.agent.md` | Runs in GitHub sandbox — can't reach localhost. Collab protocol is aspirational until Copilot gets network access or MCP support |
-| Other agents | **None** | Human relays via collab channel | v0, Jules, Codex, NotebookLM — no programmatic access |
+If follow-up work is needed (e.g., tests after a feature, docs after an API change), the human creates a new issue and assigns it to the appropriate agent profile.
 
 ---
 
@@ -175,15 +116,13 @@ Examples:
 | Windsurf | `windsurf` |
 | Antigravity | `antigravity` |
 
-### Claude Code Worktrees
+### Isolation Rule
 
-Claude Code uses git worktrees for isolated parallel work:
+**One task = one branch = one agent.** Never assign two agents to the same module concurrently. Parallel repo work is fine; parallel edits to the same files produce merge-conflict waste.
 
-```
-.claude/worktrees/{name}/       # Temporary worktree directory
-```
-
-These are ephemeral and cleaned up after the session. They do not follow the branch naming convention above — the worktree name is auto-generated.
+- Copilot agents: GitHub creates an isolated branch per issue automatically.
+- Claude Code: uses git worktrees (`.claude/worktrees/{name}/`) for parallel sessions. Ephemeral, auto-cleaned.
+- All others: human ensures branch isolation before assigning.
 
 ---
 

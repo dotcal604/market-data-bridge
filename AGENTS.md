@@ -122,7 +122,15 @@ No agent merges its own PR. Claude Code acts as Staff Engineer reviewer for all 
 
 ---
 
-## 5. Escalation Protocol
+## 5. Concurrent Work Rules
+
+**Never assign two agents to the same module/surface at the same time.** One repo can support parallel work, but two agents editing the same files produces merge conflicts and wasted tokens.
+
+- One task, one owner, one branch, one PR.
+- Use worktrees or isolated branches per task — never share a working copy between agents.
+- If follow-up work is needed (e.g., tests after a feature), create a new issue after the first PR merges.
+
+### Escalation Protocol
 
 | Situation | Action |
 |-----------|--------|
@@ -169,22 +177,21 @@ New task arrives
 
 ---
 
-## 6. Collaboration Channel
+## 6. Collaboration Channel (Session Log)
 
-All agents share context through the AI-to-AI collab channel:
+The collab channel is a persistent decision/context log used by Claude Code and ChatGPT. It is **not** reachable from GitHub-hosted agents (Copilot, Codex, Jules).
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/api/collab/messages` | GET | Read messages (params: `limit`, `author`, `type`) |
 | `/api/collab/message` | POST | Post message (body: `{ author, content, type?, metadata? }`) |
 
-**Message types:** `info`, `request`, `handoff`, `decision`, `blocker`
+**Message types:** `info` (status update, FYI), `decision` (architectural or implementation choice)
 
-**Protocol:**
-- On task start: check for pending `request` and `handoff` messages
-- On task completion: post `info` or `decision` summary
-- If blocked: post `blocker` with details
-- If handing off: post `handoff` with target agent name
+**Who uses it:**
+- **Claude Code** — via MCP tools (`collab_read`/`collab_post`). Primary user for cross-session context.
+- **ChatGPT** — via REST action catalog. Posts analysis summaries and decisions.
+- **Copilot / others** — cannot reach localhost. Human relays context via issue descriptions.
 
 ---
 

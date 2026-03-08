@@ -47,21 +47,6 @@ Other agents also work on frontend: Antigravity (#13) handles new multi-file com
 - Hooks: `frontend/src/lib/hooks/use-{domain}.ts`
 - Types: `frontend/src/lib/api/types.ts`
 
-## Collaboration Channel Protocol
-
-This project uses an AI-to-AI collab channel (REST endpoint at `/api/collab/message`). All agents share context through it.
-
-**On task start:**
-- `GET /api/collab/messages?type=request&limit=5` — check for pending requests or handoffs addressed to you.
-- `GET /api/collab/messages?type=decision&limit=5` — check for recent architectural decisions that affect your work.
-
-**On task completion:**
-- `POST /api/collab/message` with `type: "decision"` or `type: "info"` — summarize what you did, which files changed, and any follow-up needed.
-- If your work requires another agent to act, use `type: "handoff"` with the target agent name in the message.
-- If you are blocked, use `type: "blocker"` to flag the issue.
-
-**Message types:** `info` (status update), `request` (asking another agent to act), `decision` (recording a choice), `handoff` (transferring a task), `blocker` (flagging something stuck).
-
 ## Verification
 ```bash
 cd frontend && npx tsc --noEmit
