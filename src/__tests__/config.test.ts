@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi, type MockInstance } from "vitest";
 
 // Prevent dotenv from re-reading .env file on module re-import
 vi.mock("dotenv", () => ({ default: { config: () => {} }, config: () => {} }));
@@ -85,4 +85,74 @@ describe("config", () => {
     expect(cfg.autoEval.enabled).toBe(true);
     expect(cfg.divoom.enabled).toBe(true);
   });
+
+  // ── REST_API_KEY startup validation ──────────────────────────────────
+
+  describe("REST_API_KEY startup validation", () => {
+    let consoleErrorSpy: MockInstance;
+
+    beforeEach(() => {
+      consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      consoleErrorSpy.mockRestore();
+    });
+
+    it("throws in production when REST_API_KEY is not set", async () => {
+      vi.stubEnv("NODE_ENV", "production");
+      // REST_API_KEY is deleted by clearEnv() in the outer beforeEach
+      await expect(loadConfig()).rejects.toThrow("FATAL: REST_API_KEY");
+    });
+
+    it("throws in production when REST_API_KEY is fewer than 16 characters", async () => {
+      vi.stubEnv("NODE_ENV", "production");
+      vi.stubEnv("REST_API_KEY", "short-key");
+      await expect(loadConfig()).rejects.toThrow("FATAL: REST_API_KEY");
+    });
+
+    it("does not throw in production when REST_API_KEY is exactly 16 characters", async () => {
+      vi.stubEnv("NODE_ENV", "production");
+      vi.stubEnv("REST_API_KEY", "1234567890abcdef"); // exactly 16 chars
+      const cfg = await loadConfig();
+      expect(cfg.rest.apiKey).toBe("1234567890abcdef");
+    });
+
+    it("does not throw in production when REST_API_KEY is longer than 16 characters", async () => {
+      vi.stubEnv("NODE_ENV", "production");
+      vi.stubEnv("REST_API_KEY", "a-long-valid-api-key-for-production");
+      const cfg = await loadConfig();
+      expect(cfg.rest.apiKey).toBe("a-long-valid-api-key-for-production");
+    });
+
+    it("logs a warning in dev mode when REST_API_KEY is not set", async () => {
+      vi.stubEnv("NODE_ENV", "development");
+      const cfg = await loadConfig();
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        expect.stringContaining("WARNING: REST_API_KEY"),
+      );
+      expect(cfg.rest.apiKey).toBe("");
+    });
+
+    it("logs a warning in dev mode when REST_API_KEY is fewer than 16 characters", async () => {
+      vi.stubEnv("NODE_ENV", "development");
+      vi.stubEnv("REST_API_KEY", "short");
+      const cfg = await loadConfig();
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        expect.stringContaining("WARNING: REST_API_KEY"),
+      );
+      expect(cfg.rest.apiKey).toBe("short");
+    });
+
+    it("does not warn in dev mode when REST_API_KEY meets the minimum length", async () => {
+      vi.stubEnv("NODE_ENV", "development");
+      vi.stubEnv("REST_API_KEY", "a-valid-dev-key-16");
+      await loadConfig();
+      const warningCalls = consoleErrorSpy.mock.calls.filter((args) =>
+        String(args[0]).includes("WARNING: REST_API_KEY"),
+      );
+      expect(warningCalls).toHaveLength(0);
+    });
+  });
 });
+

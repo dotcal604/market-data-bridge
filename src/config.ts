@@ -116,11 +116,24 @@ export const config = {
 };
 
 // ── Production API key guard ────────────────────────────────────────────
-// In production, an empty API key means ALL endpoints are unauthenticated.
+// In production, a missing or short API key means ALL endpoints are unauthenticated.
 // Refuse to start rather than run wide-open.
-if (process.env.NODE_ENV === "production" && !config.rest.apiKey) {
-  throw new Error(
-    "FATAL: REST_API_KEY is required in production. " +
-    "Set REST_API_KEY in your .env or environment variables.",
+// NOTE: console.error is intentional here — this is a bootstrap path and importing
+// the Pino logger from logging.ts would trigger file-transport side-effects before
+// config is fully resolved. The existing IBKR_CLIENT_ID guard above uses the same pattern.
+export const MIN_API_KEY_LENGTH = 16;
+
+if (process.env.NODE_ENV === "production") {
+  if (!config.rest.apiKey || config.rest.apiKey.length < MIN_API_KEY_LENGTH) {
+    throw new Error(
+      `FATAL: REST_API_KEY must be at least ${MIN_API_KEY_LENGTH} characters in production. ` +
+      "Set REST_API_KEY in your .env or environment variables.",
+    );
+  }
+} else if (!config.rest.apiKey || config.rest.apiKey.length < MIN_API_KEY_LENGTH) {
+  // Dev/test mode: warn but allow startup so local development isn't blocked.
+  console.error(
+    `[CONFIG] ⚠️  WARNING: REST_API_KEY is ${config.rest.apiKey ? `only ${config.rest.apiKey.length} character(s)` : "not set"} — ` +
+    `all endpoints are unauthenticated. Set REST_API_KEY (≥${MIN_API_KEY_LENGTH} chars) before exposing to a network.`,
   );
 }
