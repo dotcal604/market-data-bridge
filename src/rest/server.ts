@@ -4,6 +4,7 @@ import rateLimit from "express-rate-limit";
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { existsSync } from "node:fs";
 import path from "node:path";
+import { Sentry } from "../instrument.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { publicRouter, router } from "./routes.js";
 import { evalRouter } from "../eval/routes.js";
@@ -16,6 +17,7 @@ import { isDbWritable, insertMcpSession, updateMcpSessionActivity, closeMcpSessi
 import { createMcpServer } from "../mcp/server.js";
 import { initWebSocket } from "../ws/server.js";
 import { getMetrics, getRecentIncidents } from "../ops/metrics.js";
+import { collectMetrics, getPrometheusContentType, observeHttpRequest } from "../ops/prometheus.js";
 import { isReady } from "../ops/readiness.js";
 import { getCachedChart, getPlaceholderPng } from "../divoom/charts.js";
 import sharp from "sharp";
@@ -297,6 +299,12 @@ export function createApp(): express.Express {
     } else {
       res.json(status);
     }
+  });
+
+  // GET /metrics — Prometheus exposition format (unauthenticated)
+  app.get("/metrics", async (_req, res) => {
+    res.set("Content-Type", getPrometheusContentType());
+    res.send(await collectMetrics());
   });
 
   // ── Composite background endpoint (unauthenticated — device fetches directly) ──
@@ -790,7 +798,11 @@ export function createApp(): express.Express {
   app.use("/api/collab", collabLimiter);
 
   configureFrontendStaticHosting(app);
-  
+
+  // Sentry error handler — MUST be after all routes but before any other error handlers.
+  // Captures unhandled Express errors with full request context.
+  Sentry.setupExpressErrorHandler(app);
+
   return app;
 }
 

@@ -15,6 +15,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import { config } from "../config.js";
 import { getIB, isConnected, onReconnect } from "../ibkr/connection.js";
 import { logger } from "../logging.js";
+import { Sentry } from "../instrument.js";
 
 const logWs = logger.child({ subsystem: "ws" });
 
@@ -246,7 +247,10 @@ export function initWebSocket(httpServer: HttpServer): void {
     });
 
     socket.on("close", () => { subscriptions.delete(socket); });
-    socket.on("error", (err: Error) => { logWs.warn({ err }, "WebSocket client error"); });
+    socket.on("error", (err: Error) => {
+      logWs.warn({ err }, "WebSocket client error");
+      Sentry.captureException(err, { tags: { subsystem: "ws" } });
+    });
   });
 
   // ── Heartbeat: terminate stale clients ──

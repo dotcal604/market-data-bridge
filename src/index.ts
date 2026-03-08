@@ -2,6 +2,10 @@
 // before @stoqey/ib's logger initializes and pollutes MCP's stdio transport.
 import "./suppress-stdout.js";
 
+// ⚠️ Sentry MUST be the second import — it needs to instrument modules before they load.
+// Set SENTRY_DSN in .env to enable error tracking. Without it, Sentry is a no-op.
+import { Sentry } from "./instrument.js";
+
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { connect, disconnect, isConnected, onReconnect, scheduleReconnect } from "./ibkr/connection.js";
 import { createMcpServer } from "./mcp/server.js";
@@ -204,6 +208,10 @@ async function main() {
   process.on("SIGINT", () => { shutdown().catch((e) => logger.error({ err: e }, "Shutdown error")); });
   process.on("SIGTERM", () => { shutdown().catch((e) => logger.error({ err: e }, "Shutdown error")); });
 
+  // Set Sentry context now that we know the mode
+  Sentry.setTag("bridge.mode", mode);
+  Sentry.setTag("bridge.ibkr_port", config.ibkr.port.toString());
+
   // Catch unhandled async rejections — log but keep running.
   // Shutting down on every unhandled rejection kills the bridge 40x/day
   // during market hours when transient IBKR/network errors bubble up
@@ -216,6 +224,9 @@ async function main() {
     const detail = reason instanceof Error ? reason.message : String(reason);
     recordIncident("unhandled_rejection", "warning", `#${unhandledCount}: ${detail.slice(0, 200)}`);
     logger.error({ reason, unhandledCount }, "Unhandled promise rejection (swallowed — keeping server alive)");
+    Sentry.captureException(reason instanceof Error ? reason : new Error(detail), {
+      tags: { handler: "unhandledRejection", count: unhandledCount },
+    });
     // If we get 50+ unhandled rejections, something is truly broken — restart
     if (unhandledCount >= 50) {
       recordIncident("unhandled_rejection_flood", "critical", `${unhandledCount} unhandled rejections — shutting down`);
@@ -229,6 +240,10 @@ async function main() {
   process.on("uncaughtException", (err) => {
     recordIncident("uncaught_exception", "critical", err.message?.slice(0, 200) ?? "unknown");
     logger.fatal({ err }, "Uncaught exception (keeping server alive — may be degraded)");
+    Sentry.captureException(err, {
+      tags: { handler: "uncaughtException" },
+      level: "fatal",
+    });
     // Only shut down for truly unrecoverable errors
     if (err.message?.includes("out of memory") || err.message?.includes("Maximum call stack")) {
       logger.fatal("Unrecoverable error — forcing exit");
