@@ -55,6 +55,8 @@ export function getNextSequenceId(): number {
 }
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
+const RATE_LIMIT_MAX = 100;          // messages per window
+const RATE_LIMIT_WINDOW_MS = 60_000; // 1 minute
 const VALID_CHANNELS = new Set(["positions", "orders", "account", "executions", "signals", "status", "inbox", "incidents", "eval", "holly", "eval_created", "journal_posted", "order_filled"]);
 
 type ChannelName = "positions" | "orders" | "account" | "executions" | "signals" | "status" | "inbox" | "incidents" | "eval" | "holly" | "eval_created" | "journal_posted" | "order_filled";
@@ -66,6 +68,8 @@ type ClientMessage = AuthMessage | SubscribeMessage;
 interface AuthenticatedWebSocket extends WebSocket {
   isAlive?: boolean;
   isAuthenticated?: boolean;
+  msgCount?: number;
+  rateWindowStart?: number;
 }
 
 function parseMessage(raw: WebSocket.RawData): ClientMessage | null {
@@ -174,11 +178,26 @@ export function initWebSocket(httpServer: HttpServer): void {
   wss.on("connection", (socket: AuthenticatedWebSocket) => {
     socket.isAlive = true;
     socket.isAuthenticated = false;
+    socket.msgCount = 0;
+    socket.rateWindowStart = Date.now();
     subscriptions.set(socket, new Set<ChannelName>());
 
     socket.on("pong", () => { socket.isAlive = true; });
 
     socket.on("message", (rawData: WebSocket.RawData) => {
+      // ── Per-connection rate limiting ──────────────────────────────────────
+      const now = Date.now();
+      if (now - (socket.rateWindowStart ?? now) >= RATE_LIMIT_WINDOW_MS) {
+        socket.msgCount = 0;
+        socket.rateWindowStart = now;
+      }
+      socket.msgCount = (socket.msgCount ?? 0) + 1;
+      if (socket.msgCount > RATE_LIMIT_MAX) {
+        socket.send(JSON.stringify({ type: "error", message: "Rate limit exceeded" }));
+        socket.close(1008, "Rate limit exceeded");
+        return;
+      }
+
       const message = parseMessage(rawData);
       if (!message) {
         socket.close(1008, "Invalid message");
