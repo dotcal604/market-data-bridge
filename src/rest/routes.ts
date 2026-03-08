@@ -69,6 +69,8 @@ import {
   queryAccountSnapshots,
 } from "../db/database.js";
 import { getWalkForwardSummary, getStrategyWalkForward } from "../holly/walk-forward-summary.js";
+import { getExitParams, getStrategyExitParams, listExitParamStrategies } from "../holly/exit-params.js";
+import { suggestExit } from "../holly/suggest-exits.js";
 
 function qs(val: unknown, fallback: string): string {
   if (typeof val === "string") return val;
@@ -1637,4 +1639,56 @@ router.get("/holly/walk-forward/:strategy", (req, res) => {
   const result = getStrategyWalkForward(req.params.strategy);
   if (!result) { res.status(404).json({ error: `No walk-forward data for strategy '${req.params.strategy}'` }); return; }
   res.json(result);
+});
+
+// =====================================================================
+// HOLLY — Exit Parameters & Exit Suggestions
+// =====================================================================
+
+// GET /api/holly/exit-params — All strategy exit parameters from analytics pipeline
+router.get("/holly/exit-params", (_req, res) => {
+  const params = getExitParams();
+  if (!params) { res.status(404).json({ error: "Exit params not yet generated — run analytics/holly_exit pipeline" }); return; }
+  res.json(params);
+});
+
+// GET /api/holly/exit-params/strategies — List available strategy names
+router.get("/holly/exit-params/strategies", (_req, res) => {
+  res.json({ strategies: listExitParamStrategies() });
+});
+
+// GET /api/holly/exit-params/:strategy — Exit params for a single strategy
+router.get("/holly/exit-params/:strategy", (req, res) => {
+  const result = getStrategyExitParams(req.params.strategy);
+  if (!result) { res.status(404).json({ error: `No exit params for strategy '${req.params.strategy}'` }); return; }
+  res.json(result);
+});
+
+// POST /api/holly/suggest-exit — Generate exit suggestion for a trade setup
+router.post("/holly/suggest-exit", (req, res) => {
+  try {
+    const body = req.body ?? {};
+    const { symbol, direction, entry_price, stop_price, total_shares, strategy, volatility_regime, archetype } = body;
+
+    if (!symbol || typeof symbol !== "string") { res.status(400).json({ error: "symbol is required" }); return; }
+    if (!direction || !["long", "short"].includes(direction)) { res.status(400).json({ error: "direction must be 'long' or 'short'" }); return; }
+    if (typeof entry_price !== "number" || entry_price <= 0) { res.status(400).json({ error: "entry_price must be a positive number" }); return; }
+    if (typeof stop_price !== "number" || stop_price <= 0) { res.status(400).json({ error: "stop_price must be a positive number" }); return; }
+    if (typeof total_shares !== "number" || total_shares <= 0) { res.status(400).json({ error: "total_shares must be a positive number" }); return; }
+
+    const suggestion = suggestExit({
+      symbol,
+      direction,
+      entry_price,
+      stop_price,
+      total_shares,
+      strategy,
+      volatility_regime,
+      archetype,
+    });
+
+    res.json(suggestion);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
 });

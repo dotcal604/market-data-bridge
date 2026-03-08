@@ -1,0 +1,93 @@
+{
+  "generated_at": "2026-03-07T12:00:00Z",
+  "lookback_days": 180,
+  "strategies": {
+    "momentum_breakout": {
+      "trades_analyzed": 142,
+      "win_rate": 0.634,
+      "avg_r": 0.18,
+      "optimal_stop": {
+        "method": "atr",
+        "atr_multiple": 1.8,
+        "fixed_pct": null,
+        "avg_stop_distance_pct": 0.025
+      },
+      "optimal_targets": {
+        "tp1_r": 1.5,
+        "tp1_qty_pct": 0.33,
+        "tp2_r": 2.5,
+        "tp2_qty_pct": 0.33,
+        "runner_trail_pct": 0.03
+      },
+      "timing": {
+        "avg_time_to_mfe_min": 18,
+        "avg_hold_minutes": 42,
+        "optimal_time_stop_min": 60,
+        "best_entry_window": "open_15"
+      },
+      "regime_adjustments": {
+        "low_vol": { "size_scalar": 1.0, "target_scalar": 1.2, "stop_scalar": 0.9 },
+        "normal_vol": { "size_scalar": 0.75, "target_scalar": 1.0, "stop_scalar": 1.0 },
+        "high_vol": { "size_scalar": 0.5, "target_scalar": 0.8, "stop_scalar": 1.3 }
+      }
+    },
+    "mean_reversion": {
+      "trades_analyzed": 87,
+      "win_rate": 0.586,
+      "avg_r": 0.09,
+      "optimal_stop": {
+        "method": "fixed_pct",
+        "atr_multiple": null,
+        "fixed_pct": 0.02,
+        "avg_stop_distance_pct": 0.020
+      },
+      "optimal_targets": {
+        "tp1_r": 1.0,
+        "tp1_qty_pct": 0.50,
+        "tp2_r": 1.5,
+        "tp2_qty_pct": 0.30,
+        "runner_trail_pct": 0.02
+      },
+      "timing": {
+        "avg_time_to_mfe_min": 12,
+        "avg_hold_minutes": 25,
+        "optimal_time_stop_min": 30,
+        "best_entry_window": "morning"
+      },
+      "regime_adjustments": {
+        "low_vol": { "size_scalar": 1.0, "target_scalar": 1.1, "stop_scalar": 1.0 },
+        "normal_vol": { "size_scalar": 0.75, "target_scalar": 1.0, "stop_scalar": 1.0 },
+        "high_vol": { "size_scalar": 0.4, "target_scalar": 0.7, "stop_scalar": 1.5 }
+      }
+    },
+    "gap_and_go": {
+      "trades_analyzed": 64,
+      "win_rate": 0.609,
+      "avg_r": 0.14,
+      "optimal_stop": {
+        "method": "atr",
+        "atr_multiple": 1.5,
+        "fixed_pct": null,
+        "avg_stop_distance_pct": 0.018
+      },
+      "optimal_targets": {
+        "tp1_r": 1.0,
+        "tp1_qty_pct": 0.50,
+        "tp2_r": 2.0,
+        "tp2_qty_pct": 0.25,
+        "runner_trail_pct": 0.025
+      },
+      "timing": {
+        "avg_time_to_mfe_min": 8,
+        "avg_hold_minutes": 20,
+        "optimal_time_stop_min": 30,
+        "best_entry_window": "open_15"
+      },
+      "regime_adjustments": {
+        "low_vol": { "size_scalar": 0.8, "target_scalar": 0.9, "stop_scalar": 1.0 },
+        "normal_vol": { "size_scalar": 0.75, "target_scalar": 1.0, "stop_scalar": 1.0 },
+        "high_vol": { "size_scalar": 0.5, "target_scalar": 1.2, "stop_scalar": 1.2 }
+      }
+    }
+  }
+}
