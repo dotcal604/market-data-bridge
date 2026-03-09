@@ -12,6 +12,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Sentry } from "../instrument.js";
 import { logger } from "../logging.js";
 import { recommendPolicy } from "../exit-plan/recommend.js";
 import type {
@@ -159,6 +160,7 @@ function loadOptimalParams(): OptimalExitData | null {
     return cachedData;
   } catch (err) {
     log.error({ err, path }, "Failed to load optimal_exit_params.json");
+    Sentry.captureException(err instanceof Error ? err : new Error("Failed to load optimal_exit_params.json"), { tags: { subsystem: "holly" }, extra: { path } });
     return null;
   }
 }
@@ -191,6 +193,7 @@ function loadWalkForwardSummary(): WalkForwardSummary | null {
     return cachedWF;
   } catch (err) {
     log.error({ err, path }, "Failed to load walk_forward_summary.json");
+    Sentry.captureException(err instanceof Error ? err : new Error("Failed to load walk_forward_summary.json"), { tags: { subsystem: "holly" }, extra: { path } });
     return null;
   }
 }

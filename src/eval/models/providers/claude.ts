@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { evalConfig } from "../../config.js";
+import { Sentry } from "../../../instrument.js";
 import { SYSTEM_PROMPT } from "../prompt.js";
 import type { ModelEvaluation } from "../types.js";
 import { ModelOutputSchema } from "../schema.js";
@@ -74,6 +75,7 @@ export async function evaluateWithClaude(
     return { model_id: "claude", output: result.data, raw_response: raw, latency_ms: Date.now() - start, error: null, compliant: true, model_version: evalConfig.claudeModel, prompt_hash: promptHash, token_count: tokenCount, api_response_id: response.id ?? "", timestamp };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
+    Sentry.addBreadcrumb({ category: "eval", message: `Claude eval call failed: ${msg}`, level: "warning" });
     return { model_id: "claude", output: null, raw_response: "", latency_ms: Date.now() - start, error: msg, compliant: false, model_version: evalConfig.claudeModel, prompt_hash: promptHash, token_count: 0, api_response_id: "", timestamp };
   }
 }

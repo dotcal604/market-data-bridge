@@ -8,6 +8,7 @@
 
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
+import { Sentry } from "../instrument.js";
 import { recordIncident } from "./metrics.js";
 import { logger } from "../logging.js";
 
@@ -118,6 +119,7 @@ async function attemptTunnelRestart(): Promise<boolean> {
     return false;
   } catch (err: any) {
     log.error({ err }, "Tunnel restart attempt failed");
+    Sentry.captureException(err, { tags: { subsystem: "ops" } });
     recordIncident("tunnel_restart_failed", "critical", `Tunnel restart failed: ${err.message}`);
     return false;
   }

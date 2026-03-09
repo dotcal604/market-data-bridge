@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync, watchFile, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { EnsembleWeights } from "./types.js";
+import { Sentry } from "../../instrument.js";
 import { logger } from "../../logging.js";
 import { insertWeightHistory } from "../../db/database.js";
 
@@ -45,6 +46,7 @@ function loadFromDisk(): void {
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     logger.error(`[Weights] Failed to load weights.json: ${msg}`);
+    Sentry.addBreadcrumb({ category: "eval", message: `Failed to load weights.json: ${msg}`, level: "warning" });
   }
 }
 

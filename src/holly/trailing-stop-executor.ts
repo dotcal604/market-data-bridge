@@ -1,4 +1,5 @@
 import { getDb } from "../db/database.js";
+import { Sentry } from "../instrument.js";
 import { logger } from "../logging.js";
 import { modifyOrder } from "../ibkr/orders.js";
 import { runPerStrategyOptimization, type TrailingStopParams } from "./trailing-stop-optimizer.js";
@@ -67,6 +68,7 @@ function getStoredParamsForStrategy(strategy: string): TrailingStopParams | null
     return JSON.parse(row.params_json) as TrailingStopParams;
   } catch (error) {
     log.warn({ err: error, strategy }, "Invalid trailing stop params_json in table");
+    Sentry.addBreadcrumb({ category: "holly", message: `Invalid trailing stop params_json for strategy: ${strategy}`, level: "warning" });
     return null;
   }
 }

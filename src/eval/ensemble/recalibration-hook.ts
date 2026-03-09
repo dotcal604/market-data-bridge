@@ -10,6 +10,7 @@
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Sentry } from "../../instrument.js";
 import { logger } from "../../logging.js";
 import {
   getModelOutputsForEval,
@@ -42,6 +43,7 @@ function loadBayesianState(): void {
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     log.warn({ err: msg }, "Failed to load bayesian-state.json, using default priors");
+    Sentry.addBreadcrumb({ category: "eval", message: `Failed to load bayesian-state.json: ${msg}`, level: "warning" });
   }
 }
 
@@ -51,6 +53,7 @@ function saveBayesianState(): void {
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     log.error({ err: msg }, "Failed to save bayesian-state.json");
+    Sentry.captureException(e instanceof Error ? e : new Error(msg), { tags: { subsystem: "eval" } });
   }
 }
 
@@ -145,6 +148,7 @@ export function onOutcomeRecorded(
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     log.error({ err: msg, evaluationId }, "Failed to apply Bayesian update");
+    Sentry.captureException(e instanceof Error ? e : new Error(msg), { tags: { subsystem: "eval" }, extra: { evaluationId } });
   }
 }
 
@@ -214,6 +218,7 @@ function triggerBatchRecalibration(): void {
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     log.error({ err: msg }, "Batch recalibration failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(msg), { tags: { subsystem: "eval" } });
   }
 }
 

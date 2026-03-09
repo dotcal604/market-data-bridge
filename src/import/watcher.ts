@@ -11,6 +11,7 @@
 
 import { statSync, readdirSync, readFileSync, renameSync, mkdirSync, existsSync } from "node:fs";
 import path from "node:path";
+import { Sentry } from "../instrument.js";
 import { importFile, importFromPath } from "./router.js";
 import { logger } from "../logging.js";
 
@@ -97,6 +98,7 @@ async function poll(config: InboxConfig): Promise<void> {
         }
       } catch (err: any) {
         log.error({ file, err: err.message }, "Inbox: error processing file");
+        Sentry.captureException(err, { tags: { subsystem: "import" }, extra: { file } });
         try {
           moveFile(filePath, path.join(inboxPath, "failed"));
         } catch {
@@ -106,6 +108,7 @@ async function poll(config: InboxConfig): Promise<void> {
     }
   } catch (err) {
     log.error({ err }, "Inbox watcher poll error");
+    Sentry.captureException(err instanceof Error ? err : new Error("Inbox watcher poll error"), { tags: { subsystem: "import" } });
   }
 }
 

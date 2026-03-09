@@ -1,6 +1,7 @@
 import type { EnsembleScore } from "../ensemble/types.js";
 import { evalConfig } from "../config.js";
 import type { DriftReport } from "../drift.js";
+import { Sentry } from "../../instrument.js";
 import { logger } from "../../logging.js";
 
 const log = logger.child({ subsystem: "guardrails" });
@@ -63,6 +64,7 @@ export function runGuardrails(
       }
     } catch (e: any) {
       log.warn({ err: e }, "Loss streak check failed — defaulting to 0 (guardrail bypassed)");
+      Sentry.addBreadcrumb({ category: "eval", message: "Loss streak guardrail check failed", level: "warning" });
     }
   }
 
@@ -82,6 +84,7 @@ export function runGuardrails(
       insufficientSample = sampleSize < evalConfig.minOutcomesHard;
     } catch (e: any) {
       log.warn({ err: e }, "Sample size check failed — defaulting to 0 (guardrail bypassed)");
+      Sentry.addBreadcrumb({ category: "eval", message: "Sample size guardrail check failed", level: "warning" });
     }
   }
 
@@ -110,6 +113,7 @@ export function runGuardrails(
       }
     } catch (e: any) {
       log.warn({ err: e }, "Drift check failed — defaulting to no regime shift (guardrail bypassed)");
+      Sentry.addBreadcrumb({ category: "eval", message: "Drift guardrail check failed", level: "warning" });
     }
   }
 

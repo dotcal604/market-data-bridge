@@ -12,6 +12,7 @@ import {
   getOrderByOrderId,
 } from "../../db/database.js";
 import { tryLinkExecution, schedulePositionCloseCheck } from "../../eval/auto-link.js";
+import { Sentry } from "../../instrument.js";
 import { logOrder, logExec } from "../../logging.js";
 import { appendInboxItem } from "../../inbox/store.js";
 import { wsBroadcastWithSequence, getNextSequenceId } from "../../ws/server.js";
@@ -62,6 +63,7 @@ export function attachPersistentOrderListeners() {
       }
     } catch (e: any) {
       logOrder.error({ err: e, orderId, status }, "Failed to update order status in DB");
+      Sentry.captureException(e, { tags: { subsystem: "ibkr" }, extra: { orderId, status } });
     }
   });
 
@@ -116,6 +118,7 @@ export function attachPersistentOrderListeners() {
       });
     } catch (e: any) {
       logExec.error({ err: e, orderId: execution.orderId }, "Failed to write execution to DB");
+      Sentry.captureException(e, { tags: { subsystem: "ibkr" }, extra: { orderId: execution.orderId } });
     }
   });
 
@@ -142,6 +145,7 @@ export function attachPersistentOrderListeners() {
       }
     } catch (e: any) {
       logExec.error({ err: e, execId: report.execId }, "Failed to update commission in DB");
+      Sentry.captureException(e, { tags: { subsystem: "ibkr" }, extra: { execId: report.execId } });
     }
   });
 

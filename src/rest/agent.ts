@@ -69,6 +69,7 @@ import {
   getScannerParameters, listSubscriptions,
 } from "../ibkr/subscriptions.js";
 import { importHollyAlerts } from "../holly/importer.js";
+import { Sentry } from "../instrument.js";
 import { isAutoEvalEnabled, setAutoEvalEnabled, getAutoEvalStatus } from "../holly/auto-eval.js";
 import { buildProfiles, scanSymbols, getPreAlertCandidates } from "../holly/predictor.js";
 import { extractRules, runBacktest, getStrategyBreakdown } from "../holly/backtester.js";
@@ -996,6 +997,7 @@ export async function handleAgentRequest(req: Request, res: Response): Promise<v
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     log.warn({ action, params, error: message }, "agent action failed");
+    Sentry.captureException(err instanceof Error ? err : new Error(message), { tags: { subsystem: "rest", action } });
     res.status(500).json({ action, error: message });
   }
 }

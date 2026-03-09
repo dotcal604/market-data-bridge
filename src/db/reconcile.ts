@@ -10,6 +10,7 @@ import {
   updateOrderStatus,
 } from "./database.js";
 import { reconcileClosedPosition } from "../eval/auto-link.js";
+import { Sentry } from "../instrument.js";
 import { logReconcile } from "../logging.js";
 
 /**
@@ -54,6 +55,7 @@ export async function runReconciliation(): Promise<void> {
     [ibkrOrders, ibkrPositions] = await Promise.all([getOpenOrders(), getPositions()]);
   } catch (e: any) {
     logReconcile.error({ err: e }, "Failed to fetch IBKR state for reconciliation");
+    Sentry.captureException(e, { tags: { subsystem: "db" }, extra: { phase: "reconciliation" } });
     // Revert RECONCILING → back to previous status
     for (const order of liveOrders) {
       updateOrderStatus(order.order_id, order.status);

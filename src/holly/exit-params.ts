@@ -1,5 +1,6 @@
 import fs from "fs/promises";
 import path from "path";
+import { Sentry } from "../instrument.js";
 import { logger } from "../logging.js";
 
 const log = logger.child({ subsystem: "holly-exit" });
@@ -63,6 +64,7 @@ export async function getExitParams(): Promise<ExitParamsData> {
     return cachedParams;
   } catch (error: any) {
     log.error({ err: error, path: filePath }, "Failed to load exit params");
+    Sentry.captureException(error, { tags: { subsystem: "holly" }, extra: { path: filePath } });
     throw new Error(`Failed to load exit params: ${error.message}`);
   }
 }

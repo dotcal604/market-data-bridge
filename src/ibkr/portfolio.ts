@@ -1,6 +1,7 @@
 import { getPositions, getAccountSummary, type PositionData } from "./account.js";
 import { getContractDetails, type ContractDetailsData } from "./contracts.js";
 import { getHistoricalBars, type BarData, getQuote } from "../providers/yahoo.js";
+import { Sentry } from "../instrument.js";
 import { logger } from "../logging.js";
 
 const log = logger.child({ subsystem: "ibkr-portfolio" });
@@ -31,6 +32,7 @@ async function getCachedContractDetails(symbol: string): Promise<ContractDetails
       return firstDetail;
     }
   } catch {
+    Sentry.addBreadcrumb({ category: "ibkr", message: `Contract details fetch failed for ${symbol}, using cache`, level: "warning" });
     if (cached) {
       return cached.data;
     }
@@ -160,7 +162,8 @@ export async function calculateBeta(symbol: string, benchmarkSymbol: string = "S
     }
 
     return Math.round(beta * 100) / 100;
-  } catch {
+  } catch (err) {
+    Sentry.addBreadcrumb({ category: "ibkr", message: `Beta calculation failed for ${symbol}, defaulting to 1`, level: "warning" });
     return 1;
   }
 }
@@ -225,6 +228,7 @@ export async function runPortfolioStressTest(shockPercent: number, betaAdjusted:
       }
     } catch (error) {
       log.warn({ err: error, symbol: position.symbol }, "Failed to load quote; falling back to avgCost market value");
+      Sentry.addBreadcrumb({ category: "ibkr", message: `Quote fetch failed for ${position.symbol} in stress test`, level: "warning" });
     }
 
     let beta = 1;
@@ -233,6 +237,7 @@ export async function runPortfolioStressTest(shockPercent: number, betaAdjusted:
         beta = await calculateBeta(position.symbol);
       } catch (error) {
         log.warn({ err: error, symbol: position.symbol }, "Failed to calculate beta; using beta=1");
+        Sentry.addBreadcrumb({ category: "ibkr", message: `Beta calc failed for ${position.symbol} in stress test`, level: "warning" });
         beta = 1;
       }
     }
@@ -338,6 +343,7 @@ export async function computePortfolioExposure(): Promise<PortfolioExposureRespo
         }
       } catch (err: any) {
         log.warn({ symbol: pos.symbol, error: err.message }, "Failed to fetch quote, using avgCost");
+        Sentry.addBreadcrumb({ category: "ibkr", message: `Quote fetch failed for ${pos.symbol} in exposure calc`, level: "warning" });
         currentPrice = pos.avgCost;
       }
       const marketValue = pos.position * currentPrice;

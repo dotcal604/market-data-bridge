@@ -57,6 +57,7 @@ import { getGptInstructions } from "./gpt-instructions.js";
 import { checkRisk, getSessionState, recordTradeResult, lockSession, unlockSession, resetSession, getRiskGateConfig } from "../ibkr/risk-gate.js";
 import { runPortfolioStressTest } from "../ibkr/portfolio.js";
 import { calculatePositionSize } from "../ibkr/risk.js";
+import { Sentry } from "../instrument.js";
 import { logger } from "../logging.js";
 import { getOpenApiSpec } from "./openapi.js";
 import { tuneRiskParams } from "../eval/risk-tuning.js";
@@ -214,6 +215,7 @@ router.get("/quote/:symbol", async (req, res) => {
     res.json(fallbackResponse);
   } catch (e: any) {
     log.error({ err: e }, "GET /quote/:symbol failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -228,6 +230,7 @@ router.get("/history/:symbol", async (req, res) => {
     res.json({ symbol: symbol.toUpperCase(), count: bars.length, bars });
   } catch (e: any) {
     log.error({ err: e }, "GET /history/:symbol failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -272,6 +275,7 @@ router.get("/data/historical-ticks/:symbol", async (req, res) => {
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Unknown error";
     log.error({ err: e }, "GET /data/historical-ticks/:symbol failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: message });
   }
 });
@@ -283,6 +287,7 @@ router.get("/details/:symbol", async (req, res) => {
     res.json(details);
   } catch (e: any) {
     log.error({ err: e }, "GET /details/:symbol failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -295,6 +300,7 @@ router.get("/options/:symbol", async (req, res) => {
     res.json(chain);
   } catch (e: any) {
     log.error({ err: e }, "GET /options/:symbol failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -318,6 +324,7 @@ router.get("/options/:symbol/quote", async (req, res) => {
     res.json(quote);
   } catch (e: any) {
     log.error({ err: e }, "GET /options/:symbol/quote failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -334,6 +341,7 @@ router.get("/search", async (req, res) => {
     res.json({ count: results.length, results });
   } catch (e: any) {
     log.error({ err: e }, "GET /search failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -349,6 +357,7 @@ router.get("/news/providers", async (_req, res) => {
     res.json({ count: providers.length, providers });
   } catch (e: any) {
     log.error({ err: e }, "GET /news/providers failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -369,6 +378,7 @@ router.get("/news/article/:providerId/:articleId", async (req, res) => {
     res.json(article);
   } catch (e: any) {
     log.error({ err: e }, "GET /news/article/:providerId/:articleId failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -416,6 +426,7 @@ router.get("/news/history/:symbol", async (req, res) => {
     res.json({ symbol: parsedParams.data.symbol.toUpperCase(), conId: contract.conId, count: headlines.length, headlines });
   } catch (e: any) {
     log.error({ err: e }, "GET /news/history/:symbol failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -431,6 +442,7 @@ router.get("/news/bulletins", async (_req, res) => {
     res.json({ count: bulletins.length, bulletins });
   } catch (e: any) {
     log.error({ err: e }, "GET /news/bulletins failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -497,6 +509,7 @@ router.get("/news/benzinga/headlines/:symbol", async (req, res) => {
     });
   } catch (e: any) {
     log.error({ err: e }, "GET /news/benzinga/headlines/:symbol failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -517,6 +530,7 @@ router.get("/news/benzinga/article/:articleId", async (req, res) => {
     res.json({ source: "Benzinga (via IBKR)", ...article });
   } catch (e: any) {
     log.error({ err: e }, "GET /news/benzinga/article/:articleId failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -528,6 +542,7 @@ router.get("/news/:query", async (req, res) => {
     res.json({ count: news.length, articles: news });
   } catch (e: any) {
     log.error({ err: e }, "GET /news/:query failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -539,6 +554,7 @@ router.get("/financials/:symbol", async (req, res) => {
     res.json(data);
   } catch (e: any) {
     log.error({ err: e }, "GET /financials/:symbol failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -550,6 +566,7 @@ router.get("/earnings/:symbol", async (req, res) => {
     res.json(data);
   } catch (e: any) {
     log.error({ err: e }, "GET /earnings/:symbol failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -561,6 +578,7 @@ router.get("/data/recommendations/:symbol", async (req, res) => {
     res.json(data);
   } catch (e: any) {
     log.error({ err: e }, "GET /data/recommendations/:symbol failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -573,6 +591,7 @@ router.get("/trending", async (req, res) => {
     res.json(data);
   } catch (e: any) {
     log.error({ err: e }, "GET /trending failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -591,6 +610,7 @@ router.post("/screener/run", async (req, res) => {
     res.json({ count: results.length, results });
   } catch (e: any) {
     log.error({ err: e }, "POST /screener/run failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -604,6 +624,7 @@ router.post("/screener/run-with-quotes", async (req, res) => {
     res.json({ count: results.length, results });
   } catch (e: any) {
     log.error({ err: e }, "POST /screener/run-with-quotes failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -621,6 +642,7 @@ router.get("/account/summary", async (_req, res) => {
     res.json(summary);
   } catch (e: any) {
     log.error({ err: e }, "GET /account/summary failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -636,6 +658,7 @@ router.get("/account/positions", async (_req, res) => {
     res.json({ count: positions.length, positions });
   } catch (e: any) {
     log.error({ err: e }, "GET /account/positions failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -658,6 +681,7 @@ router.post("/portfolio/stress-test", async (req, res) => {
     res.json(result);
   } catch (e: any) {
     log.error({ err: e }, "Portfolio stress test failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -673,6 +697,7 @@ router.get("/account/pnl", async (_req, res) => {
     res.json(pnl);
   } catch (e: any) {
     log.error({ err: e }, "GET /account/pnl failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -698,6 +723,7 @@ router.get("/account/pnl/intraday", (_req, res) => {
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Unknown error";
     log.error({ err: e }, "GET /account/pnl/intraday failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: message });
   }
 });
@@ -722,6 +748,7 @@ router.get("/account/pnl/:symbol", async (req, res) => {
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Unknown error";
     log.error({ err: e }, "GET /account/pnl/:symbol failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: message });
   }
 });
@@ -745,6 +772,7 @@ router.get("/search/ibkr", async (req, res) => {
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Unknown error";
     log.error({ err: e }, "GET /search/ibkr failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: message });
   }
 });
@@ -768,6 +796,7 @@ router.post("/config/market-data-type", async (req, res) => {
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Unknown error";
     log.error({ err: e }, "POST /config/market-data-type failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: message });
   }
 });
@@ -791,6 +820,7 @@ router.post("/orders/auto-open", async (req, res) => {
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Unknown error";
     log.error({ err: e }, "POST /orders/auto-open failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: message });
   }
 });
@@ -820,6 +850,7 @@ router.get("/data/head-timestamp/:symbol", async (req, res) => {
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Unknown error";
     log.error({ err: e }, "GET /data/head-timestamp/:symbol failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: message });
   }
 });
@@ -853,6 +884,7 @@ router.get("/data/histogram/:symbol", async (req, res) => {
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Unknown error";
     log.error({ err: e }, "GET /data/histogram/:symbol failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: message });
   }
 });
@@ -873,6 +905,7 @@ router.post("/options/implied-vol", async (req, res) => {
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Unknown error";
     log.error({ err: e }, "POST /options/implied-vol failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: message });
   }
 });
@@ -893,6 +926,7 @@ router.post("/options/price", async (req, res) => {
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Unknown error";
     log.error({ err: e }, "POST /options/price failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: message });
   }
 });
@@ -908,6 +942,7 @@ router.get("/status/tws-time", async (_req, res) => {
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Unknown error";
     log.error({ err: e }, "GET /status/tws-time failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: message });
   }
 });
@@ -928,6 +963,7 @@ router.get("/data/market-rule/:ruleId", async (req, res) => {
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Unknown error";
     log.error({ err: e }, "GET /data/market-rule/:ruleId failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: message });
   }
 });
@@ -948,6 +984,7 @@ router.get("/data/smart-components/:exchange", async (req, res) => {
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Unknown error";
     log.error({ err: e }, "GET /data/smart-components/:exchange failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: message });
   }
 });
@@ -963,6 +1000,7 @@ router.get("/data/depth-exchanges", async (_req, res) => {
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Unknown error";
     log.error({ err: e }, "GET /data/depth-exchanges failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: message });
   }
 });
@@ -985,6 +1023,7 @@ router.get("/data/fundamentals/:symbol", async (req, res) => {
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Unknown error";
     log.error({ err: e }, "GET /data/fundamentals/:symbol failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: message });
   }
 });
@@ -1000,6 +1039,7 @@ router.get("/portfolio/exposure", async (_req, res) => {
     res.json(exposure);
   } catch (e: any) {
     log.error({ err: e }, "GET /portfolio/exposure failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -1015,6 +1055,7 @@ router.get("/account/orders", async (_req, res) => {
     res.json({ count: orders.length, orders });
   } catch (e: any) {
     log.error({ err: e }, "GET /account/orders failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -1030,6 +1071,7 @@ router.get("/account/orders/completed", async (_req, res) => {
     res.json({ count: orders.length, orders });
   } catch (e: any) {
     log.error({ err: e }, "GET /account/orders/completed failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -1051,6 +1093,7 @@ router.get("/account/executions", async (req, res) => {
     res.json({ count: executions.length, executions });
   } catch (e: any) {
     log.error({ err: e }, "GET /account/executions failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -1071,6 +1114,7 @@ router.get("/contract/:symbol", async (req, res) => {
     res.json({ count: details.length, contracts: details });
   } catch (e: any) {
     log.error({ err: e }, "GET /contract/:symbol failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -1091,6 +1135,7 @@ router.get("/ibkr/quote/:symbol", async (req, res) => {
     res.json(quote);
   } catch (e: any) {
     log.error({ err: e }, "GET /ibkr/quote/:symbol failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -1148,6 +1193,7 @@ router.post("/order", async (req, res) => {
     res.json(result);
   } catch (e: any) {
     log.error({ err: e }, "POST /order failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -1194,6 +1240,7 @@ router.post("/order/bracket", async (req, res) => {
     res.json(result);
   } catch (e: any) {
     log.error({ err: e }, "POST /order/bracket failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -1244,6 +1291,7 @@ router.post("/order/bracket-advanced", async (req, res) => {
     res.json(result);
   } catch (e: any) {
     log.error({ err: e }, "POST /order/bracket-advanced failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -1265,6 +1313,7 @@ router.patch("/order/:orderId", async (req, res) => {
     res.json(result);
   } catch (e: any) {
     log.error({ err: e }, "PATCH /order/:orderId failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -1285,6 +1334,7 @@ router.delete("/order/:orderId", async (req, res) => {
     res.json(result);
   } catch (e: any) {
     log.error({ err: e }, "DELETE /order/:orderId failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -1300,6 +1350,7 @@ router.delete("/orders/all", async (_req, res) => {
     res.json(result);
   } catch (e: any) {
     log.error({ err: e }, "DELETE /orders/all failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -1321,6 +1372,7 @@ router.post("/positions/flatten", async (req, res) => {
     res.json(result);
   } catch (e: any) {
     log.error({ err: e, source: "rest_api" }, "Manual flatten FAILED");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -1399,6 +1451,7 @@ router.get("/account/pnl/intraday", (_req, res) => {
     res.json({ count: todaySnapshots.length, snapshots: todaySnapshots });
   } catch (e: any) {
     log.error({ err: e }, "GET /account/pnl/intraday failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -1409,6 +1462,7 @@ router.get("/risk/config", (_req, res) => {
     res.json(getRiskGateConfig());
   } catch (e: any) {
     log.error({ err: e }, "GET /risk/config failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -1435,6 +1489,7 @@ router.put("/risk/config", (req, res) => {
     res.json(getRiskGateConfig());
   } catch (e: any) {
     log.error({ err: e }, "PUT /risk/config failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -1446,6 +1501,7 @@ router.post("/risk/tune", (_req, res) => {
     res.json({ tune: result, config: getRiskGateConfig() });
   } catch (e: any) {
     log.error({ err: e }, "POST /risk/tune failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -1495,6 +1551,7 @@ router.post("/risk/size-position", async (req, res) => {
     res.json(result);
   } catch (e: any) {
     log.error({ err: e }, "POST /risk/size-position failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -1513,6 +1570,7 @@ router.get("/journal", (req, res) => {
     res.json({ count: (entries as any[]).length, entries });
   } catch (e: any) {
     log.error({ err: e }, "GET /journal failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -1533,6 +1591,7 @@ router.get("/journal/:id", (req, res) => {
     res.json(entry);
   } catch (e: any) {
     log.error({ err: e }, "GET /journal/:id failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -1550,6 +1609,7 @@ router.post("/journal", (req, res) => {
     res.status(201).json(entry);
   } catch (e: any) {
     log.error({ err: e }, "POST /journal failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -1571,6 +1631,7 @@ router.patch("/journal/:id", (req, res) => {
     res.json(getJournalById(id));
   } catch (e: any) {
     log.error({ err: e }, "PATCH /journal/:id failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -1585,6 +1646,7 @@ router.get("/orders/history", (req, res) => {
     res.json({ count: (orders as any[]).length, orders });
   } catch (e: any) {
     log.error({ err: e }, "GET /orders/history failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -1598,6 +1660,7 @@ router.get("/executions/history", (req, res) => {
     res.json({ count: (executions as any[]).length, executions });
   } catch (e: any) {
     log.error({ err: e }, "GET /executions/history failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -1634,6 +1697,7 @@ router.get("/collab/messages", (req, res) => {
     res.json({ count: msgs.length, messages: msgs });
   } catch (e: any) {
     log.error({ err: e }, "GET /collab/messages failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -1664,6 +1728,7 @@ router.post("/collab/message", (req, res) => {
       res.status(400).json({ error: e.message });
     } else {
       log.error({ err: e }, "POST /collab/message failed");
+      Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
       res.status(500).json({ error: e.message });
     }
   }
@@ -1676,6 +1741,7 @@ router.delete("/collab/messages", (_req, res) => {
     res.json(result);
   } catch (e: any) {
     log.error({ err: e }, "DELETE /collab/messages failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -1759,6 +1825,7 @@ router.get("/subscriptions/scanner-parameters", async (_req, res) => {
     res.type("application/xml").send(xml);
   } catch (e: any) {
     log.error({ err: e }, "GET /subscriptions/scanner-parameters failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -1793,6 +1860,7 @@ router.get("/holly/exit-params", async (_req, res) => {
     res.json(data);
   } catch (e: any) {
     log.error({ err: e }, "GET /holly/exit-params failed");
+    Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
     res.status(500).json({ error: e.message });
   }
 });

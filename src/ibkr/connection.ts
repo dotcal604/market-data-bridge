@@ -1,5 +1,6 @@
 import { IBApi, EventName, ErrorCode, isNonFatalError } from "@stoqey/ib";
 import { config } from "../config.js";
+import { Sentry } from "../instrument.js";
 import {
   recordHeartbeatLatency,
   recordIncident,
@@ -78,6 +79,7 @@ function softReconnect(reason: string): void {
   } catch (e: unknown) {
     const detail = e instanceof Error ? e.message : String(e);
     console.error(`[IBKR] Soft reconnect disconnect failed: ${detail}`);
+    Sentry.addBreadcrumb({ category: "ibkr", message: `Soft reconnect disconnect failed: ${detail}`, level: "warning" });
   }
   scheduleReconnect();
 }
@@ -235,6 +237,7 @@ export function getIB(): IBApi {
       for (const { name, cb } of onReconnectCallbacks) {
         try { cb(); } catch (e: any) {
           console.error(`[IBKR] Reconnect callback "${name}" error: ${e.message}`);
+          Sentry.captureException(e, { tags: { subsystem: "ibkr" }, extra: { callback: name } });
         }
       }
       if (reconnectTimer) {
@@ -318,6 +321,7 @@ function destroyIB(): void {
   if (ib) {
     try { ib.disconnect(); } catch (e: any) {
       console.error(`[IBKR] Error during disconnect cleanup: ${e.message ?? e}`);
+      Sentry.addBreadcrumb({ category: "ibkr", message: `Disconnect cleanup error: ${e.message ?? e}`, level: "warning" });
     }
     ib = null;
     connected = false;

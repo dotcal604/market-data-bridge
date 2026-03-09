@@ -1,6 +1,7 @@
 import { EventName, ErrorCode, Contract, isNonFatalError } from "@stoqey/ib";
 import { getIB, getNextReqId, isConnected, onReconnect } from "./connection.js";
 import { feedBar as feedIndicatorBar } from "../indicators/engine.js";
+import { Sentry } from "../instrument.js";
 import { logger } from "../logging.js";
 import { randomUUID } from "node:crypto";
 
@@ -534,6 +535,7 @@ export function resubscribeAll(): void {
       subscribeAccountUpdates(acct);
     } catch (e: any) {
       log.error({ account: acct }, `Failed to re-subscribe account updates: ${e.message}`);
+      Sentry.addBreadcrumb({ category: "ibkr", message: `Re-subscribe account updates failed: ${e.message}`, level: "warning" });
     }
   }
 }

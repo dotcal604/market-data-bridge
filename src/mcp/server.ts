@@ -88,6 +88,7 @@ import {
 import { computeDriftReport } from "../eval/drift.js";
 import { getRecentDriftAlerts } from "../eval/drift-alerts.js";
 import { computeEdgeReport, runWalkForward } from "../eval/edge-analytics.js";
+import { Sentry } from "../instrument.js";
 import { importTraderSyncCSV } from "../tradersync/importer.js";
 import { importHollyAlerts } from "../holly/importer.js";
 import { importFile, importRows } from "../import/router.js";
@@ -134,6 +135,7 @@ function withErrorHandling<T = any>(toolName: string, handler: ToolHandler<T>): 
       return result;
     } catch (e: any) {
       log.error({ tool: toolName, params, error: e.message, stack: e.stack }, "MCP tool error");
+      Sentry.captureException(e, { tags: { subsystem: "mcp", tool: toolName } });
       return {
         content: [{ type: "text", text: `Error in ${toolName}: ${e.message}` }],
         isError: true,

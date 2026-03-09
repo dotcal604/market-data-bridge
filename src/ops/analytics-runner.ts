@@ -2,6 +2,7 @@ import { spawn } from "child_process";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
+import { Sentry } from "../instrument.js";
 import { logAnalytics } from "../logging.js";
 import { insertAnalyticsJob, updateAnalyticsJob } from "../db/database.js";
 
@@ -23,6 +24,7 @@ function loadKnownScripts(): void {
     logAnalytics.info({ count: knownScripts.size, scripts: Array.from(knownScripts) }, "Loaded known analytics scripts");
   } catch (err) {
     logAnalytics.error({ err }, "Failed to load known scripts");
+    Sentry.addBreadcrumb({ category: "ops", message: "Failed to load known analytics scripts", level: "warning" });
   }
 }
 

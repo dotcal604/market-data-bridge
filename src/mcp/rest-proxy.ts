@@ -12,6 +12,7 @@
 
 import { config } from "../config.js";
 import { isConnected } from "../ibkr/connection.js";
+import { Sentry } from "../instrument.js";
 
 const BASE_URL = `http://127.0.0.1:${config.rest.port}`;
 const API_KEY = config.rest.apiKey;
@@ -109,6 +110,7 @@ export async function ibkrTool(
     const result = await proxyToRest(action, params);
     return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
   } catch (e: any) {
+    Sentry.addBreadcrumb({ category: "mcp", message: `ibkrTool error for ${action}: ${e.message}`, level: "warning" });
     return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
   }
 }

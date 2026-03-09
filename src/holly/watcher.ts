@@ -14,6 +14,7 @@ import { config } from "../config.js";
 import { importHollyAlerts } from "./importer.js";
 import { processNewAlerts } from "./auto-eval.js";
 import { wsBroadcast } from "../ws/server.js";
+import { Sentry } from "../instrument.js";
 import { logger } from "../logging.js";
 
 const log = logger.child({ module: "holly-watcher" });
@@ -91,6 +92,7 @@ function poll(): void {
     lastSize = currentSize;
   } catch (err) {
     log.error({ err }, "Holly watcher poll error");
+    Sentry.captureException(err, { tags: { subsystem: "holly" } });
   }
 }
 

@@ -61,6 +61,8 @@ export async function fetchOrderBookFeatures(
     };
   } catch (err) {
     log.error({ symbol, error: (err as Error).message }, "Failed to fetch order book features");
+    const { Sentry } = await import("../../instrument.js");
+    Sentry.captureException(err, { tags: { subsystem: "eval" }, extra: { symbol } });
     return null;
   }
 }

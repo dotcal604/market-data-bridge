@@ -9,6 +9,7 @@
  *   - commissionReport with realizedPNL triggers a 2s delayed check
  *   - If net position for the correlation_id is zero → record outcome
  */
+import { Sentry } from "../instrument.js";
 import { logger } from "../logging.js";
 import {
   insertEvalExecutionLink,
@@ -203,6 +204,7 @@ export function tryLinkExecution(exec: ExecutionRecord): void {
     }
   } catch (e: any) {
     log.error({ err: e, execId: exec.exec_id }, "Failed to auto-link execution");
+    Sentry.captureException(e, { tags: { subsystem: "eval" }, extra: { execId: exec.exec_id } });
   }
 }
 
@@ -234,6 +236,7 @@ export function schedulePositionCloseCheck(execId: string, realizedPnl: number):
     pendingCloseChecks.set(correlationId, timer);
   } catch (e: any) {
     log.error({ err: e, execId }, "Failed to schedule position close check");
+    Sentry.captureException(e, { tags: { subsystem: "eval" }, extra: { execId } });
   }
 }
 
@@ -319,6 +322,7 @@ function checkAndRecordOutcome(correlationId: string, realizedPnl: number): void
     );
   } catch (e: any) {
     log.error({ err: e, correlationId }, "Failed to auto-record outcome");
+    Sentry.captureException(e, { tags: { subsystem: "eval" }, extra: { correlationId } });
   }
 }
 
@@ -359,6 +363,7 @@ export function reconcileClosedPosition(symbol: string): void {
     }
   } catch (e: any) {
     log.error({ err: e, symbol }, "Failed to reconcile closed position");
+    Sentry.captureException(e, { tags: { subsystem: "eval" }, extra: { symbol } });
   }
 }
 

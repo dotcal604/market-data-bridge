@@ -13,6 +13,7 @@
 import { parse } from "csv-parse/sync";
 import { randomUUID } from "crypto";
 import { bulkInsertHollyAlerts } from "../db/database.js";
+import { Sentry } from "../instrument.js";
 import { logger } from "../logging.js";
 import { HollyAlertRowSchema, type HollyAlertRow } from "./alert-schema.js";
 
@@ -134,6 +135,7 @@ export function importHollyAlerts(csvContent: string): ImportResult {
       relax_column_count: true,
     });
   } catch (e: any) {
+    Sentry.addBreadcrumb({ category: "holly", message: `CSV parse error: ${e.message}`, level: "warning" });
     return { batch_id, total_parsed: 0, inserted: 0, skipped: 0, errors: [`CSV parse error: ${e.message}`] };
   }
 

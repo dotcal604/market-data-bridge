@@ -2,6 +2,7 @@ import Database, { type Database as DatabaseType } from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { Sentry } from '../instrument.js';
 import { logger } from '../logging.js';
 
 // ── Type Definitions ─────────────────────────────────────────────────────────
@@ -132,6 +133,7 @@ export class EventStore {
         listener(event);
       } catch (error) {
         logger.error({ err: error }, "Error in event listener");
+        Sentry.captureException(error instanceof Error ? error : new Error("Error in event listener"), { tags: { subsystem: "db" } });
       }
     }
   }

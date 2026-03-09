@@ -1,6 +1,7 @@
 import { getAccountSummary, type AccountSummaryData } from "./account.js";
 import { getRiskConfigRows } from "../db/database.js";
 import { RISK_CONFIG_DEFAULTS } from "../db/schema.js";
+import { Sentry } from "../instrument.js";
 import { logRisk } from "../logging.js";
 
 export interface PositionSizeRequest {
@@ -57,6 +58,7 @@ function loadTunedRiskConfig(): { max_position_pct: number; volatility_scalar: n
       volatility_scalar: byParam.get("volatility_scalar") ?? RISK_CONFIG_DEFAULTS.volatility_scalar,
     };
   } catch {
+    Sentry.addBreadcrumb({ category: "ibkr", message: "Risk config DB load failed, using defaults", level: "warning" });
     return {
       max_position_pct: RISK_CONFIG_DEFAULTS.max_position_pct,
       volatility_scalar: RISK_CONFIG_DEFAULTS.volatility_scalar,

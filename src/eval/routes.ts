@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { randomUUID } from "crypto";
+import { Sentry } from "../instrument.js";
 import { computeFeatures } from "./features/compute.js";
 import { stripMetadata } from "./features/types.js";
 import { wsBroadcast } from "../ws/server.js";
@@ -213,6 +214,7 @@ evalRouter.post("/evaluate", async (req, res) => {
         } catch (err) {
           // Non-fatal — don't block eval pipeline for reasoning extraction failures
           logger.warn({ err, model_id: e.model_id }, "[Eval] Reasoning extraction failed");
+          Sentry.addBreadcrumb({ category: "eval", message: `Reasoning extraction failed for ${e.model_id}`, level: "warning" });
         }
       }
     }
@@ -262,6 +264,8 @@ evalRouter.post("/evaluate", async (req, res) => {
     wsBroadcast("eval", { id, symbol: features.symbol, ensemble, guardrail: { allowed: guardrail.allowed } });
   } catch (e: any) {
     logger.error({ err: e }, "[Eval] evaluate failed");
+    Sentry.captureException(e, { tags: { subsystem: "eval" } });
+    Sentry.captureException(e, { tags: { subsystem: "eval" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -323,6 +327,7 @@ evalRouter.post("/outcome", (req, res) => {
     res.json({ success: true, evaluation_id });
   } catch (e: any) {
     logger.error({ err: e }, "[Eval] outcome failed");
+    Sentry.captureException(e, { tags: { subsystem: "eval" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -335,6 +340,7 @@ evalRouter.get("/history", (req, res) => {
     const evaluations = getRecentEvaluations(limit, symbol);
     res.json({ count: evaluations.length, evaluations });
   } catch (e: any) {
+    Sentry.captureException(e, { tags: { subsystem: "eval" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -345,6 +351,7 @@ evalRouter.get("/stats", (_req, res) => {
     const stats = getEvalStats();
     res.json(stats);
   } catch (e: any) {
+    Sentry.captureException(e, { tags: { subsystem: "eval" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -406,6 +413,7 @@ evalRouter.post("/weights", (req, res) => {
     res.json(updated);
   } catch (e: any) {
     logger.error({ err: e }, "[Eval] POST /weights failed");
+    Sentry.captureException(e, { tags: { subsystem: "eval" } });
     res.status(400).json({ error: e.message });
   }
 });
@@ -428,6 +436,7 @@ evalRouter.get("/weights/history", (req, res) => {
     res.json({ count: parsed.length, history: parsed });
   } catch (e: any) {
     logger.error({ err: e }, "[Eval] GET /weights/history failed");
+    Sentry.captureException(e, { tags: { subsystem: "eval" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -593,6 +602,7 @@ evalRouter.post("/weights/simulate", (req, res) => {
     });
   } catch (e: any) {
     logger.error({ err: e }, "[Eval] weights/simulate failed");
+    Sentry.captureException(e, { tags: { subsystem: "eval" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -637,6 +647,7 @@ evalRouter.get("/daily-summary", (req, res) => {
     });
   } catch (e: any) {
     logger.error({ err: e }, "[Eval] daily-summary failed");
+    Sentry.captureException(e, { tags: { subsystem: "eval" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -660,6 +671,7 @@ evalRouter.get("/outcomes", (req, res) => {
     res.json({ count: outcomes.length, outcomes });
   } catch (e: any) {
     logger.error({ err: e }, "[Eval] outcomes failed");
+    Sentry.captureException(e, { tags: { subsystem: "eval" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -700,6 +712,7 @@ evalRouter.get("/drift", (_req, res) => {
     res.json({ data: report });
   } catch (e: any) {
     logger.error({ err: e }, "[Eval] drift failed");
+    Sentry.captureException(e, { tags: { subsystem: "eval" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -723,6 +736,7 @@ evalRouter.get("/calibration", (_req, res) => {
     res.json({ calibration });
   } catch (e: any) {
     logger.error({ err: e }, "[Eval] calibration failed");
+    Sentry.captureException(e, { tags: { subsystem: "eval" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -797,6 +811,7 @@ evalRouter.get("/model-agreement", (_req, res) => {
     res.json({ agreement: agreementRates, models });
   } catch (e: any) {
     logger.error({ err: e }, "[Eval] model-agreement failed");
+    Sentry.captureException(e, { tags: { subsystem: "eval" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -815,6 +830,7 @@ evalRouter.post("/tradersync/import", (req, res) => {
     logger.info({ batch: result.batch_id, inserted: result.inserted, skipped: result.skipped }, "[TraderSync] Import complete");
     res.json(result);
   } catch (e: any) {
+    Sentry.captureException(e, { tags: { subsystem: "eval" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -824,6 +840,7 @@ evalRouter.get("/tradersync/stats", (_req, res) => {
   try {
     res.json(getTraderSyncStats());
   } catch (e: any) {
+    Sentry.captureException(e, { tags: { subsystem: "eval" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -840,6 +857,7 @@ evalRouter.get("/tradersync/trades", (req, res) => {
     });
     res.json({ count: trades.length, trades });
   } catch (e: any) {
+    Sentry.captureException(e, { tags: { subsystem: "eval" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -862,6 +880,7 @@ evalRouter.post("/import", (req, res) => {
     logger.info({ importId: result.import_id, format: result.format, inserted: result.inserted }, "[Import] Complete");
     res.json(result);
   } catch (e: any) {
+    Sentry.captureException(e, { tags: { subsystem: "eval" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -881,6 +900,7 @@ evalRouter.post("/import/rows", (req, res) => {
     });
     res.json(result);
   } catch (e: any) {
+    Sentry.captureException(e, { tags: { subsystem: "eval" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -895,6 +915,7 @@ evalRouter.get("/import/history", (req, res) => {
     });
     res.json({ count: history.length, imports: history });
   } catch (e: any) {
+    Sentry.captureException(e, { tags: { subsystem: "eval" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -904,6 +925,7 @@ evalRouter.get("/import/stats", (_req, res) => {
   try {
     res.json(getImportStats());
   } catch (e: any) {
+    Sentry.captureException(e, { tags: { subsystem: "eval" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -918,6 +940,7 @@ evalRouter.get("/import/:id", (req, res) => {
     }
     res.json(record);
   } catch (e: any) {
+    Sentry.captureException(e, { tags: { subsystem: "eval" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -934,6 +957,7 @@ evalRouter.get("/reasoning/:evalId", (req, res) => {
 
     res.json(buildReasoningResponse(evalId));
   } catch (e: any) {
+    Sentry.captureException(e, { tags: { subsystem: "eval" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -950,6 +974,7 @@ evalRouter.get("/:id/reasoning", (req, res) => {
 
     res.json(buildReasoningResponse(evalId));
   } catch (e: any) {
+    Sentry.captureException(e, { tags: { subsystem: "eval" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -961,6 +986,7 @@ evalRouter.get("/auto-links", (_req, res) => {
     const recent = getRecentLinks(20);
     res.json({ stats, recent });
   } catch (e: any) {
+    Sentry.captureException(e, { tags: { subsystem: "eval" } });
     res.status(500).json({ error: e.message });
   }
 });
@@ -976,6 +1002,7 @@ evalRouter.get("/:id", (req, res) => {
     const outcome = getOutcomeForEval(req.params.id) ?? null;
     res.json({ evaluation, modelOutputs, outcome });
   } catch (e: any) {
+    Sentry.captureException(e, { tags: { subsystem: "eval" } });
     res.status(500).json({ error: e.message });
   }
 });

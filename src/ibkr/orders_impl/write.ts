@@ -6,6 +6,7 @@ import {
   isNonFatalError,
 } from "@stoqey/ib";
 import { getIB } from "../connection.js";
+import { Sentry } from "../../instrument.js";
 import { getNextValidOrderId } from "./read.js";
 import {
   generateCorrelationId,
@@ -103,6 +104,7 @@ export async function placeOrder(params: PlaceOrderParams): Promise<PlaceOrderRe
     logOrder.info({ orderId, symbol: params.symbol, action: params.action, orderType: params.orderType, qty: params.totalQuantity, correlationId }, "Order recorded in DB");
   } catch (e: any) {
     logOrder.error({ err: e, orderId, symbol: params.symbol }, "Failed to write order to DB — blocking placement (fail-closed)");
+    Sentry.captureException(e, { tags: { subsystem: "ibkr" }, extra: { orderId, symbol: params.symbol } });
     throw new Error(`Order DB insert failed for ${params.symbol} (orderId=${orderId}): ${e.message}`);
   }
 
@@ -246,6 +248,7 @@ export async function placeBracketOrder(params: BracketOrderParams): Promise<Bra
     logOrder.info({ parentId, tpId, slId, symbol: params.symbol, correlationId }, "Bracket order recorded in DB");
   } catch (e: any) {
     logOrder.error({ err: e, parentId, symbol: params.symbol }, "Failed to write bracket order to DB — blocking placement (fail-closed)");
+    Sentry.captureException(e, { tags: { subsystem: "ibkr" }, extra: { parentId, symbol: params.symbol } });
     throw new Error(`Bracket order DB insert failed for ${params.symbol} (parentId=${parentId}): ${e.message}`);
   }
 
@@ -421,6 +424,7 @@ export async function placeAdvancedBracket(params: AdvancedBracketParams): Promi
     logOrder.info({ parentId, tpId, slId, ocaGroup, symbol: params.symbol, correlationId }, "Advanced bracket recorded in DB");
   } catch (e: any) {
     logOrder.error({ err: e, parentId, symbol: params.symbol }, "Failed to write advanced bracket to DB — blocking placement (fail-closed)");
+    Sentry.captureException(e, { tags: { subsystem: "ibkr" }, extra: { parentId, symbol: params.symbol } });
     throw new Error(`Advanced bracket DB insert failed for ${params.symbol} (parentId=${parentId}): ${e.message}`);
   }
 
@@ -604,6 +608,7 @@ export async function modifyOrder(params: ModifyOrderParams): Promise<ModifyOrde
       }
     } catch (e: any) {
       logOrder.error({ err: e, orderId: params.orderId }, "Failed to update modified order in DB");
+      Sentry.captureException(e, { tags: { subsystem: "ibkr" }, extra: { orderId: params.orderId } });
     }
   };
 
@@ -766,6 +771,7 @@ export async function flattenAllPositions(): Promise<FlattenResult> {
       flattened.push(result);
     } catch (e: any) {
       logOrder.error({ err: e, symbol: pos.symbol, action, qty }, "Flatten order failed");
+      Sentry.captureException(e, { tags: { subsystem: "ibkr" }, extra: { symbol: pos.symbol, action, qty } });
       skipped.push(`${pos.symbol} (error: ${e.message})`);
     }
   }
