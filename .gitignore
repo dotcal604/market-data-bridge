@@ -60,6 +60,18 @@ analytics/output/
 # Temp/scratch analysis scripts
 analytics/holly_exit/scripts/_tmp_*
 
+# Stale pre-plan Benzinga scripts (will be rewritten)
+analytics/holly_exit/scripts/43_fetch_benzinga_news.py
+analytics/holly_exit/scripts/44_fetch_benzinga_ratings.py
+
+# Database backups
+data/backups/
+
+# Tray apps (local dev, not ready for repo)
+tray-app/
+tray-app-native/
+start-tray.bat
+
 # Holly export bot artifacts
 scripts/debug_screenshots/
 scripts/holly_export_progress.json
