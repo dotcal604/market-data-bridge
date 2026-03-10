@@ -1,17 +1,11 @@
 """
-Script 76 -- Benzinga News Structured Feature Lift
-===================================================
-Mines the benzinga_news.parquet for structured predictive features
-using the rich Massive.com Benzinga News API fields: channels, tags,
-body text, title, teaser, and publication timing.
+Script 76 -- Benzinga News Structured Feature Lift (v2 - Broad Dataset)
+=======================================================================
+Mines the benzinga_news_broad table (1.19M articles) for structured
+predictive features using channels, tags, body text, title, and timing.
 
-Data source: Massive.com /benzinga/v2/news endpoint (Benzinga News expansion).
-Unlike the Polygon standard news API (783K rows, basic metadata), this is
-a curated dataset of 4,846 articles with full structured data:
-  - channels: earnings, movers, price target, analyst ratings, etc.
-  - tags: why it's moving, 52-week lows, earnings scheduled, etc.
-  - body: full article HTML text
-  - tickers: explicit ticker mentions
+Data source: benzinga_news_broad DuckDB table (from script 77 broad fetch).
+1.19M articles, 19K unique tickers, 86% with body text.
 
 Features extracted (all look-ahead-free, using articles published BEFORE entry):
   - bz_article_count: Number of Benzinga articles in 48h window before entry
@@ -21,15 +15,15 @@ Features extracted (all look-ahead-free, using articles published BEFORE entry):
   - bz_has_movers: Any article with "movers" channel
   - bz_has_why_moving: Any article with "why it's moving" tag
   - bz_has_52w_low: Any article with "52-week" tag
-  - bz_channel_count: Count of unique channels across matched articles
-  - bz_tag_count: Count of unique tags across matched articles
+  - bz_channel_count: Total channels across matched articles
+  - bz_tag_count: Total tags across matched articles
   - bz_avg_body_len: Average body length (chars) of matched articles
   - bz_recency_hours: Hours between most recent article and trade entry
   - bz_title_sentiment: Simple keyword-based sentiment from titles
-    (+1 for positive words, -1 for negative words, averaged)
 
-Strategy: Load benzinga_news.parquet, explode tickers, join to trades
-via ticker + 48h time window (article published before entry_time).
+Strategy: DuckDB-native join (trades x articles within 48h window),
+aggregate features per trade in SQL, pull only final features to Python.
+Handles 1.19M articles efficiently without loading into pandas.
 
 Usage:
     python scripts/76_benzinga_structured_lift.py
@@ -42,10 +36,9 @@ import pandas as pd
 import duckdb
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from config.settings import DUCKDB_PATH, DATA_DIR
+from config.settings import DUCKDB_PATH
 
 REPORT_DIR = Path(__file__).parent.parent / "output" / "reports"
-PARQUET_PATH = DATA_DIR / "reference" / "benzinga_news.parquet"
 warnings.filterwarnings("ignore", category=FutureWarning)
 
 # Sentiment word lists (simple but effective for financial news)
@@ -79,126 +72,128 @@ def title_sentiment(title):
 
 
 def load_features(con):
-    """Load trades and compute Benzinga structured features."""
+    """Load trades and compute Benzinga structured features via DuckDB joins."""
     t0 = time.time()
 
-    # Load trades
+    # Check benzinga_news_broad table exists
+    tables = [r[0] for r in con.execute("SHOW TABLES").fetchall()]
+    if "benzinga_news_broad" not in tables:
+        print("  ERROR: benzinga_news_broad table not found")
+        print("  Run script 77_fetch_benzinga_broad.py first")
+        trades = con.execute("""
+            SELECT trade_id, symbol, strategy, direction,
+                entry_time, entry_price, holly_pnl,
+                CASE WHEN holly_pnl > 0 THEN 1 ELSE 0 END AS win
+            FROM trades
+        """).fetchdf()
+        return trades, []
+
+    # Stats
+    bz_count = con.execute("SELECT COUNT(*) FROM benzinga_news_broad").fetchone()[0]
+    print(f"  Benzinga broad articles: {bz_count:,}")
+
+    # Step 1: DuckDB-native join + aggregation (no pandas for 1.19M articles)
+    print("  Running DuckDB join (trades x articles within 48h window)...")
+    t1 = time.time()
+
+    features_df = con.execute("""
+        WITH bz_tickers AS (
+            SELECT
+                benzinga_id,
+                CAST(published AS TIMESTAMP) AS published_ts,
+                title, body, channels, tags,
+                TRIM(ticker) AS ticker
+            FROM benzinga_news_broad,
+                 UNNEST(string_split(tickers, ',')) AS t(ticker)
+            WHERE tickers IS NOT NULL
+              AND TRIM(ticker) != ''
+        ),
+        matched AS (
+            SELECT
+                t.trade_id,
+                b.benzinga_id,
+                b.title,
+                b.body,
+                b.channels,
+                b.tags,
+                EPOCH(t.entry_time - b.published_ts) / 3600.0 AS hours_before
+            FROM trades t
+            JOIN bz_tickers b ON b.ticker = t.symbol
+            WHERE b.published_ts >= t.entry_time - INTERVAL '48 hours'
+              AND b.published_ts < t.entry_time
+        )
+        SELECT
+            trade_id,
+            COUNT(*) AS bz_article_count,
+            MAX(CASE WHEN LOWER(channels) LIKE '%earnings%' THEN 1 ELSE 0 END) AS bz_has_earnings,
+            MAX(CASE WHEN LOWER(channels) LIKE '%price target%' THEN 1 ELSE 0 END) AS bz_has_price_target,
+            MAX(CASE WHEN LOWER(channels) LIKE '%analyst rat%' THEN 1 ELSE 0 END) AS bz_has_analyst_rating,
+            MAX(CASE WHEN LOWER(channels) LIKE '%movers%' THEN 1 ELSE 0 END) AS bz_has_movers,
+            MAX(CASE WHEN LOWER(tags) LIKE '%why it%' THEN 1 ELSE 0 END) AS bz_has_why_moving,
+            MAX(CASE WHEN LOWER(tags) LIKE '%52-week%' THEN 1 ELSE 0 END) AS bz_has_52w_low,
+            -- Channel/tag counts: count commas + 1 for non-empty strings, summed
+            SUM(
+                CASE WHEN LENGTH(COALESCE(channels, '')) > 0
+                THEN LENGTH(channels) - LENGTH(REPLACE(channels, ',', '')) + 1
+                ELSE 0 END
+            ) AS bz_channel_count,
+            SUM(
+                CASE WHEN LENGTH(COALESCE(tags, '')) > 0
+                THEN LENGTH(tags) - LENGTH(REPLACE(tags, ',', '')) + 1
+                ELSE 0 END
+            ) AS bz_tag_count,
+            AVG(LENGTH(COALESCE(body, ''))) AS bz_avg_body_len,
+            MIN(hours_before) AS bz_recency_hours
+        FROM matched
+        GROUP BY trade_id
+    """).fetchdf()
+    print(f"  DuckDB join complete: {len(features_df):,} trades matched ({time.time()-t1:.1f}s)")
+
+    # Step 2: Title sentiment (requires Python string processing)
+    # Pull matched titles for sentiment computation
+    print("  Computing title sentiment...")
+    t2 = time.time()
+
+    title_sentiment_df = con.execute("""
+        WITH bz_tickers AS (
+            SELECT
+                benzinga_id,
+                CAST(published AS TIMESTAMP) AS published_ts,
+                title,
+                TRIM(ticker) AS ticker
+            FROM benzinga_news_broad,
+                 UNNEST(string_split(tickers, ',')) AS t(ticker)
+            WHERE tickers IS NOT NULL
+              AND TRIM(ticker) != ''
+        )
+        SELECT
+            t.trade_id,
+            b.title
+        FROM trades t
+        JOIN bz_tickers b ON b.ticker = t.symbol
+        WHERE b.published_ts >= t.entry_time - INTERVAL '48 hours'
+          AND b.published_ts < t.entry_time
+    """).fetchdf()
+
+    if not title_sentiment_df.empty:
+        title_sentiment_df["sent"] = title_sentiment_df["title"].apply(title_sentiment)
+        sent_agg = title_sentiment_df.groupby("trade_id")["sent"].mean().reset_index()
+        sent_agg.columns = ["trade_id", "bz_title_sentiment"]
+        features_df = features_df.merge(sent_agg, on="trade_id", how="left")
+    else:
+        features_df["bz_title_sentiment"] = np.nan
+
+    print(f"  Title sentiment done ({time.time()-t2:.1f}s)")
+
+    # Step 3: Load trades and merge features
     trades = con.execute("""
         SELECT trade_id, symbol, strategy, direction,
             entry_time, entry_price, holly_pnl,
             CASE WHEN holly_pnl > 0 THEN 1 ELSE 0 END AS win
         FROM trades
     """).fetchdf()
-    trades["entry_time"] = pd.to_datetime(trades["entry_time"])
     print(f"  Trades: {len(trades):,}")
 
-    # Load Benzinga articles from parquet
-    if not PARQUET_PATH.exists():
-        print(f"  ERROR: {PARQUET_PATH} not found")
-        print("  Run script 43_fetch_benzinga_news.py first")
-        return trades, []
-
-    bz = pd.read_parquet(PARQUET_PATH)
-    print(f"  Benzinga articles: {len(bz):,}")
-    bz["published"] = pd.to_datetime(bz["published"], utc=True)
-    # Strip timezone for comparison with trades (which are tz-naive Eastern)
-    bz["published"] = bz["published"].dt.tz_localize(None)
-
-    # Explode tickers: each article can mention multiple tickers
-    bz_tickers = bz.dropna(subset=["tickers"]).copy()
-    bz_tickers["ticker_list"] = bz_tickers["tickers"].str.split(",")
-    bz_exploded = bz_tickers.explode("ticker_list")
-    bz_exploded["ticker"] = bz_exploded["ticker_list"].str.strip()
-    bz_exploded = bz_exploded.drop(columns=["ticker_list"])
-    print(f"  Exploded article-ticker pairs: {len(bz_exploded):,}")
-    print(f"  Unique tickers in articles: {bz_exploded['ticker'].nunique():,}")
-
-    # Compute per-article features (before grouping)
-    bz_exploded["body_len"] = bz_exploded["body"].fillna("").str.len()
-    bz_exploded["title_sent"] = bz_exploded["title"].apply(title_sentiment)
-
-    # Channel/tag boolean flags per article
-    channels_lower = bz_exploded["channels"].fillna("").str.lower()
-    bz_exploded["is_earnings"] = channels_lower.str.contains("earnings").astype(int)
-    bz_exploded["is_price_target"] = channels_lower.str.contains("price target").astype(int)
-    bz_exploded["is_analyst_rating"] = channels_lower.str.contains("analyst rat").astype(int)
-    bz_exploded["is_movers"] = channels_lower.str.contains("movers").astype(int)
-
-    tags_lower = bz_exploded["tags"].fillna("").str.lower()
-    bz_exploded["is_why_moving"] = tags_lower.str.contains("why it").astype(int)
-    bz_exploded["is_52w"] = tags_lower.str.contains("52-week").astype(int)
-
-    # Channel and tag counts per article
-    bz_exploded["n_channels"] = bz_exploded["channels"].fillna("").apply(
-        lambda x: len([c for c in x.split(",") if c.strip()]) if x else 0
-    )
-    bz_exploded["n_tags"] = bz_exploded["tags"].fillna("").apply(
-        lambda x: len([t for t in x.split(",") if t.strip()]) if x else 0
-    )
-
-    # For each trade, find all articles within 48h before entry
-    print("  Matching articles to trades (48h window)...")
-    t1 = time.time()
-
-    # Sort for merge_asof approach (more efficient than cartesian join)
-    # But with only 4,846 articles, a simple loop is fine
-    trade_syms = set(trades["symbol"].unique())
-    article_syms = set(bz_exploded["ticker"].unique())
-    overlap = trade_syms & article_syms
-    print(f"  Symbol overlap: {len(overlap):,} ({len(overlap)/len(trade_syms)*100:.1f}% of trade symbols)")
-
-    # Build features per trade using vectorized group operations
-    features_list = []
-    matched_count = 0
-
-    for symbol in overlap:
-        sym_trades = trades[trades["symbol"] == symbol].copy()
-        sym_articles = bz_exploded[bz_exploded["ticker"] == symbol].copy()
-
-        if sym_articles.empty:
-            continue
-
-        sym_articles = sym_articles.sort_values("published")
-
-        for _, trade in sym_trades.iterrows():
-            entry = trade["entry_time"]
-            window_start = entry - pd.Timedelta(hours=48)
-
-            # Articles in window
-            mask = (sym_articles["published"] >= window_start) & (sym_articles["published"] < entry)
-            matched = sym_articles[mask]
-
-            if matched.empty:
-                continue
-
-            matched_count += 1
-            most_recent = matched["published"].max()
-            recency_hours = (entry - most_recent).total_seconds() / 3600
-
-            features_list.append({
-                "trade_id": trade["trade_id"],
-                "bz_article_count": len(matched),
-                "bz_has_earnings": int(matched["is_earnings"].any()),
-                "bz_has_price_target": int(matched["is_price_target"].any()),
-                "bz_has_analyst_rating": int(matched["is_analyst_rating"].any()),
-                "bz_has_movers": int(matched["is_movers"].any()),
-                "bz_has_why_moving": int(matched["is_why_moving"].any()),
-                "bz_has_52w_low": int(matched["is_52w"].any()),
-                "bz_channel_count": matched["n_channels"].sum(),
-                "bz_tag_count": matched["n_tags"].sum(),
-                "bz_avg_body_len": matched["body_len"].mean(),
-                "bz_recency_hours": recency_hours,
-                "bz_title_sentiment": matched["title_sent"].mean(),
-            })
-
-    print(f"  Matched trades: {matched_count:,}/{len(trades):,} ({matched_count/len(trades)*100:.1f}%)")
-    print(f"  Matching time: {time.time()-t1:.1f}s")
-
-    if not features_list:
-        print("  No matches found!")
-        return trades, []
-
-    features_df = pd.DataFrame(features_list)
     trades = trades.merge(features_df, on="trade_id", how="left")
 
     feature_cols = [
@@ -319,7 +314,7 @@ def main():
     report.append("# Script 76 -- Benzinga News Structured Feature Lift")
     report.append("")
     report.append(f"Generated: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M')}")
-    report.append(f"Source: benzinga_news.parquet (Massive.com Benzinga News API)")
+    report.append(f"Source: benzinga_news_broad (1.19M articles, Massive.com API)")
     report.append(f"Trades: {len(trades):,}")
     coverage = trades[feature_cols[0]].notna().sum() if feature_cols else 0
     report.append(f"Coverage: {coverage:,} ({coverage/len(trades)*100:.1f}%)")
