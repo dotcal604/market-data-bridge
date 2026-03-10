@@ -1,0 +1,74 @@
+{
+  "results": [
+    {
+      "id": "bz-article-001",
+      "publisher": {
+        "name": "Benzinga",
+        "homepage_url": "https://www.benzinga.com",
+        "logo_url": "https://logo.benzinga.com/logo.png"
+      },
+      "title": "Apple Reports Record Q1 Revenue Driven By iPhone Sales",
+      "author": "John Smith",
+      "published_utc": "2024-01-28T14:30:00Z",
+      "article_url": "https://www.benzinga.com/news/apple-q1-revenue",
+      "tickers": ["AAPL"],
+      "channels": ["News", "Markets"],
+      "tags": ["Earnings", "Technology"],
+      "keywords": ["apple", "revenue", "iphone"],
+      "description": "Apple Inc. reported record first-quarter revenue of $119.6 billion, driven by strong iPhone sales.",
+      "image_url": "https://images.benzinga.com/apple-q1.jpg"
+    },
+    {
+      "id": "bz-article-002",
+      "publisher": {
+        "name": "Benzinga",
+        "homepage_url": "https://www.benzinga.com"
+      },
+      "title": "Tesla Announces Price Cuts Across Model Lineup",
+      "author": "Jane Doe",
+      "published_utc": "2024-01-28T09:15:00Z",
+      "article_url": "https://www.benzinga.com/news/tesla-price-cuts",
+      "tickers": ["TSLA"],
+      "channels": ["News", "Press Releases"],
+      "tags": ["Electric Vehicles", "Pricing"],
+      "keywords": ["tesla", "price cut", "model 3"],
+      "description": "Tesla has reduced prices across its entire vehicle lineup in a move to boost demand.",
+      "image_url": null
+    },
+    {
+      "id": "bz-article-003",
+      "publisher": {
+        "name": "Benzinga"
+      },
+      "title": "Analyst Upgrades NVIDIA To Outperform On AI Chip Demand",
+      "author": "Market Desk",
+      "published_utc": "2024-01-28T06:45:00Z",
+      "article_url": "https://www.benzinga.com/analyst-ratings/nvidia-upgrade",
+      "tickers": ["NVDA", "AMD"],
+      "channels": ["Analyst Ratings"],
+      "tags": ["Analyst", "Rating", "Technology"],
+      "keywords": ["nvidia", "analyst", "upgrade", "ai"],
+      "description": "A major Wall Street firm upgraded NVIDIA to Outperform, citing growing AI chip demand.",
+      "image_url": "https://images.benzinga.com/nvidia-ai.jpg"
+    },
+    {
+      "id": "bz-article-004",
+      "publisher": {
+        "name": "Benzinga"
+      },
+      "title": "SPY ETF Hits All-Time High As Markets Rally",
+      "author": null,
+      "published_utc": "2024-01-27T20:00:00Z",
+      "article_url": "https://www.benzinga.com/etf/spy-all-time-high",
+      "tickers": ["SPY"],
+      "channels": ["Markets", "ETFs"],
+      "tags": [],
+      "keywords": ["spy", "etf", "all-time high"],
+      "description": "The SPDR S&P 500 ETF Trust hit a new all-time high as broad market optimism continues.",
+      "image_url": null
+    }
+  ],
+  "next_url": "https://api.massive.io/v2/reference/news?cursor=abc123&apiKey=test",
+  "count": 4,
+  "status": "OK"
+}

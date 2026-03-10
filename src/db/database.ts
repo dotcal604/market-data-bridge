@@ -442,6 +442,39 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_ops_outages_created ON ops_outages(created_at);
 `);
 
+// ── Benzinga News Tables ──────────────────────────────────────────────────
+db.exec(`
+  CREATE TABLE IF NOT EXISTS benzinga_news (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    benzinga_id   TEXT NOT NULL UNIQUE,
+    title         TEXT NOT NULL,
+    published_utc TEXT NOT NULL,
+    author        TEXT,
+    article_url   TEXT,
+    description   TEXT,
+    tickers_json  TEXT NOT NULL,
+    channels_json TEXT,
+    tags_json     TEXT,
+    keywords_json TEXT,
+    publisher     TEXT,
+    image_url     TEXT,
+    last_updated  TEXT,
+    import_batch  TEXT,
+    imported_at   TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_benzinga_news_published ON benzinga_news(published_utc);
+  CREATE INDEX IF NOT EXISTS idx_benzinga_news_batch ON benzinga_news(import_batch);
+
+  CREATE TABLE IF NOT EXISTS benzinga_news_tickers (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    benzinga_id   TEXT NOT NULL,
+    symbol        TEXT NOT NULL,
+    UNIQUE(benzinga_id, symbol)
+  );
+  CREATE INDEX IF NOT EXISTS idx_bnt_symbol ON benzinga_news_tickers(symbol);
+  CREATE INDEX IF NOT EXISTS idx_bnt_benzinga_id ON benzinga_news_tickers(benzinga_id);
+`);
+
 // ── Column Migrations (safe for existing DBs — silently ignored if column exists) ──
 
 function addColumnIfMissing(table: string, column: string, type: string): void {
@@ -689,6 +722,46 @@ pruneInbox: db.prepare(`DELETE FROM inbox WHERE created_at < datetime('now', '-'
       SUM(tool_calls) as total_tool_calls
     FROM mcp_sessions
   `),
+
+  // Benzinga News
+  upsertBenzingaNews: db.prepare(`
+    INSERT INTO benzinga_news (benzinga_id, title, published_utc, author, article_url, description, tickers_json, channels_json, tags_json, keywords_json, publisher, image_url, last_updated, import_batch)
+    VALUES (@benzinga_id, @title, @published_utc, @author, @article_url, @description, @tickers_json, @channels_json, @tags_json, @keywords_json, @publisher, @image_url, @last_updated, @import_batch)
+    ON CONFLICT(benzinga_id) DO UPDATE SET
+      title = excluded.title,
+      published_utc = excluded.published_utc,
+      author = excluded.author,
+      article_url = excluded.article_url,
+      description = excluded.description,
+      tickers_json = excluded.tickers_json,
+      channels_json = excluded.channels_json,
+      tags_json = excluded.tags_json,
+      keywords_json = excluded.keywords_json,
+      publisher = excluded.publisher,
+      image_url = excluded.image_url,
+      last_updated = excluded.last_updated,
+      import_batch = excluded.import_batch,
+      imported_at = datetime('now')
+  `),
+  insertBenzingaNewsTicker: db.prepare(`
+    INSERT OR IGNORE INTO benzinga_news_tickers (benzinga_id, symbol)
+    VALUES (@benzinga_id, @symbol)
+  `),
+  queryBenzingaNewsByTicker: db.prepare(`
+    SELECT n.* FROM benzinga_news n
+    JOIN benzinga_news_tickers t ON t.benzinga_id = n.benzinga_id
+    WHERE t.symbol = ?
+    ORDER BY n.published_utc DESC
+    LIMIT ?
+  `),
+  queryBenzingaNewsByDateRange: db.prepare(`
+    SELECT n.* FROM benzinga_news n
+    JOIN benzinga_news_tickers t ON t.benzinga_id = n.benzinga_id
+    WHERE t.symbol = ? AND n.published_utc >= ? AND n.published_utc <= ?
+    ORDER BY n.published_utc ASC
+  `),
+  countBenzingaNews: db.prepare(`SELECT COUNT(*) as count FROM benzinga_news`),
+  getBenzingaNewsById: db.prepare(`SELECT * FROM benzinga_news WHERE benzinga_id = ?`),
 
   // Analytics Jobs
   insertAnalyticsJob: db.prepare(`
@@ -2325,6 +2398,102 @@ export function queryAnalyticsJobs(limit: number = 50): AnalyticsJobRow[] {
 
 export function getAnalyticsJobById(id: number): AnalyticsJobRow | undefined {
   return stmts.getAnalyticsJobById.get(id) as AnalyticsJobRow | undefined;
+}
+
+// ── Benzinga News DB Helpers ────────────────────────────────────────────
+
+export interface BenzingaNewsRow {
+  id: number;
+  benzinga_id: string;
+  title: string;
+  published_utc: string;
+  author: string | null;
+  article_url: string | null;
+  description: string | null;
+  tickers_json: string;
+  channels_json: string | null;
+  tags_json: string | null;
+  keywords_json: string | null;
+  publisher: string | null;
+  image_url: string | null;
+  last_updated: string | null;
+  import_batch: string | null;
+  imported_at: string;
+}
+
+export function upsertBenzingaArticle(data: {
+  benzinga_id: string;
+  title: string;
+  published_utc: string;
+  author?: string | null;
+  article_url?: string | null;
+  description?: string | null;
+  tickers: string[];
+  channels?: string[] | null;
+  tags?: string[] | null;
+  keywords?: string[] | null;
+  publisher?: string | null;
+  image_url?: string | null;
+  last_updated?: string | null;
+  import_batch?: string | null;
+}): void {
+  stmts.upsertBenzingaNews.run({
+    benzinga_id: data.benzinga_id,
+    title: data.title,
+    published_utc: data.published_utc,
+    author: data.author ?? null,
+    article_url: data.article_url ?? null,
+    description: data.description ?? null,
+    tickers_json: JSON.stringify(data.tickers),
+    channels_json: data.channels ? JSON.stringify(data.channels) : null,
+    tags_json: data.tags ? JSON.stringify(data.tags) : null,
+    keywords_json: data.keywords ? JSON.stringify(data.keywords) : null,
+    publisher: data.publisher ?? null,
+    image_url: data.image_url ?? null,
+    last_updated: data.last_updated ?? null,
+    import_batch: data.import_batch ?? null,
+  });
+
+  // Populate ticker junction table
+  for (const symbol of data.tickers) {
+    stmts.insertBenzingaNewsTicker.run({
+      benzinga_id: data.benzinga_id,
+      symbol,
+    });
+  }
+}
+
+export function upsertBenzingaArticleBatch(
+  articles: Parameters<typeof upsertBenzingaArticle>[0][]
+): number {
+  const tx = db.transaction(() => {
+    for (const article of articles) {
+      upsertBenzingaArticle(article);
+    }
+    return articles.length;
+  });
+  return tx();
+}
+
+export function queryBenzingaNewsByTicker(symbol: string, limit: number = 100): BenzingaNewsRow[] {
+  return stmts.queryBenzingaNewsByTicker.all(symbol, limit) as BenzingaNewsRow[];
+}
+
+export function queryBenzingaNewsByDateRange(
+  symbol: string,
+  startUtc: string,
+  endUtc: string
+): BenzingaNewsRow[] {
+  return stmts.queryBenzingaNewsByDateRange.all(symbol, startUtc, endUtc) as BenzingaNewsRow[];
+}
+
+export function countBenzingaNews(): number {
+  const row = stmts.countBenzingaNews.get() as { count: number };
+  return row.count;
+}
+
+export function getBenzingaNewsById(benzingaId: string): BenzingaNewsRow | undefined {
+  return stmts.getBenzingaNewsById.get(benzingaId) as BenzingaNewsRow | undefined;
 }
 
 /**
