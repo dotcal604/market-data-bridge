@@ -236,6 +236,23 @@
 - **Copilot CLI prompts provided** for F10, F12, F13, F14, F18, test coverage, repo quality scan
 - Net audit status: 2 false positives closed, 1 already fixed, 2 fixed this session, ~25 remain
 
+## 2026-03-10 — cloud — IBKR Benzinga removal + Catalyst Leakage framework synthesis
+
+- **Removed IBKR Benzinga integration** (286 lines, 7 files):
+  - 3 MCP tools (`get_benzinga_news`, `get_benzinga_article`, `get_benzinga_providers`)
+  - 3 REST routes (`/api/news/benzinga/{providers,headlines,article}`)
+  - Benzinga convenience functions from `src/ibkr/news.ts` (kept `buildNewsDateRange`)
+  - Tests, mocks, CLAUDE.md and MEMORY.md references cleaned
+  - Rationale: IBKR is execution layer not signal layer; only covers Dec 2025–Mar 2026 (103 symbols); partial fills ≠ signals; dual trade_id namespace not justified
+- **Catalyst Leakage Analysis framework synthesized and committed to MEMORY.md:**
+  - Phase 0: use existing holly_analytics fields before building Benzinga pipeline
+  - Ablation table (PF All → ex-Earnings → ex-All-News → No-News)
+  - 4 archetypes, CLS z-score with N≥30 guard, 5 non-overlapping time windows
+  - Primary catalyst hierarchy (simple, no regex), matched controls deferred to Phase 2
+  - Live filter table as required output for Holly alert gating
+  - Massive.com Benzinga News v2 API as data source (Holly trades only)
+- Branch: `claude/plan-benzinga-scrape-GNkBQ`
+
 ## 2026-03-07 21:00 — desktop — Polygon minute flat files + MEMORY update
 
 - Verified minute flat files already downloaded from prior session

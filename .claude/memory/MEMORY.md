@@ -109,6 +109,19 @@ NEVER set IBKR_CLIENT_ID in .env — causes collision for all MCP clients.
 - PBI rewired: `powerbi/data-prep.pq` now reads Silver Parquet (was holly_analytics.xlsx)
 - `13_export_analytics.py` deprecated with runtime DeprecationWarning → use build_silver.py
 
+### Catalyst Leakage Analysis Framework (Planned)
+- **Goal:** Measure how much of Holly's edge is borrowed from catalysts/news vs true technical strength
+- **Phase 0 (immediate):** Use existing holly_analytics fields (`is_earnings_day`, `news_has_institutional`, `news_volume_bucket`) for preliminary leakage table — validates whether leakage is large enough to justify Massive/Benzinga build
+- **Ablation table:** PF All → PF ex-Earnings → PF ex-All-News → PF No-News
+- **Four archetypes:** True Technicals, Catalyst Amplifiers, Catalyst Parasites, News-Reversal Traps
+- **Catalyst Leakage Score (CLS):** z-score blended, minimum N≥30 guard (else `insufficient_sample`)
+- **Time windows (non-overlapping):** prev_afterhours (4–8pm), overnight (8pm–4am), premarket (4–9:30am), open_drive (9:30–10am), intraday_near (10am→entry)
+- **Primary catalyst hierarchy:** is_earnings_day+has_article → `earnings` > bz_institutional_tag → `analyst_or_institutional` > has_article_24h → `general_news` > else → `no_news`
+- **MVP scope:** No matched controls (deferred to Phase 2 — needs float/mcap/sector). No Benzinga taxonomy trust (use hierarchy above).
+- **Required output:** Live filter table (strategy_name | catalyst_required | min_catalyst_strength | confidence) for Holly alert gating
+- **Data source:** Massive.com Benzinga News v2 API (replaces IBKR Benzinga — removed 2026-03-10)
+- **IBKR Benzinga removed:** Only covered Dec 2025–Mar 2026 (103 symbols), partial fills not signals, dual trade_id namespace complexity not justified
+
 ### Sizing Simulation (30_sizing_simulation.py)
 - 3 engines: baseline (100 shares), fixed_notional, hybrid_risk_cap
 - 36 scenarios, 28,875 trades, 1M+ output rows
