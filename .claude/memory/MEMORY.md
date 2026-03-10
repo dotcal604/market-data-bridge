@@ -92,12 +92,6 @@ NEVER set IBKR_CLIENT_ID in .env — causes collision for all MCP clients.
 - **Minute flat files:** 1,047 files, 20.78 GB on disk (2022-01-03 → 2026-03-06), NOT in DuckDB (too large, query .csv.gz directly)
 - 5-year plan window: currently 2022–2026 accessible, 2003–2021 = 403 Forbidden
 
-### Benzinga News Integration
-- 3 new MCP tools: `get_benzinga_news`, `get_benzinga_article`, `get_benzinga_providers`
-- 3 new REST endpoints: `/api/news/benzinga/providers`, `/api/news/benzinga/headlines/:symbol`, `/api/news/benzinga/article/:articleId`
-- Auto-detects provider code from IBKR subscription, caches for session
-- Smart defaults: 24h lookback, `buildNewsDateRange()` helper
-
 ### Silver Layer Normalization (Extended)
 - `build_silver.py` now produces **238 columns** (up from 224)
 - Dual-track: vendor_R (from holly_pnl) vs price_exit_R (from entry/exit math)

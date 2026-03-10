@@ -27,7 +27,7 @@ import { getContractDetails } from "../ibkr/contracts.js";
 import { getIBKRQuote, getHistoricalTicks } from "../ibkr/marketdata.js";
 import {
   reqHistoricalNews, reqNewsArticle, reqNewsBulletins, reqNewsProviders,
-  reqBenzingaNews, reqBenzingaArticle, detectBenzingaProvider, buildNewsDateRange,
+  buildNewsDateRange,
 } from "../ibkr/news.js";
 import {
   subscribeRealTimeBars, unsubscribeRealTimeBars, getRealTimeBars,
@@ -621,98 +621,6 @@ export function createMcpServer(opts?: { readonly?: boolean }): McpServer {
     async () => ibkrTool("get_news_bulletins", async () => {
       const bulletins = await reqNewsBulletins();
       return { count: bulletins.length, bulletins };
-    })
-  );
-
-  // =====================================================================
-  // BENZINGA NEWS (src/ibkr/news.ts — convenience wrappers)
-  // =====================================================================
-
-  // --- Tool: get_benzinga_news (IBKR — requires TWS/Gateway + Benzinga subscription) ---
-  server.tool(
-    "get_benzinga_news",
-    "Get Benzinga news headlines for a stock symbol via IBKR. Auto-detects provider code. " +
-    "Defaults to last 24 hours if no date range specified. Requires TWS/Gateway + Benzinga subscription.",
-    {
-      symbol: z.string().describe("Ticker symbol, e.g. AAPL"),
-      hoursBack: z.number().optional().describe("Hours of history to fetch (default: 24, max: 720)"),
-      startDateTime: z.string().optional().describe("Override start time (YYYYMMDD-HH:mm:ss). Ignored if hoursBack is set."),
-      endDateTime: z.string().optional().describe("Override end time (YYYYMMDD-HH:mm:ss). Ignored if hoursBack is set."),
-      secType: z.string().optional().describe("Security type (default STK)"),
-      exchange: z.string().optional().describe("Exchange (default SMART)"),
-      currency: z.string().optional().describe("Currency (default USD)"),
-    },
-    async ({ symbol, hoursBack, startDateTime, endDateTime, secType, exchange, currency }) => ibkrTool(
-      "get_benzinga_news",
-      async () => {
-        const [contract] = await getContractDetails({ symbol, secType, exchange, currency });
-        if (!contract) throw new Error(`No contract found for symbol ${symbol}`);
-
-        // Use hoursBack if provided, otherwise explicit dates, otherwise default 24h
-        let start: string;
-        let end: string;
-        if (hoursBack !== undefined) {
-          const range = buildNewsDateRange(Math.min(hoursBack, 720));
-          start = range.startDateTime;
-          end = range.endDateTime;
-        } else if (startDateTime && endDateTime) {
-          start = startDateTime;
-          end = endDateTime;
-        } else {
-          const range = buildNewsDateRange(24);
-          start = range.startDateTime;
-          end = range.endDateTime;
-        }
-
-        const headlines = await reqBenzingaNews(contract.conId, start, end);
-        return {
-          symbol: symbol.toUpperCase(),
-          conId: contract.conId,
-          source: "Benzinga (via IBKR)",
-          dateRange: { start, end },
-          count: headlines.length,
-          headlines,
-        };
-      },
-      { symbol, hoursBack, startDateTime, endDateTime, secType, exchange, currency },
-    )
-  );
-
-  // --- Tool: get_benzinga_article (IBKR — requires TWS/Gateway + Benzinga subscription) ---
-  server.tool(
-    "get_benzinga_article",
-    "Get full text of a Benzinga article by article ID. Auto-detects Benzinga provider code. " +
-    "Use article IDs from get_benzinga_news results.",
-    {
-      articleId: z.string().describe("Benzinga article ID from get_benzinga_news results"),
-    },
-    async ({ articleId }) => ibkrTool(
-      "get_benzinga_article",
-      async () => {
-        const article = await reqBenzingaArticle(articleId);
-        return { source: "Benzinga (via IBKR)", ...article };
-      },
-      { articleId },
-    )
-  );
-
-  // --- Tool: get_benzinga_providers (IBKR — requires TWS/Gateway) ---
-  server.tool(
-    "get_benzinga_providers",
-    "Check if Benzinga is available in your IBKR news subscription. Returns the detected provider code or lists all available providers.",
-    {},
-    async () => ibkrTool("get_benzinga_providers", async () => {
-      try {
-        const code = await detectBenzingaProvider();
-        return { benzingaAvailable: true, providerCode: code, message: `Benzinga active with code '${code}'` };
-      } catch (e: any) {
-        const providers = await reqNewsProviders();
-        return {
-          benzingaAvailable: false,
-          message: e.message,
-          availableProviders: providers,
-        };
-      }
     })
   );
 
