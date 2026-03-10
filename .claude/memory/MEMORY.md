@@ -119,8 +119,17 @@ NEVER set IBKR_CLIENT_ID in .env — causes collision for all MCP clients.
 - **Primary catalyst hierarchy:** is_earnings_day+has_article → `earnings` > bz_institutional_tag → `analyst_or_institutional` > has_article_24h → `general_news` > else → `no_news`
 - **MVP scope:** No matched controls (deferred to Phase 2 — needs float/mcap/sector). No Benzinga taxonomy trust (use hierarchy above).
 - **Required output:** Live filter table (strategy_name | catalyst_required | min_catalyst_strength | confidence) for Holly alert gating
-- **Data source:** Massive.com Benzinga News v2 API (replaces IBKR Benzinga — removed 2026-03-10)
-- **IBKR Benzinga removed:** Only covered Dec 2025–Mar 2026 (103 symbols), partial fills not signals, dual trade_id namespace complexity not justified
+- **Data migration policy (IBKR → Massive cutover):**
+  - **Preserve** all historical IBKR Benzinga data — legitimate lineage, do not delete
+  - **Freeze** IBKR Benzinga News ingestion at cutover timestamp (2026-03-10)
+  - **Forward source:** Massive.com Benzinga News v2 API (real-time since Oct 2025, v1 sunset Dec 2025)
+  - **Dual raw tables:** `benzinga_news_raw_ibkr` + `benzinga_news_raw_massive`
+  - **Canonical union view** on top with: `source_system`, `provider`, `vendor_article_id`, `published_at`, `received_at`, `headline`, `body`, `symbols`, `raw_json`, `is_backfill`, `cutover_version`
+  - **Dedupe:** vendor article ID when available, else normalized headline + primary ticker + close timestamp
+  - **Overlap window:** short dual-ingest period around cutover, dedupe before canonical load
+  - **Scope:** Benzinga News only. Do NOT expand to Massive Ratings/Earnings/Insights unless actually subscribed and needed.
+  - **IBKR stays** for broker-native: executions, account activity, trade confirmations, brokerage plumbing
+- **IBKR Benzinga MCP/REST removed (2026-03-10):** code removed (3 tools, 3 routes, 286 lines) — IBKR only covered Dec 2025–Mar 2026 (103 symbols), partial fills not signals, dual trade_id namespace not justified for Holly pipeline
 
 ### Sizing Simulation (30_sizing_simulation.py)
 - 3 engines: baseline (100 shares), fixed_notional, hybrid_risk_cap
