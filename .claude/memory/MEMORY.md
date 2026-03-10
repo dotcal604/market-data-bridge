@@ -92,12 +92,6 @@ NEVER set IBKR_CLIENT_ID in .env — causes collision for all MCP clients.
 - **Minute flat files:** 1,047 files, 20.78 GB on disk (2022-01-03 → 2026-03-06), NOT in DuckDB (too large, query .csv.gz directly)
 - 5-year plan window: currently 2022–2026 accessible, 2003–2021 = 403 Forbidden
 
-### Benzinga News Integration
-- 3 new MCP tools: `get_benzinga_news`, `get_benzinga_article`, `get_benzinga_providers`
-- 3 new REST endpoints: `/api/news/benzinga/providers`, `/api/news/benzinga/headlines/:symbol`, `/api/news/benzinga/article/:articleId`
-- Auto-detects provider code from IBKR subscription, caches for session
-- Smart defaults: 24h lookback, `buildNewsDateRange()` helper
-
 ### Silver Layer Normalization (Extended)
 - `build_silver.py` now produces **238 columns** (up from 224)
 - Dual-track: vendor_R (from holly_pnl) vs price_exit_R (from entry/exit math)
@@ -114,6 +108,28 @@ NEVER set IBKR_CLIENT_ID in .env — causes collision for all MCP clients.
 - **Earnings proximity (1 col):** is_earnings_day — needs full yfinance fetch for coverage (only 10 symbols cached)
 - PBI rewired: `powerbi/data-prep.pq` now reads Silver Parquet (was holly_analytics.xlsx)
 - `13_export_analytics.py` deprecated with runtime DeprecationWarning → use build_silver.py
+
+### Catalyst Leakage Analysis Framework (Planned)
+- **Goal:** Measure how much of Holly's edge is borrowed from catalysts/news vs true technical strength
+- **Phase 0 (immediate):** Use existing holly_analytics fields (`is_earnings_day`, `news_has_institutional`, `news_volume_bucket`) for preliminary leakage table — validates whether leakage is large enough to justify Massive/Benzinga build
+- **Ablation table:** PF All → PF ex-Earnings → PF ex-All-News → PF No-News
+- **Four archetypes:** True Technicals, Catalyst Amplifiers, Catalyst Parasites, News-Reversal Traps
+- **Catalyst Leakage Score (CLS):** z-score blended, minimum N≥30 guard (else `insufficient_sample`)
+- **Time windows (non-overlapping):** prev_afterhours (4–8pm), overnight (8pm–4am), premarket (4–9:30am), open_drive (9:30–10am), intraday_near (10am→entry)
+- **Primary catalyst hierarchy:** is_earnings_day+has_article → `earnings` > bz_institutional_tag → `analyst_or_institutional` > has_article_24h → `general_news` > else → `no_news`
+- **MVP scope:** No matched controls (deferred to Phase 2 — needs float/mcap/sector). No Benzinga taxonomy trust (use hierarchy above).
+- **Required output:** Live filter table (strategy_name | catalyst_required | min_catalyst_strength | confidence) for Holly alert gating
+- **Data migration policy (IBKR → Massive cutover):**
+  - **Preserve** all historical IBKR Benzinga data — legitimate lineage, do not delete
+  - **Freeze** IBKR Benzinga News ingestion at cutover timestamp (2026-03-10)
+  - **Forward source:** Massive.com Benzinga News v2 API (real-time since Oct 2025, v1 sunset Dec 2025)
+  - **Dual raw tables:** `benzinga_news_raw_ibkr` + `benzinga_news_raw_massive`
+  - **Canonical union view** on top with: `source_system`, `provider`, `vendor_article_id`, `published_at`, `received_at`, `headline`, `body`, `symbols`, `raw_json`, `is_backfill`, `cutover_version`
+  - **Dedupe:** vendor article ID when available, else normalized headline + primary ticker + close timestamp
+  - **Overlap window:** short dual-ingest period around cutover, dedupe before canonical load
+  - **Scope:** Benzinga News only. Do NOT expand to Massive Ratings/Earnings/Insights unless actually subscribed and needed.
+  - **IBKR stays** for broker-native: executions, account activity, trade confirmations, brokerage plumbing
+- **IBKR Benzinga MCP/REST removed (2026-03-10):** code removed (3 tools, 3 routes, 286 lines) — IBKR only covered Dec 2025–Mar 2026 (103 symbols), partial fills not signals, dual trade_id namespace not justified for Holly pipeline
 
 ### Sizing Simulation (30_sizing_simulation.py)
 - 3 engines: baseline (100 shares), fixed_notional, hybrid_risk_cap

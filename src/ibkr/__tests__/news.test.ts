@@ -24,7 +24,6 @@ import {
   reqNewsArticle,
   reqHistoricalNews,
   reqNewsBulletins,
-  detectBenzingaProvider,
   buildNewsDateRange,
 } from "../news.js";
 
@@ -109,23 +108,6 @@ describe("news.ts", () => {
       mockIBInstance.emit(EventName.error, new Error("API error"), 502);
 
       await expect(promise).rejects.toThrow("News bulletins error (502): API error");
-    });
-  });
-
-  describe("detectBenzingaProvider", () => {
-    it("detects BZ", async () => {
-      // It calls reqNewsProviders
-      const promise = detectBenzingaProvider();
-      
-      // Delay so internal promises settle
-      await vi.waitFor(() => {
-        expect(mockIBInstance.reqNewsProviders).toHaveBeenCalled();
-      });
-
-      mockIBInstance.emit(EventName.newsProviders, [{ providerCode: "BZ" }]);
-      
-      const res = await promise;
-      expect(res).toBe("BZ");
     });
   });
 

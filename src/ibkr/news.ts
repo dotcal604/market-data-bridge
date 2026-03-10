@@ -7,14 +7,6 @@ const log = logger.child({ subsystem: "ibkr-news" });
 const REQUEST_TIMEOUT_MS = 10000;
 const BULLETIN_COLLECTION_MS = 3000;
 
-/**
- * Known Benzinga provider codes for IBKR.
- * "BZ" is the standard code; "BZNY" is the Benzinga New York variant.
- * The actual available code depends on the user's IBKR subscription.
- */
-export const BENZINGA_PROVIDER_CODES = ["BZ", "BZNY"] as const;
-export const BENZINGA_DEFAULT_CODE = "BZ";
-
 export interface NewsProviderData {
   code: string;
   name: string;
@@ -270,74 +262,6 @@ export async function reqNewsBulletins(): Promise<NewsBulletinData[]> {
     log.info("Subscribing to IBKR news bulletins");
     ib.reqNewsBulletins(true);
   });
-}
-
-// =====================================================================
-// BENZINGA CONVENIENCE FUNCTIONS
-// =====================================================================
-
-/**
- * Detect which Benzinga provider code is available in the user's IBKR subscription.
- * Caches the result for the session lifetime.
- */
-let cachedBenzingaCode: string | null = null;
-
-export async function detectBenzingaProvider(): Promise<string> {
-  if (cachedBenzingaCode) return cachedBenzingaCode;
-
-  const providers = await reqNewsProviders();
-  const providerCodes = providers.map((p) => p.code.toUpperCase());
-
-  for (const code of BENZINGA_PROVIDER_CODES) {
-    if (providerCodes.includes(code)) {
-      cachedBenzingaCode = code;
-      log.info({ code }, "Benzinga provider detected");
-      return code;
-    }
-  }
-
-  // Log available providers to help debug
-  log.warn(
-    { available: providerCodes },
-    "No Benzinga provider found — check IBKR subscription"
-  );
-  throw new Error(
-    `Benzinga provider not found. Available providers: ${providers
-      .map((p) => `${p.code} (${p.name})`)
-      .join(", ")}. Ensure Benzinga is enabled in your IBKR account.`
-  );
-}
-
-/**
- * Fetch Benzinga news headlines for a contract.
- * Auto-detects the Benzinga provider code from the subscription.
- *
- * @param conId Contract ID
- * @param startDateTime Start time (YYYYMMDD-HH:mm:ss format)
- * @param endDateTime End time (YYYYMMDD-HH:mm:ss format)
- * @returns Promise resolving to Benzinga headlines
- */
-export async function reqBenzingaNews(
-  conId: number,
-  startDateTime: string,
-  endDateTime: string
-): Promise<HistoricalNewsHeadline[]> {
-  const providerCode = await detectBenzingaProvider();
-  return reqHistoricalNews(conId, providerCode, startDateTime, endDateTime);
-}
-
-/**
- * Fetch a Benzinga article by article ID.
- * Auto-detects the Benzinga provider code from the subscription.
- *
- * @param articleId Article ID from Benzinga headlines
- * @returns Promise resolving to article data
- */
-export async function reqBenzingaArticle(
-  articleId: string
-): Promise<NewsArticleData> {
-  const providerCode = await detectBenzingaProvider();
-  return reqNewsArticle(providerCode, articleId);
 }
 
 /**
