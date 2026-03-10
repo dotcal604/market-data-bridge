@@ -44,7 +44,7 @@ def load_unique_symbols() -> list[str]:
     db = duckdb.connect(str(DUCKDB_PATH), read_only=True)
     rows = db.execute("""
         SELECT DISTINCT symbol FROM trades
-        WHERE CAST(entry_time AS DATE) >= '2021-01-01'
+        WHERE CAST(entry_time AS DATE) >= '2016-01-01'
         ORDER BY symbol
     """).fetchall()
     db.close()

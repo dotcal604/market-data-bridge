@@ -58,7 +58,7 @@ def load_trade_manifest(since: str | None = None) -> list[tuple[str, date]]:
     """Load unique (symbol, trade_date) pairs from DuckDB."""
     import duckdb
     db = duckdb.connect(str(DUCKDB_PATH), read_only=True)
-    where = "WHERE CAST(entry_time AS DATE) >= '2021-01-01'"
+    where = "WHERE CAST(entry_time AS DATE) >= '2016-01-01'"
     if since:
         where = f"WHERE CAST(entry_time AS DATE) >= '{since}'"
     rows = db.execute(f"""

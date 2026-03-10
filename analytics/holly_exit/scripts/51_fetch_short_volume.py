@@ -63,7 +63,7 @@ def load_trade_date_manifest(since: str | None = None) -> list[tuple[date, list[
 
     db = duckdb.connect(str(DUCKDB_PATH), read_only=True)
 
-    where = "WHERE CAST(entry_time AS DATE) >= '2021-01-01'"
+    where = "WHERE CAST(entry_time AS DATE) >= '2016-01-01'"
     if since:
         where = f"WHERE CAST(entry_time AS DATE) >= '{since}'"
 
