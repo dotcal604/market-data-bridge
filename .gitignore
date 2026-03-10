@@ -60,8 +60,7 @@ analytics/output/
 # Temp/scratch analysis scripts
 analytics/holly_exit/scripts/_tmp_*
 
-# Stale pre-plan Benzinga scripts (will be rewritten)
-analytics/holly_exit/scripts/43_fetch_benzinga_news.py
+# Stale pre-plan Benzinga ratings script (not yet rewritten)
 analytics/holly_exit/scripts/44_fetch_benzinga_ratings.py
 
 # Database backups
