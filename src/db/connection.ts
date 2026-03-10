@@ -490,6 +490,13 @@ addColumnIfMissing("risk_config", "updated_at", "TEXT NOT NULL DEFAULT (datetime
 addColumnIfMissing("collab_messages", "type", "TEXT NOT NULL DEFAULT 'info'");
 addColumnIfMissing("collab_messages", "metadata", "TEXT");
 
+// v8: Massive.com analyst ratings + corporate guidance features on evaluations
+addColumnIfMissing("evaluations", "analyst_rating_momentum", "REAL");
+addColumnIfMissing("evaluations", "analyst_avg_pt_upside_pct", "REAL");
+addColumnIfMissing("evaluations", "analyst_consensus", "TEXT");
+addColumnIfMissing("evaluations", "guidance_net_direction", "REAL");
+addColumnIfMissing("evaluations", "guidance_latest_direction", "TEXT");
+
 function ensureRiskConfigDefaults(): void {
   const upsert = db.prepare(`
     INSERT INTO risk_config (param, value, source)

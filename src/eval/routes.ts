@@ -1033,5 +1033,10 @@ export function extractFeatureCols(f: FeatureVector): Record<string, unknown> {
     market_alignment: f.market_alignment,
     time_of_day: f.time_of_day,
     minutes_since_open: f.minutes_since_open,
+    analyst_rating_momentum: f.analyst_rating_momentum,
+    analyst_avg_pt_upside_pct: f.analyst_avg_pt_upside_pct,
+    analyst_consensus: f.analyst_consensus,
+    guidance_net_direction: f.guidance_net_direction,
+    guidance_latest_direction: f.guidance_latest_direction,
   };
 }

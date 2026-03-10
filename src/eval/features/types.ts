@@ -32,6 +32,12 @@ export interface FeatureVector {
   market_alignment: "aligned_bull" | "aligned_bear" | "mixed" | "neutral";
   time_of_day: "premarket" | "open_drive" | "morning" | "midday" | "power_hour" | "close";
   minutes_since_open: number;
+  // Massive.com enrichment (analyst ratings + guidance)
+  analyst_rating_momentum: number;
+  analyst_avg_pt_upside_pct: number | null;
+  analyst_consensus: "bullish" | "neutral" | "bearish" | "none";
+  guidance_net_direction: number;
+  guidance_latest_direction: string | null;
   data_source: "ibkr" | "yahoo";
   bridge_latency_ms: number;
 }

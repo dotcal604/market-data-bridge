@@ -1,4 +1,5 @@
 import { getQuote, getHistoricalBars, getStockDetails } from "../../providers/yahoo.js";
+import { getAnalystRatings, getGuidanceChanges } from "../../providers/massive.js";
 import { withTimeout } from "../retry.js";
 import type { FeatureVector } from "./types.js";
 import { computeRVOL } from "./rvol.js";
@@ -39,12 +40,14 @@ export async function computeFeatures(
   const sym = symbol.toUpperCase();
 
   // Parallel data fetches — direct provider calls, no HTTP hop
-  const [quote, dailyBars, intradayBars, details] = await withTimeout(
+  const [quote, dailyBars, intradayBars, details, analystData, guidanceData] = await withTimeout(
     Promise.all([
       getQuote(sym),
       getHistoricalBars(sym, "1mo", "1d"),
       getHistoricalBars(sym, "1d", "5m"),
       getStockDetails(sym).catch(() => null),
+      getAnalystRatings(sym, 30, undefined).catch(() => null),
+      getGuidanceChanges(sym).catch(() => null),
     ]),
     15_000,
     `Feature data fetch for ${sym}`,
@@ -85,6 +88,15 @@ export async function computeFeatures(
   const tick_velocity = tickData?.velocity ?? null;
   const tick_acceleration = tickData?.acceleration ?? null;
 
+  // Massive.com enrichment — compute PT upside from parallel-fetched analyst data
+  const analyst_rating_momentum = analystData?.momentum ?? 0;
+  const analyst_avg_pt_upside_pct = analystData?.avg_pt && last > 0
+    ? Math.round(((analystData.avg_pt - last) / last) * 10000) / 100
+    : analystData?.pt_upside_pct ?? null;
+  const analyst_consensus = analystData?.consensus ?? "none";
+  const guidance_net_direction = guidanceData?.net_direction ?? 0;
+  const guidance_latest_direction = guidanceData?.latest_direction ?? null;
+
   const marketCtx = await computeMarketAlignment(direction);
 
   const time_of_day = classifyTimeOfDay(now);
@@ -121,6 +133,11 @@ export async function computeFeatures(
     market_alignment: marketCtx.market_alignment,
     time_of_day,
     minutes_since_open,
+    analyst_rating_momentum,
+    analyst_avg_pt_upside_pct,
+    analyst_consensus,
+    guidance_net_direction,
+    guidance_latest_direction,
     data_source: "yahoo",
     bridge_latency_ms: latencyMs,
   };

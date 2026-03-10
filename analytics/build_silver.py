@@ -88,8 +88,29 @@ def extract_from_holly_ddb() -> pd.DataFrame:
     has_market_daily = "market_daily" in existing_tables
     has_daily_bars_flat = "daily_bars_flat" in existing_tables
     has_benzinga_news = "benzinga_news" in existing_tables
+    has_analyst_ratings = "analyst_ratings" in existing_tables
+    has_corporate_guidance = "corporate_guidance" in existing_tables
+    has_massive_daily_bars = "massive_daily_bars" in existing_tables
+    has_trade_nbbo_quotes = "trade_nbbo_quotes" in existing_tables
+    has_massive_float = "massive_float" in existing_tables
+    has_massive_short_interest = "massive_short_interest" in existing_tables
+    has_massive_short_volume = "massive_short_volume" in existing_tables
+    has_benzinga_earnings = "benzinga_earnings" in existing_tables
+    has_massive_dividends = "massive_dividends" in existing_tables
+    has_massive_splits = "massive_splits" in existing_tables
+    has_massive_ipos = "massive_ipos" in existing_tables
+    has_massive_ratios = "massive_ratios" in existing_tables
+    has_benzinga_consensus = "benzinga_consensus_ratings" in existing_tables
+    has_related_tickers = "massive_related_tickers" in existing_tables
     logger.info(f"Optional tables: etf_bars={has_etf_bars}, market_daily={has_market_daily}, "
-                f"daily_bars_flat={has_daily_bars_flat}, benzinga_news={has_benzinga_news}")
+                f"daily_bars_flat={has_daily_bars_flat}, benzinga_news={has_benzinga_news}, "
+                f"analyst_ratings={has_analyst_ratings}, corporate_guidance={has_corporate_guidance}, "
+                f"massive_daily_bars={has_massive_daily_bars}, trade_nbbo={has_trade_nbbo_quotes}, "
+                f"float={has_massive_float}, short_interest={has_massive_short_interest}, "
+                f"short_volume={has_massive_short_volume}, earnings={has_benzinga_earnings}, "
+                f"dividends={has_massive_dividends}, splits={has_massive_splits}, "
+                f"ipos={has_massive_ipos}, ratios={has_massive_ratios}, "
+                f"consensus={has_benzinga_consensus}, related={has_related_tickers}")
 
     # Build optional CTE stubs for missing tables
     spy_cte = """
@@ -265,6 +286,480 @@ def extract_from_holly_ddb() -> pd.DataFrame:
         )
     """
 
+    # ── Analyst ratings CTE (30-day lookback) ─────────────────────
+    analyst_cte = """
+        trade_analyst AS (
+            SELECT
+                t.trade_id,
+                COUNT(ar.rating_id) AS ar_rating_count_30d,
+                COUNT(CASE WHEN ar.action_type IN ('Upgrade', 'upgrade', 'Initiate', 'initiate')
+                    THEN 1 END) AS ar_upgrades_30d,
+                COUNT(CASE WHEN ar.action_type IN ('Downgrade', 'downgrade')
+                    THEN 1 END) AS ar_downgrades_30d,
+                COUNT(DISTINCT ar.firm) AS ar_distinct_firms_30d,
+                (COUNT(CASE WHEN ar.action_type IN ('Upgrade', 'upgrade', 'Initiate', 'initiate') THEN 1 END)
+                 - COUNT(CASE WHEN ar.action_type IN ('Downgrade', 'downgrade') THEN 1 END)
+                ) AS ar_momentum_30d,
+                AVG(ar.pt_current) AS ar_avg_pt,
+                ROUND(
+                    (AVG(ar.pt_current) - t.entry_price)
+                    / NULLIF(t.entry_price, 0) * 100, 2
+                ) AS ar_pt_upside_pct,
+                FIRST(ar.action_type ORDER BY CAST(ar.date AS DATE) DESC) AS ar_latest_action,
+                FIRST(ar.rating_current ORDER BY CAST(ar.date AS DATE) DESC) AS ar_latest_rating,
+                FIRST(ar.firm ORDER BY CAST(ar.date AS DATE) DESC) AS ar_latest_firm,
+                CAST(t.entry_time AS DATE) - MAX(CAST(ar.date AS DATE))
+                    AS ar_days_since_latest
+            FROM trades t
+            LEFT JOIN analyst_ratings ar
+                ON ar.ticker = t.symbol
+                AND CAST(ar.date AS DATE) BETWEEN CAST(t.entry_time AS DATE) - 30
+                    AND CAST(t.entry_time AS DATE)
+            GROUP BY t.trade_id, t.entry_time, t.entry_price
+        ),
+    """ if has_analyst_ratings else """
+        trade_analyst AS (
+            SELECT trade_id,
+                0::BIGINT AS ar_rating_count_30d,
+                0::BIGINT AS ar_upgrades_30d,
+                0::BIGINT AS ar_downgrades_30d,
+                0::BIGINT AS ar_distinct_firms_30d,
+                0::BIGINT AS ar_momentum_30d,
+                NULL::DOUBLE AS ar_avg_pt,
+                NULL::DOUBLE AS ar_pt_upside_pct,
+                NULL::VARCHAR AS ar_latest_action,
+                NULL::VARCHAR AS ar_latest_rating,
+                NULL::VARCHAR AS ar_latest_firm,
+                NULL::BIGINT AS ar_days_since_latest
+            FROM trades
+        ),
+    """
+
+    # ── Corporate guidance CTE (60-day lookback) ─────────────────
+    guidance_cte = """
+        trade_guidance AS (
+            SELECT
+                t.trade_id,
+                COUNT(cg.guidance_id) AS cg_changes_60d,
+                COUNT(CASE WHEN cg.direction = 'raised' THEN 1 END) AS cg_raised_count,
+                COUNT(CASE WHEN cg.direction = 'lowered' THEN 1 END) AS cg_lowered_count,
+                (COUNT(CASE WHEN cg.direction = 'raised' THEN 1 END)
+                 - COUNT(CASE WHEN cg.direction = 'lowered' THEN 1 END)
+                ) AS cg_net_direction,
+                FIRST(cg.direction ORDER BY CAST(cg.date AS DATE) DESC) AS cg_latest_direction,
+                FIRST(cg.guidance_type ORDER BY CAST(cg.date AS DATE) DESC) AS cg_latest_type,
+                FIRST(cg.change_pct ORDER BY CAST(cg.date AS DATE) DESC) AS cg_latest_change_pct,
+                CAST(t.entry_time AS DATE) - MAX(CAST(cg.date AS DATE))
+                    AS cg_days_since_latest
+            FROM trades t
+            LEFT JOIN corporate_guidance cg
+                ON cg.ticker = t.symbol
+                AND CAST(cg.date AS DATE) BETWEEN CAST(t.entry_time AS DATE) - 60
+                    AND CAST(t.entry_time AS DATE)
+            GROUP BY t.trade_id, t.entry_time
+        ),
+    """ if has_corporate_guidance else """
+        trade_guidance AS (
+            SELECT trade_id,
+                0::BIGINT AS cg_changes_60d,
+                0::BIGINT AS cg_raised_count,
+                0::BIGINT AS cg_lowered_count,
+                0::BIGINT AS cg_net_direction,
+                NULL::VARCHAR AS cg_latest_direction,
+                NULL::VARCHAR AS cg_latest_type,
+                NULL::DOUBLE AS cg_latest_change_pct,
+                NULL::BIGINT AS cg_days_since_latest
+            FROM trades
+        ),
+    """
+
+    # ── Massive daily bars CTE (same-day VWAP) ──────────────────
+    massive_bars_cte = """
+        trade_massive_bar AS (
+            SELECT
+                t.trade_id,
+                mdb.vwap AS massive_vwap,
+                mdb.num_trades AS massive_num_trades,
+                mdb.volume AS massive_volume,
+                ROUND((t.entry_price - mdb.vwap) / NULLIF(mdb.vwap, 0) * 100, 4)
+                    AS entry_vs_vwap_pct
+            FROM trades t
+            LEFT JOIN massive_daily_bars mdb
+                ON mdb.ticker = t.symbol
+                AND CAST(mdb.bar_date AS DATE) = CAST(t.entry_time AS DATE)
+        ),
+    """ if has_massive_daily_bars else """
+        trade_massive_bar AS (
+            SELECT trade_id,
+                NULL::DOUBLE AS massive_vwap,
+                NULL::BIGINT AS massive_num_trades,
+                NULL::BIGINT AS massive_volume,
+                NULL::DOUBLE AS entry_vs_vwap_pct
+            FROM trades
+        ),
+    """
+
+    # ── NBBO spread quality CTE (at trade entry) ──────────────────
+    nbbo_cte = """
+        trade_nbbo AS (
+            SELECT
+                t.trade_id,
+                tnq.bid AS nbbo_bid,
+                tnq.ask AS nbbo_ask,
+                tnq.spread AS nbbo_spread,
+                tnq.spread_pct AS nbbo_spread_pct,
+                tnq.midpoint AS nbbo_midpoint,
+                tnq.bid_size AS nbbo_bid_size,
+                tnq.ask_size AS nbbo_ask_size,
+                ROUND((t.entry_price - tnq.midpoint) / NULLIF(tnq.midpoint, 0) * 100, 4)
+                    AS entry_vs_midpoint_pct
+            FROM trades t
+            LEFT JOIN trade_nbbo_quotes tnq
+                ON tnq.ticker = t.symbol
+                AND tnq.entry_time = CAST(t.entry_time AS VARCHAR)
+        )
+    """ if has_trade_nbbo_quotes else """
+        trade_nbbo AS (
+            SELECT trade_id,
+                NULL::DOUBLE AS nbbo_bid,
+                NULL::DOUBLE AS nbbo_ask,
+                NULL::DOUBLE AS nbbo_spread,
+                NULL::DOUBLE AS nbbo_spread_pct,
+                NULL::DOUBLE AS nbbo_midpoint,
+                NULL::BIGINT AS nbbo_bid_size,
+                NULL::BIGINT AS nbbo_ask_size,
+                NULL::DOUBLE AS entry_vs_midpoint_pct
+            FROM trades
+        )
+    """
+
+    # ── Float data CTE (latest free float per symbol at trade time) ──
+    float_cte = """
+        trade_float AS (
+            SELECT
+                t.trade_id,
+                mf.free_float,
+                mf.free_float_percent,
+                CASE WHEN mf.free_float > 0 AND t.entry_price > 0
+                    THEN ROUND(CAST(t.shares AS DOUBLE) / mf.free_float * 100, 6)
+                    ELSE NULL
+                END AS float_rotation_pct
+            FROM trades t
+            LEFT JOIN (
+                SELECT ticker, effective_date, free_float, free_float_percent,
+                    ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY effective_date DESC) AS rn
+                FROM massive_float
+            ) mf ON mf.ticker = t.symbol AND mf.rn = 1
+        ),
+    """ if has_massive_float else """
+        trade_float AS (
+            SELECT trade_id,
+                NULL::BIGINT AS free_float,
+                NULL::DOUBLE AS free_float_percent,
+                NULL::DOUBLE AS float_rotation_pct
+            FROM trades
+        ),
+    """
+
+    # ── Short interest CTE (latest settlement before trade) ──────────
+    short_interest_cte = """
+        trade_short_interest AS (
+            SELECT
+                t.trade_id,
+                si.short_interest,
+                si.avg_daily_volume AS si_avg_daily_volume,
+                si.days_to_cover,
+                si.settlement_date AS si_settlement_date,
+                CASE WHEN si.short_interest IS NOT NULL AND mf.free_float > 0
+                    THEN ROUND(CAST(si.short_interest AS DOUBLE) / mf.free_float * 100, 2)
+                    ELSE NULL
+                END AS short_pct_float
+            FROM trades t
+            LEFT JOIN (
+                SELECT ticker, short_interest, avg_daily_volume, days_to_cover, settlement_date,
+                    ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY settlement_date DESC) AS rn
+                FROM massive_short_interest
+            ) si ON si.ticker = t.symbol AND si.rn = 1
+            LEFT JOIN (
+                SELECT ticker, free_float,
+                    ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY effective_date DESC) AS rn
+                FROM massive_float
+            ) mf ON mf.ticker = t.symbol AND mf.rn = 1
+        ),
+    """ if has_massive_short_interest else """
+        trade_short_interest AS (
+            SELECT trade_id,
+                NULL::BIGINT AS short_interest,
+                NULL::BIGINT AS si_avg_daily_volume,
+                NULL::DOUBLE AS days_to_cover,
+                NULL::VARCHAR AS si_settlement_date,
+                NULL::DOUBLE AS short_pct_float
+            FROM trades
+        ),
+    """
+
+    # ── Short volume CTE (trade-day short volume ratio) ──────────────
+    short_volume_cte = """
+        trade_short_volume AS (
+            SELECT
+                t.trade_id,
+                sv.short_volume,
+                sv.total_volume AS sv_total_volume,
+                sv.short_volume_ratio,
+                sv.exempt_volume,
+                sv.non_exempt_volume
+            FROM trades t
+            LEFT JOIN massive_short_volume sv
+                ON sv.ticker = t.symbol
+                AND sv.date = CAST(t.entry_time AS DATE)
+        ),
+    """ if has_massive_short_volume else """
+        trade_short_volume AS (
+            SELECT trade_id,
+                NULL::BIGINT AS short_volume,
+                NULL::BIGINT AS sv_total_volume,
+                NULL::DOUBLE AS short_volume_ratio,
+                NULL::BIGINT AS exempt_volume,
+                NULL::BIGINT AS non_exempt_volume
+            FROM trades
+        ),
+    """
+
+    # ── Benzinga earnings CTE (most recent earnings before trade) ────
+    earnings_cte = """
+        trade_earnings AS (
+            SELECT
+                t.trade_id,
+                be.actual_eps,
+                be.estimated_eps,
+                be.eps_surprise,
+                be.eps_surprise_percent,
+                be.actual_revenue,
+                be.estimated_revenue,
+                be.revenue_surprise_percent,
+                be.date AS earnings_report_date,
+                DATEDIFF('day', TRY_CAST(be.date AS DATE), CAST(t.entry_time AS DATE))
+                    AS days_since_earnings,
+                be.importance AS earnings_importance
+            FROM trades t
+            LEFT JOIN (
+                SELECT ticker, date, actual_eps, estimated_eps, eps_surprise,
+                    eps_surprise_percent, actual_revenue, estimated_revenue,
+                    revenue_surprise_percent, importance,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY ticker, date ORDER BY importance DESC
+                    ) AS rn
+                FROM benzinga_earnings
+                WHERE actual_eps IS NOT NULL
+            ) be ON be.ticker = t.symbol
+                AND TRY_CAST(be.date AS DATE) <= CAST(t.entry_time AS DATE)
+                AND TRY_CAST(be.date AS DATE) >= CAST(t.entry_time AS DATE) - INTERVAL 7 DAY
+                AND be.rn = 1
+        ),
+    """ if has_benzinga_earnings else """
+        trade_earnings AS (
+            SELECT trade_id,
+                NULL::DOUBLE AS actual_eps,
+                NULL::DOUBLE AS estimated_eps,
+                NULL::DOUBLE AS eps_surprise,
+                NULL::DOUBLE AS eps_surprise_percent,
+                NULL::DOUBLE AS actual_revenue,
+                NULL::DOUBLE AS estimated_revenue,
+                NULL::DOUBLE AS revenue_surprise_percent,
+                NULL::VARCHAR AS earnings_report_date,
+                NULL::INTEGER AS days_since_earnings,
+                NULL::INTEGER AS earnings_importance
+            FROM trades
+        ),
+    """
+
+    # ── Dividends CTE (nearest ex-div date relative to trade) ────────
+    dividends_cte = """
+        trade_dividends AS (
+            SELECT
+                t.trade_id,
+                md.ex_dividend_date,
+                md.cash_amount AS div_cash_amount,
+                md.frequency AS div_frequency,
+                md.distribution_type AS div_type,
+                DATEDIFF('day', TRY_CAST(md.ex_dividend_date AS DATE), CAST(t.entry_time AS DATE))
+                    AS days_since_ex_div,
+                CASE WHEN DATEDIFF('day', TRY_CAST(md.ex_dividend_date AS DATE),
+                    CAST(t.entry_time AS DATE)) BETWEEN 0 AND 5 THEN TRUE ELSE FALSE
+                END AS near_ex_div
+            FROM trades t
+            LEFT JOIN (
+                SELECT ticker, ex_dividend_date, cash_amount, frequency, distribution_type,
+                    ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY ex_dividend_date DESC) AS rn
+                FROM massive_dividends
+            ) md ON md.ticker = t.symbol
+                AND TRY_CAST(md.ex_dividend_date AS DATE) <= CAST(t.entry_time AS DATE)
+                AND md.rn = 1
+        ),
+    """ if has_massive_dividends else """
+        trade_dividends AS (
+            SELECT trade_id,
+                NULL::VARCHAR AS ex_dividend_date,
+                NULL::DOUBLE AS div_cash_amount,
+                NULL::INTEGER AS div_frequency,
+                NULL::VARCHAR AS div_type,
+                NULL::INTEGER AS days_since_ex_div,
+                FALSE AS near_ex_div
+            FROM trades
+        ),
+    """
+
+    # ── Splits CTE (nearest split relative to trade) ─────────────────
+    splits_cte = """
+        trade_splits AS (
+            SELECT
+                t.trade_id,
+                ms.execution_date AS split_date,
+                ms.split_from,
+                ms.split_to,
+                ms.adjustment_type AS split_type,
+                DATEDIFF('day', TRY_CAST(ms.execution_date AS DATE), CAST(t.entry_time AS DATE))
+                    AS days_since_split
+            FROM trades t
+            LEFT JOIN (
+                SELECT ticker, execution_date, split_from, split_to, adjustment_type,
+                    ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY execution_date DESC) AS rn
+                FROM massive_splits
+            ) ms ON ms.ticker = t.symbol
+                AND TRY_CAST(ms.execution_date AS DATE) <= CAST(t.entry_time AS DATE)
+                AND ms.rn = 1
+        ),
+    """ if has_massive_splits else """
+        trade_splits AS (
+            SELECT trade_id,
+                NULL::VARCHAR AS split_date,
+                NULL::INTEGER AS split_from,
+                NULL::INTEGER AS split_to,
+                NULL::VARCHAR AS split_type,
+                NULL::INTEGER AS days_since_split
+            FROM trades
+        ),
+    """
+
+    # ── IPO CTE (days since listing) ─────────────────────────────────
+    ipo_cte = """
+        trade_ipo AS (
+            SELECT
+                t.trade_id,
+                mi.listing_date,
+                mi.final_issue_price AS ipo_price,
+                DATEDIFF('day', TRY_CAST(mi.listing_date AS DATE), CAST(t.entry_time AS DATE))
+                    AS days_since_ipo,
+                CASE WHEN DATEDIFF('day', TRY_CAST(mi.listing_date AS DATE),
+                    CAST(t.entry_time AS DATE)) <= 90 THEN TRUE ELSE FALSE
+                END AS is_recent_ipo
+            FROM trades t
+            LEFT JOIN massive_ipos mi ON mi.ticker = t.symbol
+        ),
+    """ if has_massive_ipos else """
+        trade_ipo AS (
+            SELECT trade_id,
+                NULL::VARCHAR AS listing_date,
+                NULL::DOUBLE AS ipo_price,
+                NULL::INTEGER AS days_since_ipo,
+                FALSE AS is_recent_ipo
+            FROM trades
+        ),
+    """
+
+    # ── Financial ratios CTE (latest ratios at trade time) ───────────
+    ratios_cte = """
+        trade_ratios AS (
+            SELECT
+                t.trade_id,
+                mr.price_to_earnings,
+                mr.price_to_book,
+                mr.ev_to_ebitda,
+                mr.return_on_equity,
+                mr.return_on_assets,
+                mr.current_ratio,
+                mr.free_cash_flow
+            FROM trades t
+            LEFT JOIN (
+                SELECT ticker, price_to_earnings, price_to_book, ev_to_ebitda,
+                    return_on_equity, return_on_assets,
+                    current AS current_ratio, free_cash_flow,
+                    ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY date DESC) AS rn
+                FROM massive_ratios
+            ) mr ON mr.ticker = t.symbol AND mr.rn = 1
+        ),
+    """ if has_massive_ratios else """
+        trade_ratios AS (
+            SELECT trade_id,
+                NULL::DOUBLE AS price_to_earnings,
+                NULL::DOUBLE AS price_to_book,
+                NULL::DOUBLE AS ev_to_ebitda,
+                NULL::DOUBLE AS return_on_equity,
+                NULL::DOUBLE AS return_on_assets,
+                NULL::DOUBLE AS current_ratio,
+                NULL::DOUBLE AS free_cash_flow
+            FROM trades
+        ),
+    """
+
+    # ── Consensus ratings CTE (aggregated analyst consensus) ─────────
+    consensus_cte = """
+        trade_consensus AS (
+            SELECT
+                t.trade_id,
+                cr.consensus_rating,
+                cr.consensus_rating_value,
+                cr.strong_buy AS cr_strong_buy,
+                cr.buy AS cr_buy,
+                cr.hold AS cr_hold,
+                cr.sell AS cr_sell,
+                cr.strong_sell AS cr_strong_sell,
+                cr.consensus_pt,
+                cr.pt_high AS cr_pt_high,
+                cr.pt_low AS cr_pt_low,
+                CASE WHEN cr.consensus_pt > 0 AND t.entry_price > 0
+                    THEN ROUND((cr.consensus_pt - t.entry_price) / t.entry_price * 100, 2)
+                    ELSE NULL
+                END AS cr_pt_upside_pct
+            FROM trades t
+            LEFT JOIN benzinga_consensus_ratings cr ON cr.ticker = t.symbol
+        ),
+    """ if has_benzinga_consensus else """
+        trade_consensus AS (
+            SELECT trade_id,
+                NULL::VARCHAR AS consensus_rating,
+                NULL::DOUBLE AS consensus_rating_value,
+                NULL::INTEGER AS cr_strong_buy,
+                NULL::INTEGER AS cr_buy,
+                NULL::INTEGER AS cr_hold,
+                NULL::INTEGER AS cr_sell,
+                NULL::INTEGER AS cr_strong_sell,
+                NULL::DOUBLE AS consensus_pt,
+                NULL::DOUBLE AS cr_pt_high,
+                NULL::DOUBLE AS cr_pt_low,
+                NULL::DOUBLE AS cr_pt_upside_pct
+            FROM trades
+        ),
+    """
+
+    # ── Related tickers CTE (count of related companies) ─────────────
+    related_cte = """
+        trade_related AS (
+            SELECT
+                t.trade_id,
+                COUNT(rt.related_ticker) AS related_ticker_count
+            FROM trades t
+            LEFT JOIN massive_related_tickers rt ON rt.source_ticker = t.symbol
+            GROUP BY t.trade_id
+        )
+    """ if has_related_tickers else """
+        trade_related AS (
+            SELECT trade_id,
+                0 AS related_ticker_count
+            FROM trades
+        )
+    """
+
     df = db.execute(f"""
         WITH trade_financials AS (
             SELECT
@@ -328,7 +823,21 @@ def extract_from_holly_ddb() -> pd.DataFrame:
         {spy_cte}
         {breadth_cte}
         {daily_context_cte}
-        {benzinga_cte}
+        {benzinga_cte},
+        {analyst_cte}
+        {guidance_cte}
+        {massive_bars_cte}
+        {nbbo_cte}
+        {float_cte}
+        {short_interest_cte}
+        {short_volume_cte}
+        {earnings_cte}
+        {dividends_cte}
+        {splits_cte}
+        {ipo_cte}
+        {ratios_cte}
+        {consensus_cte}
+        {related_cte}
         SELECT
             t.trade_id,
             t.symbol,
@@ -481,6 +990,108 @@ def extract_from_holly_ddb() -> pd.DataFrame:
             tbz.bz_minutes_since_last,
             COALESCE(tbz.bz_institutional_count, 0) AS bz_institutional_count,
             tbz.bz_nearest_channels,
+            -- Analyst ratings features (30-day lookback)
+            COALESCE(tar.ar_rating_count_30d, 0) AS ar_rating_count_30d,
+            COALESCE(tar.ar_upgrades_30d, 0) AS ar_upgrades_30d,
+            COALESCE(tar.ar_downgrades_30d, 0) AS ar_downgrades_30d,
+            COALESCE(tar.ar_distinct_firms_30d, 0) AS ar_distinct_firms_30d,
+            COALESCE(tar.ar_momentum_30d, 0) AS ar_momentum_30d,
+            tar.ar_avg_pt,
+            tar.ar_pt_upside_pct,
+            tar.ar_latest_action,
+            tar.ar_latest_rating,
+            tar.ar_latest_firm,
+            tar.ar_days_since_latest,
+            -- Corporate guidance features (60-day lookback)
+            COALESCE(tcg.cg_changes_60d, 0) AS cg_changes_60d,
+            COALESCE(tcg.cg_raised_count, 0) AS cg_raised_count,
+            COALESCE(tcg.cg_lowered_count, 0) AS cg_lowered_count,
+            COALESCE(tcg.cg_net_direction, 0) AS cg_net_direction,
+            tcg.cg_latest_direction,
+            tcg.cg_latest_type,
+            tcg.cg_latest_change_pct,
+            tcg.cg_days_since_latest,
+            -- Massive daily bars (same-day VWAP)
+            tmb.massive_vwap,
+            tmb.massive_num_trades,
+            tmb.massive_volume,
+            tmb.entry_vs_vwap_pct,
+            -- NBBO spread quality at entry
+            tnbbo.nbbo_bid,
+            tnbbo.nbbo_ask,
+            tnbbo.nbbo_spread,
+            tnbbo.nbbo_spread_pct,
+            tnbbo.nbbo_midpoint,
+            tnbbo.nbbo_bid_size,
+            tnbbo.nbbo_ask_size,
+            tnbbo.entry_vs_midpoint_pct,
+            -- Float data
+            tfl.free_float,
+            tfl.free_float_percent,
+            tfl.float_rotation_pct,
+            -- Short interest
+            tsi.short_interest,
+            tsi.si_avg_daily_volume,
+            tsi.days_to_cover,
+            tsi.si_settlement_date,
+            tsi.short_pct_float,
+            -- Short volume (trade day)
+            tsv.short_volume,
+            tsv.sv_total_volume,
+            tsv.short_volume_ratio,
+            tsv.exempt_volume,
+            tsv.non_exempt_volume,
+            -- Benzinga earnings (most recent before trade)
+            tearns.actual_eps,
+            tearns.estimated_eps,
+            tearns.eps_surprise,
+            tearns.eps_surprise_percent,
+            tearns.actual_revenue,
+            tearns.estimated_revenue,
+            tearns.revenue_surprise_percent,
+            tearns.earnings_report_date,
+            tearns.days_since_earnings,
+            tearns.earnings_importance,
+            -- Dividends
+            tdiv.ex_dividend_date,
+            tdiv.div_cash_amount,
+            tdiv.div_frequency,
+            tdiv.div_type,
+            tdiv.days_since_ex_div,
+            tdiv.near_ex_div,
+            -- Splits
+            tspl.split_date,
+            tspl.split_from,
+            tspl.split_to,
+            tspl.split_type,
+            tspl.days_since_split,
+            -- IPO
+            tipo.listing_date,
+            tipo.ipo_price,
+            tipo.days_since_ipo,
+            tipo.is_recent_ipo,
+            -- Financial ratios
+            trat.price_to_earnings,
+            trat.price_to_book,
+            trat.ev_to_ebitda,
+            trat.return_on_equity,
+            trat.return_on_assets,
+            trat.current_ratio,
+            trat.free_cash_flow,
+            -- Consensus ratings
+            tcon.consensus_rating,
+            tcon.consensus_rating_value,
+            tcon.cr_strong_buy,
+            tcon.cr_buy,
+            tcon.cr_hold,
+            tcon.cr_sell,
+            tcon.cr_strong_sell,
+            tcon.consensus_pt,
+            tcon.cr_pt_high,
+            tcon.cr_pt_low,
+            tcon.cr_pt_upside_pct,
+            -- Related tickers
+            trel.related_ticker_count,
             -- Coverage flags
             CASE WHEN EXISTS (
                 SELECT 1 FROM bars b
@@ -516,6 +1127,21 @@ def extract_from_holly_ddb() -> pd.DataFrame:
         LEFT JOIN economic_event_flags ev ON ev.date = CAST(t.entry_time AS DATE)
         -- Benzinga news (aggregated by trade)
         LEFT JOIN trade_benzinga tbz ON tbz.trade_id = t.trade_id
+        -- Massive.com enrichment sources
+        LEFT JOIN trade_analyst tar ON tar.trade_id = t.trade_id
+        LEFT JOIN trade_guidance tcg ON tcg.trade_id = t.trade_id
+        LEFT JOIN trade_massive_bar tmb ON tmb.trade_id = t.trade_id
+        LEFT JOIN trade_nbbo tnbbo ON tnbbo.trade_id = t.trade_id
+        LEFT JOIN trade_float tfl ON tfl.trade_id = t.trade_id
+        LEFT JOIN trade_short_interest tsi ON tsi.trade_id = t.trade_id
+        LEFT JOIN trade_short_volume tsv ON tsv.trade_id = t.trade_id
+        LEFT JOIN trade_earnings tearns ON tearns.trade_id = t.trade_id
+        LEFT JOIN trade_dividends tdiv ON tdiv.trade_id = t.trade_id
+        LEFT JOIN trade_splits tspl ON tspl.trade_id = t.trade_id
+        LEFT JOIN trade_ipo tipo ON tipo.trade_id = t.trade_id
+        LEFT JOIN trade_ratios trat ON trat.trade_id = t.trade_id
+        LEFT JOIN trade_consensus tcon ON tcon.trade_id = t.trade_id
+        LEFT JOIN trade_related trel ON trel.trade_id = t.trade_id
         ORDER BY t.entry_time
     """).fetchdf()
 
@@ -958,6 +1584,86 @@ def transform(df: pd.DataFrame) -> pd.DataFrame:
             right=True,
         )
 
+    # ── Analyst ratings derived features ────────────────────────
+    if "ar_rating_count_30d" in df.columns:
+        df["ar_has_activity_30d"] = df["ar_rating_count_30d"] > 0
+        df["ar_consensus_direction"] = np.select(
+            [df["ar_momentum_30d"] >= 2,
+             df["ar_momentum_30d"] <= -2,
+             df["ar_momentum_30d"].between(-1, 1)],
+            ["bullish", "bearish", "neutral"],
+            default="none",
+        )
+        df["ar_pt_upside_bucket"] = pd.cut(
+            df["ar_pt_upside_pct"],
+            bins=[-float("inf"), -10, 0, 10, 25, float("inf")],
+            labels=["deep_below", "below_pt", "near_pt", "above_pt", "well_above"],
+            right=True,
+        )
+
+    # ── Guidance derived features ────────────────────────────────
+    if "cg_changes_60d" in df.columns:
+        df["cg_has_guidance_60d"] = df["cg_changes_60d"] > 0
+        df["cg_sentiment"] = np.select(
+            [df["cg_net_direction"] > 0,
+             df["cg_net_direction"] < 0,
+             df["cg_net_direction"] == 0],
+            ["positive", "negative", "neutral"],
+            default="none",
+        )
+
+    # ── Massive VWAP derived features ────────────────────────────
+    if "entry_vs_vwap_pct" in df.columns:
+        df["massive_above_vwap"] = df["entry_vs_vwap_pct"] > 0
+        df["massive_vwap_distance_bucket"] = pd.cut(
+            df["entry_vs_vwap_pct"].abs(),
+            bins=[0, 0.5, 1, 2, 5, float("inf")],
+            labels=["<0.5%", "0.5-1%", "1-2%", "2-5%", "5%+"],
+            right=True,
+        )
+
+    # ── Float / short interest derived features ────────────────
+    if "short_pct_float" in df.columns:
+        df["short_squeeze_risk"] = np.select(
+            [df["short_pct_float"] >= 20,
+             df["short_pct_float"] >= 10,
+             df["short_pct_float"] >= 5],
+            ["high", "medium", "low"],
+            default="none",
+        )
+        df["days_to_cover_bucket"] = pd.cut(
+            df["days_to_cover"],
+            bins=[0, 1, 3, 5, 10, float("inf")],
+            labels=["<1d", "1-3d", "3-5d", "5-10d", "10d+"],
+            right=True,
+        )
+
+    if "short_volume_ratio" in df.columns:
+        df["short_volume_elevated"] = df["short_volume_ratio"] > 0.5
+
+    # ── Earnings derived features ────────────────────────────────
+    if "eps_surprise_percent" in df.columns:
+        df["earnings_beat"] = df["eps_surprise_percent"] > 0
+        df["earnings_surprise_bucket"] = pd.cut(
+            df["eps_surprise_percent"],
+            bins=[-float("inf"), -10, -2, 2, 10, float("inf")],
+            labels=["big_miss", "miss", "inline", "beat", "big_beat"],
+            right=True,
+        )
+        df["traded_on_earnings"] = df["days_since_earnings"].fillna(999) <= 1
+
+    # ── Splits / IPO derived features ────────────────────────────
+    if "days_since_split" in df.columns:
+        df["recent_split"] = df["days_since_split"].fillna(999) <= 30
+
+    if "days_since_ipo" in df.columns:
+        df["ipo_age_bucket"] = pd.cut(
+            df["days_since_ipo"],
+            bins=[0, 30, 90, 365, float("inf")],
+            labels=["<30d", "30-90d", "90d-1y", "1y+"],
+            right=True,
+        )
+
     # ── Event day interaction (FOMC or NFP on trade day) ──────
     if "is_event_day" in df.columns:
         df["event_type"] = np.where(
@@ -982,6 +1688,18 @@ def transform(df: pd.DataFrame) -> pd.DataFrame:
     df["has_event_flags"] = df.get("is_event_day", pd.Series(dtype=int)).isin([1])
     df["has_benzinga"] = df.get("bz_article_count_24h", pd.Series(dtype=int)) > 0
     df["has_earnings_proximity"] = df.get("earnings_days_since", pd.Series(dtype=float)).notna()
+    df["has_analyst_ratings"] = df.get("ar_rating_count_30d", pd.Series(dtype=int)) > 0
+    df["has_guidance"] = df.get("cg_changes_60d", pd.Series(dtype=int)) > 0
+    df["has_massive_vwap"] = df.get("massive_vwap", pd.Series(dtype=float)).notna()
+    df["has_nbbo"] = df.get("nbbo_spread_pct", pd.Series(dtype=float)).notna()
+    df["has_float"] = df.get("free_float", pd.Series(dtype=float)).notna()
+    df["has_short_interest"] = df.get("short_interest", pd.Series(dtype=float)).notna()
+    df["has_short_volume"] = df.get("short_volume_ratio", pd.Series(dtype=float)).notna()
+    df["has_bz_earnings"] = df.get("actual_eps", pd.Series(dtype=float)).notna()
+    df["has_dividends"] = df.get("ex_dividend_date", pd.Series(dtype=object)).notna()
+    df["has_ratios"] = df.get("price_to_earnings", pd.Series(dtype=float)).notna()
+    df["has_consensus"] = df.get("consensus_rating", pd.Series(dtype=object)).notna()
+    df["has_related"] = df.get("related_ticker_count", pd.Series(dtype=int)) > 0
 
     # ── Rolling 20-trade trailing metrics per strategy ───────────
     df = df.sort_values(["strategy", "entry_time"])
