@@ -87,7 +87,9 @@ def extract_from_holly_ddb() -> pd.DataFrame:
     has_etf_bars = "etf_bars" in existing_tables
     has_market_daily = "market_daily" in existing_tables
     has_daily_bars_flat = "daily_bars_flat" in existing_tables
-    logger.info(f"Optional tables: etf_bars={has_etf_bars}, market_daily={has_market_daily}, daily_bars_flat={has_daily_bars_flat}")
+    has_benzinga_news = "benzinga_news" in existing_tables
+    logger.info(f"Optional tables: etf_bars={has_etf_bars}, market_daily={has_market_daily}, "
+                f"daily_bars_flat={has_daily_bars_flat}, benzinga_news={has_benzinga_news}")
 
     # Build optional CTE stubs for missing tables
     spy_cte = """
@@ -194,7 +196,7 @@ def extract_from_holly_ddb() -> pd.DataFrame:
                     WHERE ticker = 'SPY'
                     AND CAST(bar_time AS DATE) < CAST(t.entry_time AS DATE)
                 )
-        )
+        ),
     """ if has_daily_bars_flat else """
         trade_daily_context AS (
             SELECT trade_id,
@@ -204,6 +206,61 @@ def extract_from_holly_ddb() -> pd.DataFrame:
                 NULL::DOUBLE AS prior_day_low,
                 NULL::DOUBLE AS entry_gap_pct,
                 NULL::DOUBLE AS spy_prior_close
+            FROM trades
+        ),
+    """
+
+    benzinga_cte = """
+        trade_benzinga AS (
+            SELECT
+                t.trade_id,
+                COUNT(bn.benzinga_id) AS bz_article_count_24h,
+                COUNT(CASE WHEN CAST(bn.published AS TIMESTAMPTZ) >=
+                    (t.entry_time AT TIME ZONE 'America/New_York') - INTERVAL '2 hours'
+                    THEN 1 END) AS bz_article_count_2h,
+                COUNT(CASE WHEN CAST(bn.published AS TIMESTAMPTZ) >=
+                    (t.entry_time AT TIME ZONE 'America/New_York') - INTERVAL '30 minutes'
+                    THEN 1 END) AS bz_article_count_30m,
+                COUNT(CASE WHEN
+                    CAST(CAST(bn.published AS TIMESTAMPTZ) AS DATE) = CAST(t.entry_time AS DATE)
+                    AND CAST(bn.published AS TIMESTAMPTZ) <=
+                        (t.entry_time AT TIME ZONE 'America/New_York')
+                    THEN 1 END) AS bz_same_day_count,
+                EXTRACT(EPOCH FROM (
+                    (t.entry_time AT TIME ZONE 'America/New_York') -
+                    MAX(CAST(bn.published AS TIMESTAMPTZ))
+                )) / 60 AS bz_minutes_since_last,
+                COUNT(CASE WHEN
+                    bn.channels LIKE '%analyst-ratings%' OR
+                    bn.channels LIKE '%upgrades%' OR
+                    bn.channels LIKE '%downgrades%' OR
+                    bn.channels LIKE '%initiates%' OR
+                    bn.channels LIKE '%price-target%' OR
+                    bn.channels LIKE '%m-a%' OR
+                    bn.channels LIKE '%insider-trades%' OR
+                    bn.channels LIKE '%sec-filings%'
+                THEN 1 END) AS bz_institutional_count,
+                first(bn.channels ORDER BY CAST(bn.published AS TIMESTAMPTZ) DESC)
+                    AS bz_nearest_channels
+            FROM trades t
+            LEFT JOIN benzinga_news bn
+                ON ',' || bn.tickers || ',' LIKE '%,' || t.symbol || ',%'
+                AND CAST(bn.published AS TIMESTAMPTZ) <=
+                    (t.entry_time AT TIME ZONE 'America/New_York')
+                AND CAST(bn.published AS TIMESTAMPTZ) >=
+                    (t.entry_time AT TIME ZONE 'America/New_York') - INTERVAL '24 hours'
+            GROUP BY t.trade_id, t.entry_time
+        )
+    """ if has_benzinga_news else """
+        trade_benzinga AS (
+            SELECT trade_id,
+                0::BIGINT AS bz_article_count_24h,
+                0::BIGINT AS bz_article_count_2h,
+                0::BIGINT AS bz_article_count_30m,
+                0::BIGINT AS bz_same_day_count,
+                NULL::DOUBLE AS bz_minutes_since_last,
+                0::BIGINT AS bz_institutional_count,
+                NULL::VARCHAR AS bz_nearest_channels
             FROM trades
         )
     """
@@ -271,6 +328,7 @@ def extract_from_holly_ddb() -> pd.DataFrame:
         {spy_cte}
         {breadth_cte}
         {daily_context_cte}
+        {benzinga_cte}
         SELECT
             t.trade_id,
             t.symbol,
@@ -388,8 +446,15 @@ def extract_from_holly_ddb() -> pd.DataFrame:
             COALESCE(ev.is_fomc_day, 0) AS is_fomc_day,
             COALESCE(ev.is_nfp_day, 0) AS is_nfp_day,
             COALESCE(ev.is_event_day, 0) AS is_event_day,
-            -- Earnings proximity
-            ec_exact.earnings_date AS earnings_date_exact,
+            -- Earnings proximity (windowed: prev + next earnings date)
+            (SELECT MAX(ec.earnings_date) FROM earnings_calendar ec
+             WHERE ec.symbol = t.symbol
+             AND ec.earnings_date <= CAST(t.entry_time AS DATE)
+            ) AS prev_earnings_date,
+            (SELECT MIN(ec.earnings_date) FROM earnings_calendar ec
+             WHERE ec.symbol = t.symbol
+             AND ec.earnings_date > CAST(t.entry_time AS DATE)
+            ) AS next_earnings_date,
             -- SPY relative strength at entry
             ts.spy_price_at_entry,
             ts.spy_open_price,
@@ -408,6 +473,14 @@ def extract_from_holly_ddb() -> pd.DataFrame:
             tdc.prior_day_low,
             tdc.entry_gap_pct,
             tdc.spy_prior_close,
+            -- Benzinga news features
+            COALESCE(tbz.bz_article_count_24h, 0) AS bz_article_count_24h,
+            COALESCE(tbz.bz_article_count_2h, 0) AS bz_article_count_2h,
+            COALESCE(tbz.bz_article_count_30m, 0) AS bz_article_count_30m,
+            COALESCE(tbz.bz_same_day_count, 0) AS bz_same_day_count,
+            tbz.bz_minutes_since_last,
+            COALESCE(tbz.bz_institutional_count, 0) AS bz_institutional_count,
+            tbz.bz_nearest_channels,
             -- Coverage flags
             CASE WHEN EXISTS (
                 SELECT 1 FROM bars b
@@ -441,10 +514,8 @@ def extract_from_holly_ddb() -> pd.DataFrame:
         LEFT JOIN trade_daily_context tdc ON tdc.trade_id = t.trade_id
         -- Economic event flags
         LEFT JOIN economic_event_flags ev ON ev.date = CAST(t.entry_time AS DATE)
-        -- Earnings calendar (exact match on trade date)
-        LEFT JOIN earnings_calendar ec_exact
-            ON ec_exact.symbol = t.symbol
-            AND ec_exact.earnings_date = CAST(t.entry_time AS DATE)
+        -- Benzinga news (aggregated by trade)
+        LEFT JOIN trade_benzinga tbz ON tbz.trade_id = t.trade_id
         ORDER BY t.entry_time
     """).fetchdf()
 
@@ -855,11 +926,37 @@ def transform(df: pd.DataFrame) -> pd.DataFrame:
             (df["entry_price"] - df["snap_day_vwap"]) / vwap_safe * 100
         ).round(2)
 
-    # ── Earnings proximity ──────────────────────────────────────
-    if "earnings_date_exact" in df.columns:
-        df["is_earnings_day"] = df["earnings_date_exact"].notna()
+    # ── Earnings proximity (windowed) ────────────────────────────
+    entry_date = pd.to_datetime(df["entry_time"]).dt.normalize()
+    if "prev_earnings_date" in df.columns:
+        prev_earn = pd.to_datetime(df["prev_earnings_date"])
+        next_earn = pd.to_datetime(df["next_earnings_date"])
+        df["earnings_days_since"] = (entry_date - prev_earn).dt.days
+        df["earnings_days_until"] = (next_earn - entry_date).dt.days
+        df["is_earnings_day"] = df["earnings_days_since"] == 0
+        df["earnings_proximity"] = np.select(
+            [df["earnings_days_since"] == 0,
+             df["earnings_days_until"].between(1, 3),
+             df["earnings_days_since"].between(1, 3)],
+            ["earnings_day", "pre_earnings_3d", "post_earnings_3d"],
+            default="normal",
+        )
     else:
+        df["earnings_days_since"] = np.nan
+        df["earnings_days_until"] = np.nan
         df["is_earnings_day"] = False
+        df["earnings_proximity"] = "normal"
+
+    # ── Benzinga derived features ────────────────────────────────
+    if "bz_article_count_24h" in df.columns:
+        df["bz_has_article_24h"] = df["bz_article_count_24h"] > 0
+        df["bz_has_institutional_tag"] = df["bz_institutional_count"] > 0
+        df["bz_news_volume_bucket"] = pd.cut(
+            df["bz_article_count_24h"],
+            bins=[-1, 0, 2, 5, float("inf")],
+            labels=["none", "low", "medium", "high"],
+            right=True,
+        )
 
     # ── Event day interaction (FOMC or NFP on trade day) ──────
     if "is_event_day" in df.columns:
@@ -883,9 +980,8 @@ def transform(df: pd.DataFrame) -> pd.DataFrame:
     df["has_snapshot"] = df.get("snap_day_vwap", pd.Series(dtype=float)).notna()
     df["has_put_call"] = df.get("macro_put_call_equity", pd.Series(dtype=float)).notna()
     df["has_event_flags"] = df.get("is_event_day", pd.Series(dtype=int)).isin([1])
-
-    # Drop temp columns used for derivation
-    df = df.drop(columns=["earnings_date_exact"], errors="ignore")
+    df["has_benzinga"] = df.get("bz_article_count_24h", pd.Series(dtype=int)) > 0
+    df["has_earnings_proximity"] = df.get("earnings_days_since", pd.Series(dtype=float)).notna()
 
     # ── Rolling 20-trade trailing metrics per strategy ───────────
     df = df.sort_values(["strategy", "entry_time"])
@@ -1031,6 +1127,10 @@ def print_stats(df: pd.DataFrame, load_result: dict, duration_s: float) -> None:
         print(f"  On event days:     {df['has_event_flags'].sum():,}")
     if "is_earnings_day" in df.columns:
         print(f"  On earnings day:   {df['is_earnings_day'].sum():,}")
+    if "has_earnings_proximity" in df.columns:
+        print(f"  With earnings prox:{df['has_earnings_proximity'].sum():,}")
+    if "has_benzinga" in df.columns:
+        print(f"  With Benzinga 24h: {df['has_benzinga'].sum():,}")
 
     # Date range
     dates = pd.to_datetime(df["trade_date"])
