@@ -60,7 +60,7 @@ async def fetch_all_ipos(
     params = {
         "listing_date.gte": "2020-01-01",
         "limit": "10" if smoke else "1000",
-        "sort": "listing_date.desc",
+        "order": "desc",
         "apiKey": POLYGON_API_KEY,
     }
 
