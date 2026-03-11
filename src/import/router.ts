@@ -16,6 +16,7 @@ import { parseByExtension, parseTsv, parseXlsx, parseJsonl, type ParsedContent }
 import { importTraderSyncCSV } from "../tradersync/importer.js";
 import { importHollyAlerts } from "../holly/importer.js";
 import { importHollyTrades } from "../holly/trade-importer.js";
+import { importFlexContent } from "../flex/importer.js";
 import {
   importWatchlist,
   importSymbolList,
@@ -224,6 +225,10 @@ function routeStringContent(
     case "holly_trades": {
       const r = importHollyTrades(content, importId);
       return { inserted: r.imported, skipped: r.skipped, errors: r.error_samples };
+    }
+    case "ibkr_flex": {
+      const r = importFlexContent(content, importId);
+      return { inserted: r.inserted, skipped: r.skipped, errors: r.errors };
     }
     case "watchlist": {
       // CSV watchlist — use the symbol list parser

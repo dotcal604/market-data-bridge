@@ -10,6 +10,7 @@ import { checkTunnelHealth } from "./ops/tunnel-monitor.js";
 import { sampleAvailability, pruneOldSamples, SAMPLE_INTERVAL_MS } from "./ops/availability.js";
 import { runAnalyticsScript, getKnownScripts } from "./ops/analytics-runner.js";
 import { recordIncident } from "./ops/metrics.js";
+import { fetchAndImport } from "./flex/importer.js";
 import { logger } from "./logging.js";
 
 const log = logger.child({ subsystem: "scheduler" });
@@ -336,6 +337,49 @@ export function getAnalyticsSchedule() {
   }));
 }
 
+// ── IBKR Flex Report Fetch (scheduled EOD) ────────────────────────────────
+
+let flexFiredToday = "";
+let flexTimer: ReturnType<typeof setInterval> | null = null;
+const FLEX_CHECK_MS = 60 * 1000; // check every 60s
+
+async function checkFlexFetch() {
+  const flexHour = config.flex.scheduleHour;
+  if (flexHour < 0) return; // disabled
+  if (!config.flex.token || !config.flex.queryId) return; // not configured
+
+  const { hour, minute, day } = getNowET();
+  if (day === 0 || day === 6) return; // weekends
+
+  const today = getTodayET();
+
+  // Reset for new day
+  if (flexFiredToday && flexFiredToday !== today) {
+    flexFiredToday = "";
+  }
+
+  if (flexFiredToday === today) return; // already ran today
+
+  if (hour === flexHour && minute === config.flex.scheduleMinute) {
+    flexFiredToday = today;
+    log.info(
+      { time: `${hour}:${String(minute).padStart(2, "0")} ET`, queryId: config.flex.queryId },
+      "Scheduled Flex report fetch triggered",
+    );
+
+    try {
+      const result = await fetchAndImport();
+      log.info(
+        { batch: result.batch_id, inserted: result.inserted, skipped: result.skipped },
+        `Scheduled Flex fetch complete: ${result.inserted} trades imported`,
+      );
+    } catch (e: any) {
+      log.error({ err: e }, "Scheduled Flex fetch FAILED");
+      recordIncident("flex_fetch_failed", "warning", `Scheduled Flex fetch failed: ${e.message}`);
+    }
+  }
+}
+
 // ── Scheduler Lifecycle ──────────────────────────────────────────────────
 
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
@@ -419,6 +463,17 @@ export function startScheduler(intervalMs: number = DEFAULT_INTERVAL_MS) {
       "Analytics scheduler armed — pre/post-market scripts",
     );
   }
+
+  // Start scheduled Flex report fetch (60s check interval, fires once per day at configured time)
+  if (!flexTimer && config.flex.token && config.flex.queryId && config.flex.scheduleHour >= 0) {
+    flexTimer = setInterval(() => {
+      checkFlexFetch().catch((err) => log.error({ err }, "Flex fetch timer error (swallowed)"));
+    }, FLEX_CHECK_MS);
+    log.info(
+      { time: `${String(config.flex.scheduleHour).padStart(2, "0")}:${String(config.flex.scheduleMinute).padStart(2, "0")} ET` },
+      "Flex report scheduler armed — daily EOD fetch",
+    );
+  }
 }
 
 export function stopScheduler() {
@@ -453,6 +508,10 @@ export function stopScheduler() {
   if (analyticsTimer) {
     clearInterval(analyticsTimer);
     analyticsTimer = null;
+  }
+  if (flexTimer) {
+    clearInterval(flexTimer);
+    flexTimer = null;
   }
   log.info("Scheduler stopped");
 }

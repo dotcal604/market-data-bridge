@@ -62,6 +62,7 @@ import {
 } from "../db/database.js";
 import { RISK_CONFIG_DEFAULTS, type RiskConfigParam } from "../db/schema.js";
 import { importTraderSyncCSV } from "../tradersync/importer.js";
+import { fetchAndImport, importFlexFile, importFlexContent, getFlexStats, getFlexTrades } from "../flex/importer.js";
 import { logger } from "../logging.js";
 import {
   subscribeRealTimeBars, unsubscribeRealTimeBars, getRealTimeBars,
@@ -634,6 +635,34 @@ const actions: Record<string, ActionHandler> = {
       side: str(p, "side") || undefined,
       status: str(p, "status") || undefined,
       days: num(p, "days") || undefined,
+      limit: num(p, "limit") || undefined,
+    });
+    return { count: trades.length, trades };
+  },
+
+  // ── IBKR Flex ──
+  flex_fetch: async (p) => fetchAndImport({
+    queryId: str(p, "queryId") || undefined,
+    token: str(p, "token") || undefined,
+  }),
+  flex_import_file: async (p) => {
+    const filePath = str(p, "file_path");
+    if (!filePath) throw new Error("file_path is required");
+    return importFlexFile(filePath);
+  },
+  flex_import: async (p) => {
+    const content = str(p, "content");
+    if (!content) throw new Error("content is required");
+    return importFlexContent(content);
+  },
+  flex_stats: async () => getFlexStats(),
+  flex_trades: async (p) => {
+    const trades = getFlexTrades({
+      symbol: str(p, "symbol") || undefined,
+      action: str(p, "action") || undefined,
+      days: num(p, "days") || undefined,
+      from_date: str(p, "from_date") || undefined,
+      to_date: str(p, "to_date") || undefined,
       limit: num(p, "limit") || undefined,
     });
     return { count: trades.length, trades };
@@ -1576,9 +1605,42 @@ export const actionsMeta: Record<string, ActionMeta> = {
     },
   },
 
+  // IBKR Flex
+  flex_fetch: {
+    description: "Fetch IBKR Flex report and import trades. The 'update IBKR trade info' action.",
+    params: {
+      queryId: { type: "string", description: "Flex Query ID (optional, defaults to env)" },
+      token: { type: "string", description: "Flex token (optional, defaults to env)" },
+    },
+  },
+  flex_import_file: {
+    description: "Import IBKR Flex report from a local file path",
+    params: {
+      file_path: { type: "string", description: "Path to Flex report file", required: true },
+    },
+  },
+  flex_import: {
+    description: "Import IBKR Flex report content (XML or CSV string)",
+    params: {
+      content: { type: "string", description: "Flex report content", required: true },
+    },
+  },
+  flex_stats: { description: "Get IBKR Flex import statistics" },
+  flex_trades: {
+    description: "Query imported IBKR Flex trades",
+    params: {
+      symbol: { type: "string", description: "Filter by symbol" },
+      action: { type: "string", description: "Filter by action", enum: ["BUY", "SELL"] },
+      days: { type: "number", description: "Lookback days" },
+      from_date: { type: "string", description: "Start date (YYYY-MM-DD)" },
+      to_date: { type: "string", description: "End date (YYYY-MM-DD)" },
+      limit: { type: "number", description: "Maximum results" },
+    },
+  },
+
   // History
-  orders_history: { 
-    description: "Query historical orders", 
+  orders_history: {
+    description: "Query historical orders",
     params: {
       symbol: { type: "string", description: "Filter by symbol" },
       strategy: { type: "string", description: "Filter by strategy" },

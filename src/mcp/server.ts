@@ -91,6 +91,7 @@ import { computeEdgeReport, runWalkForward } from "../eval/edge-analytics.js";
 import { Sentry } from "../instrument.js";
 import { importTraderSyncCSV } from "../tradersync/importer.js";
 import { importHollyAlerts } from "../holly/importer.js";
+import { fetchAndImport, importFlexFile, importFlexContent, getFlexStats, getFlexTrades } from "../flex/importer.js";
 import { importFile, importRows } from "../import/router.js";
 import { getImportHistory, getImportById, getImportStats } from "../import/history.js";
 import { isAutoEvalEnabled, setAutoEvalEnabled, getAutoEvalStatus } from "../holly/auto-eval.js";
@@ -152,6 +153,7 @@ const MUTATING_TOOLS = new Set([
   "session_record_trade", "session_lock", "session_unlock", "session_reset",
   "tune_risk_params", "trade_journal_write", "record_outcome",
   "tradersync_import", "holly_import", "import_file",
+  "flex_fetch", "flex_import_file",
   "holly_predictor_refresh", "holly_trade_import_file",
   "trailing_stop_optimize", "auto_eval_toggle",
   "divoom_refresh", "divoom_set_brightness",
@@ -1866,6 +1868,105 @@ export function createMcpServer(opts?: { readonly?: boolean }): McpServer {
           side: params.side,
           status: params.status,
           days: params.days,
+          limit: params.limit,
+        });
+        return { content: [{ type: "text", text: JSON.stringify({ count: trades.length, trades }, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: flex_fetch ---
+  server.tool(
+    "flex_fetch",
+    "Fetch an IBKR Flex Query report and import trades into the database. Uses the Flex Web Service API to request, poll, and download the report. Defaults to env IBKR_FLEX_TOKEN and IBKR_FLEX_QUERY_ID if not provided. This is the 'update IBKR trade info' button.",
+    {
+      queryId: z.string().optional().describe("Flex Query ID (defaults to IBKR_FLEX_QUERY_ID env var)"),
+      token: z.string().optional().describe("Flex Web Service token (defaults to IBKR_FLEX_TOKEN env var)"),
+    },
+    async (params) => {
+      try {
+        const result = await fetchAndImport({
+          queryId: params.queryId,
+          token: params.token,
+        });
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: flex_import_file ---
+  server.tool(
+    "flex_import_file",
+    "Import an IBKR Flex report from a local file (XML or CSV). Auto-detects format.",
+    {
+      file_path: z.string().describe("Absolute path to the Flex report file"),
+    },
+    async (params) => {
+      try {
+        const result = importFlexFile(params.file_path);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: flex_import ---
+  server.tool(
+    "flex_import",
+    "Import IBKR Flex report content (XML or CSV string) directly into the database. Use this when you have the report content as text.",
+    {
+      content: z.string().describe("Full Flex report content (XML or CSV)"),
+    },
+    async (params) => {
+      try {
+        const result = importFlexContent(params.content);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: flex_stats ---
+  server.tool(
+    "flex_stats",
+    "Get aggregate stats from imported IBKR Flex trades: total trades, unique symbols, total commission, realized P&L, date range.",
+    {},
+    async () => {
+      try {
+        const stats = getFlexStats();
+        return { content: [{ type: "text", text: JSON.stringify(stats, null, 2) }] };
+      } catch (e: any) {
+        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+      }
+    }
+  );
+
+  // --- Tool: flex_trades ---
+  server.tool(
+    "flex_trades",
+    "Query imported IBKR Flex trades. Filter by symbol, action (BUY/SELL), date range, and lookback days.",
+    {
+      symbol: z.string().optional().describe("Filter by ticker symbol"),
+      action: z.enum(["BUY", "SELL"]).optional().describe("Filter by trade action"),
+      days: z.number().optional().describe("Lookback period in days"),
+      from_date: z.string().optional().describe("Start date (YYYY-MM-DD)"),
+      to_date: z.string().optional().describe("End date (YYYY-MM-DD)"),
+      limit: z.number().optional().default(100).describe("Max results (default: 100)"),
+    },
+    async (params) => {
+      try {
+        const trades = getFlexTrades({
+          symbol: params.symbol,
+          action: params.action,
+          days: params.days,
+          from_date: params.from_date,
+          to_date: params.to_date,
           limit: params.limit,
         });
         return { content: [{ type: "text", text: JSON.stringify({ count: trades.length, trades }, null, 2) }] };

@@ -20,3 +20,4 @@ export * from "./holly.js";
 export * from "./drift.js";
 export * from "./sessions.js";
 export * from "./analytics-jobs.js";
+export * from "./flex.js";

@@ -113,6 +113,13 @@ export const config = {
     path: process.env.IMPORT_INBOX_PATH ?? "",
     pollIntervalMs: parseInt(process.env.IMPORT_INBOX_POLL_MS ?? "5000", 10),
   },
+  flex: {
+    token: process.env.IBKR_FLEX_TOKEN ?? "",
+    queryId: process.env.IBKR_FLEX_QUERY_ID ?? "",
+    /** Scheduled EOD fetch hour (ET, 24h). Default: 16 (4 PM). Set to -1 to disable. */
+    scheduleHour: parseInt(process.env.FLEX_SCHEDULE_HOUR ?? "16", 10),
+    scheduleMinute: parseInt(process.env.FLEX_SCHEDULE_MINUTE ?? "15", 10),
+  },
 };
 
 // ── Production API key guard ────────────────────────────────────────────
