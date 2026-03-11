@@ -38,6 +38,7 @@ import {
 import { importTraderSyncCSV } from "../tradersync/importer.js";
 import { computeDriftReport } from "./drift.js";
 import { extractStructuredReasoning } from "./reasoning/extractor.js";
+import { onOutcomeRecorded } from "./ensemble/recalibration-hook.js";
 import { logger } from "../logging.js";
 import { wsBroadcastWithSequence, getNextSequenceId } from "../ws/server.js";
 import { computeEdgeMetrics } from "./features/edge-metrics.js";
@@ -324,6 +325,10 @@ evalRouter.post("/outcome", (req, res) => {
     });
 
     logger.info(`[Eval] Outcome recorded for ${evaluation_id}: taken=${trade_taken} R=${r_multiple}`);
+
+    // Trigger Bayesian weight recalibration (matches agent.ts behavior)
+    onOutcomeRecorded(evaluation_id, r_multiple, trade_taken);
+
     res.json({ success: true, evaluation_id });
   } catch (e: any) {
     logger.error({ err: e }, "[Eval] outcome failed");

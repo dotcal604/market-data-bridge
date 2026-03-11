@@ -39,6 +39,14 @@ function loadBayesianState(): void {
     if (!existsSync(STATE_PATH)) return;
     const raw = readFileSync(STATE_PATH, "utf-8");
     bayesianUpdater.fromJSON(raw);
+    // Restore batch recalibration counter from persisted state
+    try {
+      const parsed = JSON.parse(raw);
+      if (typeof parsed.outcomeSinceLastRecal === "number") {
+        outcomeSinceLastRecal = parsed.outcomeSinceLastRecal;
+        log.info({ outcomeSinceLastRecal }, "Restored batch recalibration counter");
+      }
+    } catch { /* counter stays at 0 if missing */ }
     log.info("Bayesian priors loaded from disk");
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -49,7 +57,10 @@ function loadBayesianState(): void {
 
 function saveBayesianState(): void {
   try {
-    writeFileSync(STATE_PATH, bayesianUpdater.toJSON(), "utf-8");
+    // Merge batch counter into Bayesian state for persistence across restarts
+    const state = JSON.parse(bayesianUpdater.toJSON());
+    state.outcomeSinceLastRecal = outcomeSinceLastRecal;
+    writeFileSync(STATE_PATH, JSON.stringify(state, null, 2), "utf-8");
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     log.error({ err: msg }, "Failed to save bayesian-state.json");

@@ -38,6 +38,8 @@ export interface FeatureVector {
   analyst_consensus: "bullish" | "neutral" | "bearish" | "none";
   guidance_net_direction: number;
   guidance_latest_direction: string | null;
+  /** Exchange code (e.g. "NMS", "NYQ", "OTC"). Used by AQS for OTC filter. */
+  exchange: string | null;
   data_source: "ibkr" | "yahoo";
   bridge_latency_ms: number;
 }

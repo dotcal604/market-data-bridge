@@ -22,6 +22,7 @@ import {
   insertEvaluation, insertModelOutput, insertEvalReasoning,
   getRecentOutcomes, getOutcomeCount, hasRecentEvalForSymbol, insertSignal, getHollyAlertsByBatch,
 } from "../db/database.js";
+import { computeAQS, type AQSInput } from "../eval/aqs.js";
 import { appendInboxItem } from "../inbox/store.js";
 import type { ImportResult } from "./importer.js";
 import type { FeatureVector } from "../eval/features/types.js";
@@ -158,6 +159,11 @@ async function runSingleEval(
   if (!prefilter.passed) {
     log.info({ id: id.slice(0, 8), symbol, flags: prefilter.flags }, "Auto-eval pre-filter blocked");
 
+    // AQS shadow-mode: compute even on prefilter blocks for data collection
+    const aqsInputBlocked = buildAQSInput(features, direction, entryPrice, stopPrice);
+    const aqsBlocked = computeAQS(aqsInputBlocked);
+    log.info({ id: id.slice(0, 8), symbol, aqs: aqsBlocked.score, aqs_reasons: aqsBlocked.reason_codes }, "AQS computed (prefilter-blocked)");
+
     insertEvaluation({
       id, symbol: features.symbol, direction, entry_price: entryPrice, stop_price: stopPrice,
       user_notes: `auto-eval from holly alert #${hollyAlertId}`,
@@ -179,6 +185,8 @@ async function runSingleEval(
       holly_alert_id: hollyAlertId, evaluation_id: id,
       symbol, direction, strategy: (alert.strategy as string) ?? null,
       ensemble_score: 0, should_trade: 0, prefilter_passed: 0,
+      aqs_score: aqsBlocked.score, aqs_version: aqsBlocked.version,
+      aqs_reasons: JSON.stringify(aqsBlocked.reason_codes),
     });
 
     broadcastSignal?.({
@@ -263,24 +271,32 @@ async function runSingleEval(
     }
   }
 
-  // Step 7: Insert signal
+  // Step 7: AQS shadow-mode scoring (runs alongside ensemble, does NOT gate)
+  const aqsInput = buildAQSInput(features, direction, entryPrice, stopPrice);
+  const aqs = computeAQS(aqsInput);
+  log.info({ id: id.slice(0, 8), symbol, aqs: aqs.score, aqs_reasons: aqs.reason_codes }, "AQS computed");
+
+  // Step 8: Insert signal (with AQS annotation)
   const signalId = insertSignal({
     holly_alert_id: hollyAlertId, evaluation_id: id,
     symbol, direction, strategy: (alert.strategy as string) ?? null,
     ensemble_score: ensemble.trade_score, should_trade: ensemble.should_trade ? 1 : 0,
     prefilter_passed: 1,
+    aqs_score: aqs.score, aqs_version: aqs.version,
+    aqs_reasons: JSON.stringify(aqs.reason_codes),
   });
 
   log.info({
-    id: id.slice(0, 8), symbol, score: ensemble.trade_score,
+    id: id.slice(0, 8), symbol, score: ensemble.trade_score, aqs: aqs.score,
     should_trade: ensemble.should_trade, latency: totalLatency,
   }, "Auto-eval complete");
 
-  // Broadcast via WebSocket
+  // Broadcast via WebSocket (includes AQS for dashboard consumption)
   broadcastSignal?.({
     signal_id: signalId, symbol, direction, strategy: alert.strategy,
     ensemble_score: ensemble.trade_score, should_trade: ensemble.should_trade,
     evaluation_id: id, alert_time: alert.alert_time, latency_ms: totalLatency,
+    aqs_score: aqs.score, aqs_version: aqs.version, aqs_reasons: aqs.reason_codes,
   });
 
   // Inbox: notify on ensemble signals (full eval only, not prefilter blocks)
@@ -299,5 +315,31 @@ async function runSingleEval(
   } catch { /* non-fatal */ }
 }
 
+/**
+ * Build AQSInput from available feature vector + alert data.
+ * Gracefully handles missing fields — AQS degrades rather than errors.
+ */
+function buildAQSInput(
+  features: FeatureVector,
+  direction: "long" | "short",
+  entryPrice: number | null,
+  stopPrice: number | null,
+): AQSInput {
+  const marketCap = features.last && features.float_rotation_est > 0
+    ? null // market cap not directly on FeatureVector, use provider data if available
+    : null;
+
+  return {
+    direction,
+    entry_price: entryPrice,
+    stop_price: stopPrice,
+    market_cap: marketCap, // Will be null until wired to provider — degrades gracefully
+    volatility_regime: features.volatility_regime,
+    exchange: features.exchange,
+    rolling_strat_wr: null,  // Phase 2: not yet available live
+    news_count_24h: null,    // Phase 2: not yet available live
+  };
+}
+
 // Export for testing
-export const _testing = { inferDirection, DIRECTION_MAP };
+export const _testing = { inferDirection, DIRECTION_MAP, buildAQSInput };

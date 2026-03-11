@@ -63,6 +63,9 @@ export async function computeFeatures(
   const closePrev = quote.close ?? 0;
   const volume = quote.volume ?? 0;
   const marketCap = quote.marketCap ?? details?.marketCap ?? null;
+  // Exchange code for AQS OTC filter (best-effort from Yahoo/details)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const exchange: string | null = (quote as any).exchange ?? (details as any)?.exchange ?? null;
 
   const rvol = computeRVOL(volume, dailyBars);
   const vwap_deviation_pct = computeVWAPDeviation(intradayBars, last);
@@ -138,6 +141,7 @@ export async function computeFeatures(
     analyst_consensus,
     guidance_net_direction,
     guidance_latest_direction,
+    exchange,
     data_source: "yahoo",
     bridge_latency_ms: latencyMs,
   };

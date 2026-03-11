@@ -486,6 +486,11 @@ addColumnIfMissing("orders", "eval_id", "TEXT");
 addColumnIfMissing("risk_config", "source", "TEXT NOT NULL DEFAULT 'manual'");
 addColumnIfMissing("risk_config", "updated_at", "TEXT NOT NULL DEFAULT (datetime('now'))");
 
+// v9: AQS shadow-mode columns on signals table
+addColumnIfMissing("signals", "aqs_score", "REAL");
+addColumnIfMissing("signals", "aqs_version", "TEXT");
+addColumnIfMissing("signals", "aqs_reasons", "TEXT");  // JSON array of reason codes
+
 // v7: Collab message type + metadata for performative messaging
 addColumnIfMissing("collab_messages", "type", "TEXT NOT NULL DEFAULT 'info'");
 addColumnIfMissing("collab_messages", "metadata", "TEXT");

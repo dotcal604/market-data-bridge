@@ -15,6 +15,10 @@ export interface SignalRow {
   ensemble_score: number | null;
   should_trade: number | null;
   prefilter_passed: number;
+  // AQS shadow-mode fields (optional — null when AQS not yet wired)
+  aqs_score?: number | null;
+  aqs_version?: string | null;
+  aqs_reasons?: string | null; // JSON-stringified string[]
 }
 
 // ── Functions ────────────────────────────────────────────────────────────
@@ -109,11 +113,12 @@ export function getLatestHollySymbols(limit = 20): string[] {
  */
 export function insertSignal(row: SignalRow): number {
   const result = getDb().prepare(`
-    INSERT INTO signals (holly_alert_id, evaluation_id, symbol, direction, strategy, ensemble_score, should_trade, prefilter_passed)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO signals (holly_alert_id, evaluation_id, symbol, direction, strategy, ensemble_score, should_trade, prefilter_passed, aqs_score, aqs_version, aqs_reasons)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     row.holly_alert_id, row.evaluation_id, row.symbol, row.direction,
     row.strategy, row.ensemble_score, row.should_trade, row.prefilter_passed,
+    row.aqs_score ?? null, row.aqs_version ?? null, row.aqs_reasons ?? null,
   );
   return result.lastInsertRowid as number;
 }
