@@ -14,13 +14,19 @@ export interface FlexImportResult {
   errors: string[];
 }
 
+/** Matches the SQL shape returned by getFlexStats() in src/db/flex.ts */
 export interface FlexStats {
   total_trades: number;
   unique_symbols: number;
-  import_batches: number;
+  accounts: number;
+  total_bought: number;
+  total_sold: number;
+  total_commission: number;
+  total_realized_pnl: number;
+  total_net_cash: number;
   first_trade: string | null;
   last_trade: string | null;
-  last_import: string | null;
+  import_batches: number;
 }
 
 interface AgentResponse<T> {
