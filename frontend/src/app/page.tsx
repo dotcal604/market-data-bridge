@@ -7,6 +7,7 @@ import { RecentEvalsMini } from "@/components/dashboard/recent-evals-mini";
 import { HollyStats } from "@/components/dashboard/holly-stats";
 import { HollyAlerts } from "@/components/dashboard/holly-alerts";
 import { EquityCurve } from "@/components/dashboard/equity-curve";
+import { FlexImportCard } from "@/components/dashboard/flex-import-card";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function DashboardPage() {
@@ -53,9 +54,15 @@ export default function DashboardPage() {
         )}
       </div>
 
-      <div>
-        <h2 className="mb-3 text-lg font-semibold">Holly AI Alerts</h2>
-        <HollyStats />
+      <div className="grid grid-cols-3 gap-4">
+        <div className="col-span-2">
+          <h2 className="mb-3 text-lg font-semibold">Holly AI Alerts</h2>
+          <HollyStats />
+        </div>
+        <div>
+          <h2 className="mb-3 text-lg font-semibold">IBKR Flex</h2>
+          <FlexImportCard />
+        </div>
       </div>
 
       <div>
