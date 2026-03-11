@@ -16,9 +16,10 @@ import { logger } from "../logging.js";
 
 const log = logger.child({ module: "flex-client" });
 
-const BASE = "https://gdcdyn.interactivebrokers.com/Universal/servlet";
-const SEND_REQUEST_URL = `${BASE}/FlexStatementService.SendRequest`;
-const GET_STATEMENT_URL = `${BASE}/FlexStatementService.GetStatement`;
+const BASE = "https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService";
+const SEND_REQUEST_URL = `${BASE}/SendRequest`;
+const GET_STATEMENT_URL = `${BASE}/GetStatement`;
+const USER_AGENT = "market-data-bridge/3.0";
 
 /** Default poll settings */
 const DEFAULT_POLL_INTERVAL_MS = 5_000;
@@ -47,7 +48,7 @@ export async function sendFlexRequest(
   const url = `${SEND_REQUEST_URL}?t=${encodeURIComponent(token)}&q=${encodeURIComponent(queryId)}&v=${version}`;
   log.info({ queryId }, "Requesting Flex report");
 
-  const res = await fetch(url);
+  const res = await fetch(url, { headers: { "User-Agent": USER_AGENT } });
   if (!res.ok) {
     throw new Error(`Flex SendRequest HTTP ${res.status}: ${res.statusText}`);
   }
@@ -81,54 +82,70 @@ export async function sendFlexRequest(
 
 /**
  * Step 2: Download a Flex report using the reference code.
- * Polls until the report is ready.
+ * Polls until the report is ready. Handles IBKR error codes:
+ *   1009/1019 = server busy / generating → retry after 5s
+ *   1018 = throttled → retry after 10s
  */
 export async function getFlexStatement(
   referenceCode: string,
   token: string,
   opts?: { pollIntervalMs?: number; maxPolls?: number },
 ): Promise<FlexStatementResult> {
-  const pollInterval = opts?.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
+  const defaultPollMs = opts?.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
   const maxPolls = opts?.maxPolls ?? DEFAULT_MAX_POLLS;
 
   for (let attempt = 1; attempt <= maxPolls; attempt++) {
     const url = `${GET_STATEMENT_URL}?t=${encodeURIComponent(token)}&q=${encodeURIComponent(referenceCode)}&v=3`;
 
-    const res = await fetch(url);
+    const res = await fetch(url, { headers: { "User-Agent": USER_AGENT } });
     if (!res.ok) {
       throw new Error(`Flex GetStatement HTTP ${res.status}: ${res.statusText}`);
     }
 
     const text = await res.text();
+    const trimmed = text.trim();
 
-    // Check if it's an error/status response (XML with Status element)
-    const statusMatch = text.match(/<Status>([^<]+)<\/Status>/);
-    if (statusMatch) {
-      const status = statusMatch[1].trim();
-      if (status === "Warn") {
-        // Report not ready yet — ErrorCode 1019 = "Statement is being generated"
-        const errorCode = text.match(/<ErrorCode>([^<]+)<\/ErrorCode>/)?.[1] ?? "";
-        if (errorCode === "1019") {
-          log.debug({ attempt, maxPolls }, "Flex report generating, polling...");
-          await sleep(pollInterval);
-          continue;
-        }
-      }
-      if (status === "Fail") {
-        const errorCode = text.match(/<ErrorCode>([^<]+)<\/ErrorCode>/)?.[1] ?? "unknown";
-        const errorMsg = text.match(/<ErrorMessage>([^<]+)<\/ErrorMessage>/)?.[1] ?? text;
-        throw new Error(`Flex GetStatement failed (${errorCode}): ${errorMsg}`);
-      }
+    // Success: root tag is <FlexQueryResponse> (report is ready)
+    if (trimmed.includes("<FlexQueryResponse")) {
+      const format = trimmed.startsWith("<") ? "xml" : "csv";
+      log.info({ referenceCode, format, attempt, contentLength: text.length }, "Flex report downloaded");
+      return { content: text, format, referenceCode };
     }
 
-    // If we get here, it's the actual report content
-    const format = text.trim().startsWith("<") ? "xml" : "csv";
-    log.info({ referenceCode, format, attempt, contentLength: text.length }, "Flex report downloaded");
+    // Status/error response: <FlexStatementResponse>
+    const errorCode = trimmed.match(/<ErrorCode>([^<]+)<\/ErrorCode>/)?.[1] ?? "";
+    const errorMsg = trimmed.match(/<ErrorMessage>([^<]+)<\/ErrorMessage>/)?.[1] ?? "";
 
-    return { content: text, format, referenceCode };
+    // Retryable: server busy (1009), generating (1019), throttled (1018)
+    if (errorCode === "1009" || errorCode === "1019") {
+      log.debug({ attempt, maxPolls, errorCode }, "Flex report generating, polling...");
+      await sleep(defaultPollMs);
+      continue;
+    }
+    if (errorCode === "1018") {
+      log.debug({ attempt, maxPolls }, "Flex throttled, waiting 10s...");
+      await sleep(10_000);
+      continue;
+    }
+
+    // Non-retryable error
+    if (errorCode) {
+      throw new Error(`Flex GetStatement failed (${errorCode}): ${errorMsg}`);
+    }
+
+    // No FlexQueryResponse and no error code — might be CSV or unknown format
+    if (!trimmed.includes("<FlexStatementResponse")) {
+      const format = trimmed.startsWith("<") ? "xml" : "csv";
+      log.info({ referenceCode, format, attempt, contentLength: text.length }, "Flex report downloaded");
+      return { content: text, format, referenceCode };
+    }
+
+    // Unexpected status — retry with default interval
+    log.warn({ attempt, responseSnippet: trimmed.slice(0, 200) }, "Unexpected Flex response, retrying...");
+    await sleep(defaultPollMs);
   }
 
-  throw new Error(`Flex report not ready after ${maxPolls} polls (${(maxPolls * pollInterval) / 1000}s)`);
+  throw new Error(`Flex report not ready after ${maxPolls} polls (${(maxPolls * defaultPollMs) / 1000}s)`);
 }
 
 /**
