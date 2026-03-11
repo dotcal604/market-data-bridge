@@ -58,6 +58,10 @@ import { runPortfolioStressTest } from "../ibkr/portfolio.js";
 import { calculatePositionSize } from "../ibkr/risk.js";
 import { Sentry } from "../instrument.js";
 import { logger } from "../logging.js";
+import { wsBroadcast } from "../ws/server.js";
+import { fetchAndImport, importFlexContent, getFlexStats } from "../flex/importer.js";
+import { importTraderSyncCSV } from "../tradersync/importer.js";
+import { getTraderSyncStats } from "../db/tradersync.js";
 import { getOpenApiSpec } from "./openapi.js";
 import { tuneRiskParams } from "../eval/risk-tuning.js";
 import { RISK_CONFIG_DEFAULTS } from "../db/schema.js";
@@ -1772,6 +1776,77 @@ router.get("/holly/exit-params", async (_req, res) => {
   } catch (e: any) {
     log.error({ err: e }, "GET /holly/exit-params failed");
     Sentry.captureException(e instanceof Error ? e : new Error(String(e)), { tags: { subsystem: "rest" } });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── IBKR Flex Import ────────────────────────────────────────────────────────
+
+// GET /api/flex/stats — Flex import statistics
+router.get("/flex/stats", (_req, res) => {
+  try {
+    res.json(getFlexStats());
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/flex/fetch — Fetch Flex report from IBKR and import
+router.post("/flex/fetch", async (req, res) => {
+  try {
+    const result = await fetchAndImport({
+      queryId: req.body?.queryId,
+      token: req.body?.token,
+    });
+    wsBroadcast("flex", { event: "import", ...result });
+    res.json(result);
+  } catch (e: any) {
+    log.error({ err: e }, "POST /flex/fetch failed");
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/flex/import — Import Flex report content (XML or CSV string)
+router.post("/flex/import", (req, res) => {
+  try {
+    const { content } = req.body;
+    if (!content || typeof content !== "string") {
+      res.status(400).json({ error: "content (string) is required" });
+      return;
+    }
+    const result = importFlexContent(content);
+    wsBroadcast("flex", { event: "import", ...result });
+    res.json(result);
+  } catch (e: any) {
+    log.error({ err: e }, "POST /flex/import failed");
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── TraderSync Import ───────────────────────────────────────────────────────
+
+// GET /api/tradersync/stats — TraderSync import statistics
+router.get("/tradersync/stats", (_req, res) => {
+  try {
+    res.json(getTraderSyncStats());
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/tradersync/import — Import TraderSync CSV content
+router.post("/tradersync/import", (req, res) => {
+  try {
+    const { csv } = req.body;
+    if (!csv || typeof csv !== "string") {
+      res.status(400).json({ error: "csv (string) is required" });
+      return;
+    }
+    const result = importTraderSyncCSV(csv);
+    wsBroadcast("tradersync", { event: "import", ...result });
+    res.json(result);
+  } catch (e: any) {
+    log.error({ err: e }, "POST /tradersync/import failed");
     res.status(500).json({ error: e.message });
   }
 });

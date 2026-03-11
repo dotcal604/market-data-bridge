@@ -8,6 +8,18 @@ vi.mock("@/lib/hooks/use-tradersync", () => ({
   useTraderSyncImport: vi.fn(),
 }));
 
+vi.mock("@/lib/hooks/use-drop-zone", () => ({
+  useDropZone: vi.fn(() => ({
+    isDragging: false,
+    dropZoneProps: {
+      onDragOver: vi.fn(),
+      onDragEnter: vi.fn(),
+      onDragLeave: vi.fn(),
+      onDrop: vi.fn(),
+    },
+  })),
+}));
+
 import { useTraderSyncStats, useTraderSyncImport } from "@/lib/hooks/use-tradersync";
 
 describe("TraderSyncImportCard", () => {
@@ -90,8 +102,8 @@ describe("TraderSyncImportCard", () => {
     expect(screen.getByText(/25 symbols/)).toBeInTheDocument();
     expect(screen.getByText(/60.0%/)).toBeInTheDocument();
     expect(screen.getByText(/72W/)).toBeInTheDocument();
-    expect(screen.getByText("$4,500")).toBeInTheDocument();
-    expect(screen.getByText("1.35R")).toBeInTheDocument();
+    expect(screen.getByText(/\$4,500/)).toBeInTheDocument();
+    expect(screen.getByText(/1\.35R/)).toBeInTheDocument();
   });
 
   it("shows spinner when importing", () => {

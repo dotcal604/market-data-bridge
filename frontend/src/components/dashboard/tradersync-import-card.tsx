@@ -1,27 +1,14 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTraderSyncStats, useTraderSyncImport } from "@/lib/hooks/use-tradersync";
+import { useDropZone } from "@/lib/hooks/use-drop-zone";
 import type { TraderSyncImportResult } from "@/lib/api/tradersync-client";
+import { formatCurrency, formatPercent, formatRMultiple } from "@/lib/utils/formatters";
 import { Upload, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
-
-function formatCurrency(val: number | null): string {
-  if (val == null) return "$0";
-  return val.toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  });
-}
-
-function formatPct(val: number | null): string {
-  if (val == null) return "N/A";
-  return `${(val * 100).toFixed(1)}%`;
-}
 
 /** Read a File as text — extracted for testability */
 export async function readFileText(file: File): Promise<string> {
@@ -45,31 +32,49 @@ export function TraderSyncImportCard({
     return () => clearTimeout(id);
   }, [lastResult]);
 
+  const handleFileDrop = useCallback(
+    async (file: File) => {
+      setLastResult(null);
+      try {
+        const csv = await readFile(file);
+        const result = await importMutation.mutateAsync(csv);
+        setLastResult(result);
+      } catch {
+        // error available via importMutation.error
+      }
+    },
+    [readFile, importMutation],
+  );
+
+  const { isDragging, dropZoneProps } = useDropZone({
+    accept: [".csv"],
+    onDrop: handleFileDrop,
+    disabled: importMutation.isPending,
+  });
+
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-
-    setLastResult(null);
-    try {
-      const csv = await readFile(file);
-      const result = await importMutation.mutateAsync(csv);
-      setLastResult(result);
-    } catch {
-      // error available via importMutation.error
-    }
-
-    // Reset so the same file can be re-selected
+    if (file) await handleFileDrop(file);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   return (
-    <Card>
+    <Card
+      {...dropZoneProps}
+      className={isDragging ? "ring-2 ring-primary ring-offset-2" : ""}
+    >
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-sm font-medium">TraderSync Import</CardTitle>
         <Upload className="h-4 w-4 text-muted-foreground" />
       </CardHeader>
       <CardContent className="space-y-3">
-        {isLoading ? (
+        {isDragging ? (
+          <div className="flex items-center justify-center rounded border-2 border-dashed border-primary/50 py-4">
+            <p className="text-xs text-muted-foreground">
+              Drop CSV file here
+            </p>
+          </div>
+        ) : isLoading ? (
           <Skeleton className="h-16 w-full rounded" />
         ) : stats && stats.total_trades > 0 ? (
           <div className="text-xs text-muted-foreground space-y-1">
@@ -82,7 +87,7 @@ export function TraderSyncImportCard({
             <div className="flex justify-between">
               <span>Win rate</span>
               <span className="font-medium text-foreground">
-                {formatPct(stats.win_rate)} ({stats.wins}W / {stats.losses}L)
+                {stats.win_rate != null ? formatPercent(stats.win_rate) : "N/A"} ({stats.wins}W / {stats.losses}L)
               </span>
             </div>
             <div className="flex justify-between">
@@ -102,7 +107,7 @@ export function TraderSyncImportCard({
                   (stats.avg_r ?? 0) >= 0 ? "text-green-500" : "text-red-500"
                 }`}
               >
-                {stats.avg_r != null ? `${stats.avg_r.toFixed(2)}R` : "N/A"}
+                {formatRMultiple(stats.avg_r)}
               </span>
             </div>
             <div className="flex justify-between">

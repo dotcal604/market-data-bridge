@@ -26,33 +26,16 @@ export interface TraderSyncStats {
   import_batches: number;
 }
 
-interface AgentResponse<T> {
-  action: string;
-  result: T;
-}
-
 export const tradersyncClient = {
   async importCSV(csv: string): Promise<TraderSyncImportResult> {
-    const response = await fetchJson<AgentResponse<TraderSyncImportResult>>(
-      `${API_BASE}/agent`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "tradersync_import", params: { csv } }),
-      }
-    );
-    return response.result;
+    return fetchJson<TraderSyncImportResult>(`${API_BASE}/tradersync/import`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ csv }),
+    });
   },
 
   async getStats(): Promise<TraderSyncStats> {
-    const response = await fetchJson<AgentResponse<TraderSyncStats>>(
-      `${API_BASE}/agent`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "tradersync_stats" }),
-      }
-    );
-    return response.result;
+    return fetchJson<TraderSyncStats>(`${API_BASE}/tradersync/stats`);
   },
 };

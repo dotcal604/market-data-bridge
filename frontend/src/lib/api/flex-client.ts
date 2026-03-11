@@ -29,33 +29,23 @@ export interface FlexStats {
   import_batches: number;
 }
 
-interface AgentResponse<T> {
-  action: string;
-  result: T;
-}
-
 export const flexClient = {
   async fetchAndImport(): Promise<FlexImportResult> {
-    const response = await fetchJson<AgentResponse<FlexImportResult>>(
-      `${API_BASE}/agent`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "flex_fetch" }),
-      }
-    );
-    return response.result;
+    return fetchJson<FlexImportResult>(`${API_BASE}/flex/fetch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+  },
+
+  async importContent(content: string): Promise<FlexImportResult> {
+    return fetchJson<FlexImportResult>(`${API_BASE}/flex/import`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content }),
+    });
   },
 
   async getStats(): Promise<FlexStats> {
-    const response = await fetchJson<AgentResponse<FlexStats>>(
-      `${API_BASE}/agent`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "flex_stats" }),
-      }
-    );
-    return response.result;
+    return fetchJson<FlexStats>(`${API_BASE}/flex/stats`);
   },
 };

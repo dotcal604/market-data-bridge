@@ -55,12 +55,12 @@ export default function DashboardPage() {
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div>
           <h2 className="mb-3 text-lg font-semibold">Holly AI Alerts</h2>
           <HollyStats />
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <h2 className="mb-3 text-lg font-semibold">IBKR Flex</h2>
             <FlexImportCard />
