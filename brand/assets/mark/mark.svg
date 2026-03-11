@@ -1,23 +1,33 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
   <title>market-data-bridge — Mark</title>
-  <desc>The Bridge Grid: 3x3 grid representing source → bridge → enriched output. Iter 3: tightened column grouping, ordered source gradient, stronger output presence.</desc>
+  <desc>The Bridge Grid: 3x3 grid with flow connectors. Source → Bridge → Enriched output. Iter 5: subtle inter-column connectors reinforce the bridge metaphor.</desc>
 
-  <!-- Column 1: Sources (filled, dark→mid→light top-to-bottom = data depth) -->
+  <!-- Column 1: Sources (filled, dark→mid→light top-to-bottom) -->
   <rect x="5" y="5"  width="14" height="14" rx="2" fill="#334155"/>
   <rect x="5" y="25" width="14" height="14" rx="2" fill="#475569"/>
   <rect x="5" y="45" width="14" height="14" rx="2" fill="#64748b"/>
+
+  <!-- Flow connectors: source → bridge (gray, subtle) -->
+  <line x1="20" y1="12" x2="24" y2="12" stroke="#64748b" stroke-width="1" opacity="0.4"/>
+  <line x1="20" y1="32" x2="24" y2="32" stroke="#64748b" stroke-width="1" opacity="0.4"/>
+  <line x1="20" y1="52" x2="24" y2="52" stroke="#64748b" stroke-width="1" opacity="0.4"/>
 
   <!-- Column 2: Bridge (outlined, normalization layer) -->
   <rect x="25" y="5"  width="14" height="14" rx="2" fill="none" stroke="#94a3b8" stroke-width="1.5"/>
   <rect x="25" y="25" width="14" height="14" rx="2" fill="none" stroke="#94a3b8" stroke-width="1.5"/>
   <rect x="25" y="45" width="14" height="14" rx="2" fill="none" stroke="#94a3b8" stroke-width="1.5"/>
 
+  <!-- Flow connectors: bridge → output (emerald-tinted, data becoming enriched) -->
+  <line x1="40" y1="12" x2="44" y2="12" stroke="#10b981" stroke-width="1" opacity="0.35"/>
+  <line x1="40" y1="32" x2="44" y2="32" stroke="#10b981" stroke-width="1" opacity="0.35"/>
+  <line x1="40" y1="52" x2="44" y2="52" stroke="#10b981" stroke-width="1" opacity="0.35"/>
+
   <!-- Column 3: Enriched output (emerald, stronger presence) -->
   <rect x="45" y="5"  width="14" height="14" rx="2.5" fill="#10b981" fill-opacity="0.3" stroke="#10b981" stroke-width="1.5"/>
   <rect x="45" y="25" width="14" height="14" rx="2.5" fill="#10b981" fill-opacity="0.3" stroke="#10b981" stroke-width="1.5"/>
   <rect x="45" y="45" width="14" height="14" rx="2.5" fill="#10b981" fill-opacity="0.3" stroke="#10b981" stroke-width="1.5"/>
 
-  <!-- Enrichment indicators (centered dots, slightly larger) -->
+  <!-- Enrichment indicators (centered dots) -->
   <circle cx="52" cy="12" r="3" fill="#10b981"/>
   <circle cx="52" cy="32" r="3" fill="#10b981"/>
   <circle cx="52" cy="52" r="3" fill="#10b981"/>

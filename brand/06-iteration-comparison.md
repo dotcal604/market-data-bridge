@@ -92,3 +92,26 @@ These are refinement-level changes, not direction changes. The mark's identity a
 1. **Wordmark vertical centering**: Name baseline moved from y=37→35, tagline from y=54→52. The text pair now sits at optical center relative to the mark height.
 2. **Light-mode source gradient**: Reordered to match dark-mode logic (lightest→mid→darkest top-to-bottom, inverted for light backgrounds).
 3. **All lockups use updated mark coordinates** (Iter 3 cell positions).
+
+---
+
+## Iteration 5: Flow Connectors in the Core Mark
+
+### Motivation
+The OSS maintainer's critique was the one unresolved tension: *"Neither of these makes me think 'bridge.' Where's the bridge?"* The D2-Iter1 assessment had identified that subtle directional lines between columns were "clear enough to imply flow" without adding clutter. In iter 4 we added them to the banner only. This iteration promotes flow connectors into the core mark itself.
+
+### Changes
+1. **Inter-column flow lines added to mark.svg**: 4px lines (stroke-width=1) connecting each row's cells across columns. Source→bridge connectors are gray (#64748b, opacity 0.4). Bridge→output connectors are emerald (#10b981, opacity 0.35). The color transition in the connectors mirrors the transformation story.
+2. **Monochrome mark updated**: Same connector geometry, uniform gray (#64748b, opacity 0.35). In mono, the connectors read as subtle dashes between cells — enough to imply directionality without competing with the grid.
+3. **All compound assets propagated**: Lockups (dark + light), app icon, banner all use the updated mark with connectors. The OG card already had them via the banner mark embed.
+4. **Favicons unchanged**: At 32px and 16px, the connectors would be sub-pixel noise. Flow is implied by column differentiation at these sizes.
+
+### Assessment
+The connectors are the smallest possible addition that addresses the biggest remaining critique. They add 6 elements (6 `<line>` tags) but each is just 4px long, 1px thick, and low-opacity. They're invisible at a glance but register subconsciously as "flow" — the eye tracks left-to-right across the rows. The mark now communicates "bridge" through structure (columns) AND through motion (connectors), satisfying both the Data Engineer ("architecturally honest") and the OSS Maintainer ("where's the bridge?").
+
+### What not to iterate further
+The mark is now at a stable state. Further iterations risk diminishing returns:
+- Adding arrowheads to connectors: too decorative, adds complexity for no readability gain at 64px
+- Animating the connectors for web use: out of scope for static brand assets
+- Varying connector thickness: over-engineering a 4px line
+- Adding vertical connections between rows: would imply cross-source interaction that doesn't exist in the product

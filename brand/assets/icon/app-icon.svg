@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <title>market-data-bridge — App Icon</title>
-  <!-- Iter 3: uses updated mark coordinates -->
+  <!-- Iter 5: flow connectors in mark -->
 
   <!-- Background -->
   <rect width="512" height="512" rx="96" fill="#0f172a"/>
@@ -11,10 +11,18 @@
     <rect x="5" y="5"  width="14" height="14" rx="2" fill="#334155"/>
     <rect x="5" y="25" width="14" height="14" rx="2" fill="#475569"/>
     <rect x="5" y="45" width="14" height="14" rx="2" fill="#64748b"/>
+    <!-- Flow: source → bridge -->
+    <line x1="20" y1="12" x2="24" y2="12" stroke="#64748b" stroke-width="1" opacity="0.4"/>
+    <line x1="20" y1="32" x2="24" y2="32" stroke="#64748b" stroke-width="1" opacity="0.4"/>
+    <line x1="20" y1="52" x2="24" y2="52" stroke="#64748b" stroke-width="1" opacity="0.4"/>
     <!-- Bridge -->
     <rect x="25" y="5"  width="14" height="14" rx="2" fill="none" stroke="#94a3b8" stroke-width="1.5"/>
     <rect x="25" y="25" width="14" height="14" rx="2" fill="none" stroke="#94a3b8" stroke-width="1.5"/>
     <rect x="25" y="45" width="14" height="14" rx="2" fill="none" stroke="#94a3b8" stroke-width="1.5"/>
+    <!-- Flow: bridge → output -->
+    <line x1="40" y1="12" x2="44" y2="12" stroke="#10b981" stroke-width="1" opacity="0.35"/>
+    <line x1="40" y1="32" x2="44" y2="32" stroke="#10b981" stroke-width="1" opacity="0.35"/>
+    <line x1="40" y1="52" x2="44" y2="52" stroke="#10b981" stroke-width="1" opacity="0.35"/>
     <!-- Output -->
     <rect x="45" y="5"  width="14" height="14" rx="2.5" fill="#10b981" fill-opacity="0.3" stroke="#10b981" stroke-width="1.5"/>
     <rect x="45" y="25" width="14" height="14" rx="2.5" fill="#10b981" fill-opacity="0.3" stroke="#10b981" stroke-width="1.5"/>

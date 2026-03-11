@@ -8,25 +8,27 @@
 
 ## The Mark: "The Bridge Grid"
 
-A 3x3 grid representing the core data flow:
+A 3x3 grid with flow connectors representing the core data flow:
 
 ```
-┌──────────┐  ┌──────────┐  ┌──────────┐
-│  Source   │  │  Bridge   │  │  Output  ●│
-│  (filled) │  │ (outline) │  │ (emerald) │
-├──────────┤  ├──────────┤  ├──────────┤
-│  Source   │  │  Bridge   │  │  Output  ●│
-│  (filled) │  │ (outline) │  │ (emerald) │
-├──────────┤  ├──────────┤  ├──────────┤
-│  Source   │  │  Bridge   │  │  Output  ●│
-│  (filled) │  │ (outline) │  │ (emerald) │
-└──────────┘  └──────────┘  └──────────┘
-  Col 1          Col 2          Col 3
-  Data in        Normalize      Enriched out
+┌──────────┐      ┌──────────┐      ┌──────────┐
+│  Source   │─────▸│  Bridge   │─────▸│  Output  ●│
+│  (dark)   │      │ (outline) │      │ (emerald) │
+├──────────┤      ├──────────┤      ├──────────┤
+│  Source   │─────▸│  Bridge   │─────▸│  Output  ●│
+│  (mid)    │      │ (outline) │      │ (emerald) │
+├──────────┤      ├──────────┤      ├──────────┤
+│  Source   │─────▸│  Bridge   │─────▸│  Output  ●│
+│  (light)  │      │ (outline) │      │ (emerald) │
+└──────────┘      └──────────┘      └──────────┘
+  Col 1              Col 2              Col 3
+  Data in            Normalize          Enriched out
 ```
 
 - **Column 1** (Sources): Filled gray squares, dark→mid→light (top-to-bottom) = data depth → IBKR, Yahoo, CSV
+- **Flow connectors** (source→bridge): Gray lines, opacity 0.4 — raw data entering the bridge
 - **Column 2** (Bridge): Outlined squares → the normalization/processing layer
+- **Flow connectors** (bridge→output): Emerald lines, opacity 0.35 — data becoming enriched
 - **Column 3** (Output): Emerald-filled squares (fill-opacity 0.3) with centered dots (r=3) → enriched, unified data
 
 ## Color Palette
@@ -104,3 +106,4 @@ brand/assets/
 | 1-2 | Direction exploration | 3 concepts × 2 directions, 5-reviewer critique, D2-Iter2 + enrichment dots selected |
 | 3 | Core mark tightening | Source gradient ordered, output opacity 0.2→0.3, dots r=2.5→3, mono mark fixed, favicon symmetry |
 | 4 | Compound asset refinement | Banner/OG tighter composition, flow arrows in banner, tool count corrected, separators unified |
+| 5 | Flow connectors in mark | Subtle inter-column lines promoted from banner-only to core mark; addresses "where's the bridge?" critique |

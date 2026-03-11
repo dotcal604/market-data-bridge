@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 64" width="420" height="64">
   <title>market-data-bridge — Lockup (Dark)</title>
-  <!-- Iter 3: updated mark coordinates, vertically centered wordmark -->
+  <!-- Iter 5: flow connectors in mark, vertically centered wordmark -->
 
   <!-- Mark -->
   <g transform="translate(4, 4) scale(0.875)">
@@ -8,10 +8,18 @@
     <rect x="5" y="5"  width="14" height="14" rx="2" fill="#334155"/>
     <rect x="5" y="25" width="14" height="14" rx="2" fill="#475569"/>
     <rect x="5" y="45" width="14" height="14" rx="2" fill="#64748b"/>
+    <!-- Flow: source → bridge -->
+    <line x1="20" y1="12" x2="24" y2="12" stroke="#64748b" stroke-width="1" opacity="0.4"/>
+    <line x1="20" y1="32" x2="24" y2="32" stroke="#64748b" stroke-width="1" opacity="0.4"/>
+    <line x1="20" y1="52" x2="24" y2="52" stroke="#64748b" stroke-width="1" opacity="0.4"/>
     <!-- Bridge -->
     <rect x="25" y="5"  width="14" height="14" rx="2" fill="none" stroke="#94a3b8" stroke-width="1.5"/>
     <rect x="25" y="25" width="14" height="14" rx="2" fill="none" stroke="#94a3b8" stroke-width="1.5"/>
     <rect x="25" y="45" width="14" height="14" rx="2" fill="none" stroke="#94a3b8" stroke-width="1.5"/>
+    <!-- Flow: bridge → output -->
+    <line x1="40" y1="12" x2="44" y2="12" stroke="#10b981" stroke-width="1" opacity="0.35"/>
+    <line x1="40" y1="32" x2="44" y2="32" stroke="#10b981" stroke-width="1" opacity="0.35"/>
+    <line x1="40" y1="52" x2="44" y2="52" stroke="#10b981" stroke-width="1" opacity="0.35"/>
     <!-- Output -->
     <rect x="45" y="5"  width="14" height="14" rx="2.5" fill="#10b981" fill-opacity="0.3" stroke="#10b981" stroke-width="1.5"/>
     <rect x="45" y="25" width="14" height="14" rx="2.5" fill="#10b981" fill-opacity="0.3" stroke="#10b981" stroke-width="1.5"/>
@@ -24,7 +32,7 @@
   <!-- Separator -->
   <line x1="68" y1="12" x2="68" y2="52" stroke="#334155" stroke-width="1"/>
 
-  <!-- Wordmark (vertically centered: name at optical center, tagline below) -->
+  <!-- Wordmark -->
   <text x="80" y="35" font-family="'SF Mono', 'Cascadia Code', 'JetBrains Mono', 'Consolas', monospace" font-size="20" fill="#e2e8f0" font-weight="500" letter-spacing="-0.5">market-data-bridge</text>
   <text x="80" y="52" font-family="'SF Mono', 'Cascadia Code', 'JetBrains Mono', 'Consolas', monospace" font-size="10" fill="#64748b" letter-spacing="0.5">structured data layer for AI trading tools</text>
 </svg>
