@@ -1,25 +1,26 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <title>market-data-bridge — App Icon</title>
+  <!-- Iter 3: uses updated mark coordinates -->
 
   <!-- Background -->
   <rect width="512" height="512" rx="96" fill="#0f172a"/>
 
   <!-- Mark scaled to fill with padding -->
   <g transform="translate(96, 96) scale(5)">
-    <!-- Sources -->
-    <rect x="7" y="7"  width="14" height="14" rx="2" fill="#475569"/>
-    <rect x="7" y="25" width="14" height="14" rx="2" fill="#64748b"/>
-    <rect x="7" y="43" width="14" height="14" rx="2" fill="#334155"/>
+    <!-- Sources (dark→mid→light) -->
+    <rect x="5" y="5"  width="14" height="14" rx="2" fill="#334155"/>
+    <rect x="5" y="25" width="14" height="14" rx="2" fill="#475569"/>
+    <rect x="5" y="45" width="14" height="14" rx="2" fill="#64748b"/>
     <!-- Bridge -->
-    <rect x="25" y="7"  width="14" height="14" rx="2" fill="none" stroke="#94a3b8" stroke-width="1.5"/>
+    <rect x="25" y="5"  width="14" height="14" rx="2" fill="none" stroke="#94a3b8" stroke-width="1.5"/>
     <rect x="25" y="25" width="14" height="14" rx="2" fill="none" stroke="#94a3b8" stroke-width="1.5"/>
-    <rect x="25" y="43" width="14" height="14" rx="2" fill="none" stroke="#94a3b8" stroke-width="1.5"/>
+    <rect x="25" y="45" width="14" height="14" rx="2" fill="none" stroke="#94a3b8" stroke-width="1.5"/>
     <!-- Output -->
-    <rect x="43" y="7"  width="14" height="14" rx="2.5" fill="#10b981" fill-opacity="0.2" stroke="#10b981" stroke-width="1.5"/>
-    <rect x="43" y="25" width="14" height="14" rx="2.5" fill="#10b981" fill-opacity="0.2" stroke="#10b981" stroke-width="1.5"/>
-    <rect x="43" y="43" width="14" height="14" rx="2.5" fill="#10b981" fill-opacity="0.2" stroke="#10b981" stroke-width="1.5"/>
-    <circle cx="50" cy="14" r="2.5" fill="#10b981"/>
-    <circle cx="50" cy="32" r="2.5" fill="#10b981"/>
-    <circle cx="50" cy="50" r="2.5" fill="#10b981"/>
+    <rect x="45" y="5"  width="14" height="14" rx="2.5" fill="#10b981" fill-opacity="0.3" stroke="#10b981" stroke-width="1.5"/>
+    <rect x="45" y="25" width="14" height="14" rx="2.5" fill="#10b981" fill-opacity="0.3" stroke="#10b981" stroke-width="1.5"/>
+    <rect x="45" y="45" width="14" height="14" rx="2.5" fill="#10b981" fill-opacity="0.3" stroke="#10b981" stroke-width="1.5"/>
+    <circle cx="52" cy="12" r="3" fill="#10b981"/>
+    <circle cx="52" cy="32" r="3" fill="#10b981"/>
+    <circle cx="52" cy="52" r="3" fill="#10b981"/>
   </g>
 </svg>

@@ -53,3 +53,42 @@ This mark:
 7. Extends naturally to the wordmark (monospace, structured)
 
 The runner-up is D1-Iter1 (simplified grid bridge with source notches), which tells the story more explicitly but has more parts and weaker small-size performance.
+
+---
+
+## Iteration 3: Tighten the Core Mark
+
+Applied to the winning D2-Iter2 + Enrichment Dots mark:
+
+### Changes
+1. **Source column gradient reordered**: dark→mid→light (top-to-bottom) instead of arbitrary. Creates a logical data-depth progression — raw/opaque sources at top, lighter/processed at bottom.
+2. **Grid coordinates adjusted**: Cells shifted from (7,7)→(5,5) and (43,y)→(45,y) for slightly wider inter-column gaps vs intra-column spacing, visually grouping each column.
+3. **Output column presence strengthened**: fill-opacity increased from 0.2→0.3. The emerald read was too subtle against dark backgrounds; 0.3 balances visibility without overwhelming the grid structure.
+4. **Enrichment dots enlarged**: r=2.5→3. Better visibility at medium sizes (64-128px) without dominating at large sizes.
+5. **Monochrome mark fixed**: Output column changed from stroke-only (stroke-width=2) to filled (fill="#94a3b8" fill-opacity="0.3" + stroke). Maintains the filled→outlined→filled-different story in grayscale.
+6. **Favicon 32px grid symmetry**: Output column width corrected from 8px→7px to match source/bridge columns. The asymmetry was noticeable at small sizes.
+7. **Favicon 16px**: Output fill-opacity increased from 0.3→0.4 for stronger emerald read at minimum size.
+
+### Assessment
+These are refinement-level changes, not direction changes. The mark's identity and semantic structure are unchanged. Every change improves craft fidelity (pixel alignment, color hierarchy, cross-size consistency) without adding complexity.
+
+---
+
+## Iteration 4: Refine Compound Assets
+
+### Banner (readme-banner.svg)
+1. **Composition tightened**: Mark and text shifted 20px closer together (text x: 310→290) for better visual weight distribution.
+2. **Flow arrows added**: Subtle 4px lines between mark columns (opacity 0.4-0.5) hint at data flow direction in the larger banner context. These are banner-only — not present in the mark itself.
+3. **Architecture diagram readability**: Opacity increased from 0.35→0.45 — the text was barely visible, defeating the purpose of the supporting diagram.
+4. **Tool count corrected**: "56 MCP tools"→"75 MCP tools" to match actual codebase (the 56 count was from the REST API endpoints, not MCP tools).
+
+### OG Card (og-card.svg)
+1. **Mark-to-text gap reduced**: Mark scale reduced from 5→4.5, text x shifted from 460→400. Closes the dead space that made the composition feel split in two.
+2. **Separators unified**: Changed from pipe characters ("|") with mixed font-families to centered dots ("·") with consistent `'SF Mono'` stack. Cleaner, more typographically correct.
+3. **Tool count corrected**: "56 tools"→"75 tools".
+4. **Badge positioning adjusted**: Version and language badges moved left to align with new text position.
+
+### Lockups
+1. **Wordmark vertical centering**: Name baseline moved from y=37→35, tagline from y=54→52. The text pair now sits at optical center relative to the mark height.
+2. **Light-mode source gradient**: Reordered to match dark-mode logic (lightest→mid→darkest top-to-bottom, inverted for light backgrounds).
+3. **All lockups use updated mark coordinates** (Iter 3 cell positions).

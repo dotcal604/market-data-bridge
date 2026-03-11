@@ -25,9 +25,9 @@ A 3x3 grid representing the core data flow:
   Data in        Normalize      Enriched out
 ```
 
-- **Column 1** (Sources): Filled gray squares at varied opacities → IBKR, Yahoo, CSV
+- **Column 1** (Sources): Filled gray squares, dark→mid→light (top-to-bottom) = data depth → IBKR, Yahoo, CSV
 - **Column 2** (Bridge): Outlined squares → the normalization/processing layer
-- **Column 3** (Output): Emerald-filled squares with centered dots → enriched, unified data
+- **Column 3** (Output): Emerald-filled squares (fill-opacity 0.3) with centered dots (r=3) → enriched, unified data
 
 ## Color Palette
 
@@ -93,3 +93,14 @@ brand/assets/
 - Never stretch, rotate, or add effects to the mark
 - The mark works in monochrome — always test dark/light/mono before deploying
 - The emerald accent (#10b981) is the only color that should be used for "active" or "positive" states across the product
+- Source column gradient order: slate-700 (top) → slate-600 (mid) → slate-500 (bottom) = dark-to-light
+- Output column fill-opacity: 0.3 (dark mode), 0.15 (light mode) — stronger than initial 0.2 for better emerald read
+- Banner/OG card tool count: 75 MCP tools (not 56 — that was the REST endpoint count)
+
+## Iteration History
+
+| Iteration | Focus | Key Changes |
+|-----------|-------|-------------|
+| 1-2 | Direction exploration | 3 concepts × 2 directions, 5-reviewer critique, D2-Iter2 + enrichment dots selected |
+| 3 | Core mark tightening | Source gradient ordered, output opacity 0.2→0.3, dots r=2.5→3, mono mark fixed, favicon symmetry |
+| 4 | Compound asset refinement | Banner/OG tighter composition, flow arrows in banner, tool count corrected, separators unified |

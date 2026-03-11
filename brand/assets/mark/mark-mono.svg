@@ -1,23 +1,24 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
   <title>market-data-bridge — Mark (Monochrome)</title>
+  <desc>Iter 3: Output column now filled (lighter gray) to maintain filled→outlined→filled progression in mono.</desc>
 
-  <!-- Column 1: Sources (filled) -->
-  <rect x="7" y="7"  width="14" height="14" rx="2" fill="#64748b"/>
-  <rect x="7" y="25" width="14" height="14" rx="2" fill="#64748b"/>
-  <rect x="7" y="43" width="14" height="14" rx="2" fill="#64748b"/>
+  <!-- Column 1: Sources (filled, uniform) -->
+  <rect x="5" y="5"  width="14" height="14" rx="2" fill="#64748b"/>
+  <rect x="5" y="25" width="14" height="14" rx="2" fill="#64748b"/>
+  <rect x="5" y="45" width="14" height="14" rx="2" fill="#64748b"/>
 
   <!-- Column 2: Bridge (outlined) -->
-  <rect x="25" y="7"  width="14" height="14" rx="2" fill="none" stroke="#64748b" stroke-width="1.5"/>
+  <rect x="25" y="5"  width="14" height="14" rx="2" fill="none" stroke="#64748b" stroke-width="1.5"/>
   <rect x="25" y="25" width="14" height="14" rx="2" fill="none" stroke="#64748b" stroke-width="1.5"/>
-  <rect x="25" y="43" width="14" height="14" rx="2" fill="none" stroke="#64748b" stroke-width="1.5"/>
+  <rect x="25" y="45" width="14" height="14" rx="2" fill="none" stroke="#64748b" stroke-width="1.5"/>
 
-  <!-- Column 3: Output (filled, slightly different) -->
-  <rect x="43" y="7"  width="14" height="14" rx="2.5" fill="none" stroke="#64748b" stroke-width="2"/>
-  <rect x="43" y="25" width="14" height="14" rx="2.5" fill="none" stroke="#64748b" stroke-width="2"/>
-  <rect x="43" y="43" width="14" height="14" rx="2.5" fill="none" stroke="#64748b" stroke-width="2"/>
+  <!-- Column 3: Output (filled lighter to differentiate from sources) -->
+  <rect x="45" y="5"  width="14" height="14" rx="2.5" fill="#94a3b8" fill-opacity="0.3" stroke="#64748b" stroke-width="1.5"/>
+  <rect x="45" y="25" width="14" height="14" rx="2.5" fill="#94a3b8" fill-opacity="0.3" stroke="#64748b" stroke-width="1.5"/>
+  <rect x="45" y="45" width="14" height="14" rx="2.5" fill="#94a3b8" fill-opacity="0.3" stroke="#64748b" stroke-width="1.5"/>
 
   <!-- Enrichment indicators -->
-  <circle cx="50" cy="14" r="2.5" fill="#64748b"/>
-  <circle cx="50" cy="32" r="2.5" fill="#64748b"/>
-  <circle cx="50" cy="50" r="2.5" fill="#64748b"/>
+  <circle cx="52" cy="12" r="3" fill="#64748b"/>
+  <circle cx="52" cy="32" r="3" fill="#64748b"/>
+  <circle cx="52" cy="52" r="3" fill="#64748b"/>
 </svg>

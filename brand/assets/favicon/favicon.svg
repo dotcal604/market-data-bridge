@@ -1,27 +1,27 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
   <title>market-data-bridge — Favicon</title>
-  <!-- Optimized for 32x32: pixel-snapped, simplified for clarity -->
+  <!-- Iter 3: fixed column widths to be uniform (7px), ordered source gradient, stronger output -->
 
   <!-- Background -->
   <rect width="32" height="32" rx="4" fill="#0f172a"/>
 
-  <!-- Sources (col 1) -->
-  <rect x="3"  y="3"  width="7" height="7" rx="1" fill="#475569"/>
-  <rect x="3"  y="12" width="7" height="7" rx="1" fill="#64748b"/>
-  <rect x="3"  y="21" width="7" height="7" rx="1" fill="#334155"/>
+  <!-- Sources (col 1, dark→mid→light) -->
+  <rect x="3"  y="3"  width="7" height="7" rx="1" fill="#334155"/>
+  <rect x="3"  y="12" width="7" height="7" rx="1" fill="#475569"/>
+  <rect x="3"  y="21" width="7" height="7" rx="1" fill="#64748b"/>
 
   <!-- Bridge (col 2) -->
   <rect x="12" y="3"  width="7" height="7" rx="1" fill="none" stroke="#94a3b8" stroke-width="1"/>
   <rect x="12" y="12" width="7" height="7" rx="1" fill="none" stroke="#94a3b8" stroke-width="1"/>
   <rect x="12" y="21" width="7" height="7" rx="1" fill="none" stroke="#94a3b8" stroke-width="1"/>
 
-  <!-- Output (col 3) -->
-  <rect x="21" y="3"  width="8" height="7" rx="1.5" fill="#10b981" fill-opacity="0.25" stroke="#10b981" stroke-width="1"/>
-  <rect x="21" y="12" width="8" height="7" rx="1.5" fill="#10b981" fill-opacity="0.25" stroke="#10b981" stroke-width="1"/>
-  <rect x="21" y="21" width="8" height="7" rx="1.5" fill="#10b981" fill-opacity="0.25" stroke="#10b981" stroke-width="1"/>
+  <!-- Output (col 3, same 7px width for grid symmetry) -->
+  <rect x="21" y="3"  width="7" height="7" rx="1.5" fill="#10b981" fill-opacity="0.3" stroke="#10b981" stroke-width="1"/>
+  <rect x="21" y="12" width="7" height="7" rx="1.5" fill="#10b981" fill-opacity="0.3" stroke="#10b981" stroke-width="1"/>
+  <rect x="21" y="21" width="7" height="7" rx="1.5" fill="#10b981" fill-opacity="0.3" stroke="#10b981" stroke-width="1"/>
 
   <!-- Enrichment dots -->
-  <circle cx="25" cy="6.5"  r="1.5" fill="#10b981"/>
-  <circle cx="25" cy="15.5" r="1.5" fill="#10b981"/>
-  <circle cx="25" cy="24.5" r="1.5" fill="#10b981"/>
+  <circle cx="24.5" cy="6.5"  r="1.5" fill="#10b981"/>
+  <circle cx="24.5" cy="15.5" r="1.5" fill="#10b981"/>
+  <circle cx="24.5" cy="24.5" r="1.5" fill="#10b981"/>
 </svg>

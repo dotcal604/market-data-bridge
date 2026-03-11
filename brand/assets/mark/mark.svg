@@ -1,24 +1,24 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
   <title>market-data-bridge — Mark</title>
-  <desc>The Bridge Grid: 3x3 grid representing source → bridge → enriched output</desc>
+  <desc>The Bridge Grid: 3x3 grid representing source → bridge → enriched output. Iter 3: tightened column grouping, ordered source gradient, stronger output presence.</desc>
 
-  <!-- Column 1: Sources (filled, varied gray tones) -->
-  <rect x="7" y="7"  width="14" height="14" rx="2" fill="#475569"/>
-  <rect x="7" y="25" width="14" height="14" rx="2" fill="#64748b"/>
-  <rect x="7" y="43" width="14" height="14" rx="2" fill="#334155"/>
+  <!-- Column 1: Sources (filled, dark→mid→light top-to-bottom = data depth) -->
+  <rect x="5" y="5"  width="14" height="14" rx="2" fill="#334155"/>
+  <rect x="5" y="25" width="14" height="14" rx="2" fill="#475569"/>
+  <rect x="5" y="45" width="14" height="14" rx="2" fill="#64748b"/>
 
-  <!-- Column 2: Bridge (outlined, processing layer) -->
-  <rect x="25" y="7"  width="14" height="14" rx="2" fill="none" stroke="#94a3b8" stroke-width="1.5"/>
+  <!-- Column 2: Bridge (outlined, normalization layer) -->
+  <rect x="25" y="5"  width="14" height="14" rx="2" fill="none" stroke="#94a3b8" stroke-width="1.5"/>
   <rect x="25" y="25" width="14" height="14" rx="2" fill="none" stroke="#94a3b8" stroke-width="1.5"/>
-  <rect x="25" y="43" width="14" height="14" rx="2" fill="none" stroke="#94a3b8" stroke-width="1.5"/>
+  <rect x="25" y="45" width="14" height="14" rx="2" fill="none" stroke="#94a3b8" stroke-width="1.5"/>
 
-  <!-- Column 3: Enriched output (emerald filled with data indicators) -->
-  <rect x="43" y="7"  width="14" height="14" rx="2.5" fill="#10b981" fill-opacity="0.2" stroke="#10b981" stroke-width="1.5"/>
-  <rect x="43" y="25" width="14" height="14" rx="2.5" fill="#10b981" fill-opacity="0.2" stroke="#10b981" stroke-width="1.5"/>
-  <rect x="43" y="43" width="14" height="14" rx="2.5" fill="#10b981" fill-opacity="0.2" stroke="#10b981" stroke-width="1.5"/>
+  <!-- Column 3: Enriched output (emerald, stronger presence) -->
+  <rect x="45" y="5"  width="14" height="14" rx="2.5" fill="#10b981" fill-opacity="0.3" stroke="#10b981" stroke-width="1.5"/>
+  <rect x="45" y="25" width="14" height="14" rx="2.5" fill="#10b981" fill-opacity="0.3" stroke="#10b981" stroke-width="1.5"/>
+  <rect x="45" y="45" width="14" height="14" rx="2.5" fill="#10b981" fill-opacity="0.3" stroke="#10b981" stroke-width="1.5"/>
 
-  <!-- Enrichment indicators (centered dots in output column) -->
-  <circle cx="50" cy="14" r="2.5" fill="#10b981"/>
-  <circle cx="50" cy="32" r="2.5" fill="#10b981"/>
-  <circle cx="50" cy="50" r="2.5" fill="#10b981"/>
+  <!-- Enrichment indicators (centered dots, slightly larger) -->
+  <circle cx="52" cy="12" r="3" fill="#10b981"/>
+  <circle cx="52" cy="32" r="3" fill="#10b981"/>
+  <circle cx="52" cy="52" r="3" fill="#10b981"/>
 </svg>
