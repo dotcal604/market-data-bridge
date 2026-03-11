@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <title>Concept C3: Converge Consensus — Three nodes to one bar</title>
+  <rect width="120" height="120" fill="none"/>
+  <!-- Three model nodes at top -->
+  <circle cx="30" cy="28" r="10" fill="none" stroke="#10b981" stroke-width="2.5"/>
+  <circle cx="60" cy="28" r="10" fill="none" stroke="#8b5cf6" stroke-width="2.5"/>
+  <circle cx="90" cy="28" r="10" fill="none" stroke="#f59e0b" stroke-width="2.5"/>
+  <!-- Inner dots (model active indicators) -->
+  <circle cx="30" cy="28" r="3.5" fill="#10b981"/>
+  <circle cx="60" cy="28" r="3.5" fill="#8b5cf6"/>
+  <circle cx="90" cy="28" r="3.5" fill="#f59e0b"/>
+  <!-- Convergence lines to center point -->
+  <line x1="30" y1="38" x2="60" y2="62" stroke="#64748b" stroke-width="1.5"/>
+  <line x1="60" y1="38" x2="60" y2="62" stroke="#64748b" stroke-width="1.5"/>
+  <line x1="90" y1="38" x2="60" y2="62" stroke="#64748b" stroke-width="1.5"/>
+  <!-- Convergence point -->
+  <circle cx="60" cy="65" r="5" fill="#10b981"/>
+  <!-- Output consensus bar -->
+  <rect x="25" y="80" width="70" height="14" rx="4" fill="#10b981" opacity="0.2" stroke="#10b981" stroke-width="2"/>
+  <!-- Score fill within bar -->
+  <rect x="27" y="82" width="48" height="10" rx="3" fill="#10b981" opacity="0.6"/>
+  <!-- Connecting line from convergence to bar -->
+  <line x1="60" y1="70" x2="60" y2="80" stroke="#10b981" stroke-width="2"/>
+</svg>

@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <title>Concept C2: Scoring Grid — 3x3 grid with consensus row highlighted</title>
+  <rect width="120" height="120" fill="none"/>
+  <!-- 3x3 grid structure -->
+  <!-- Row 1 (features) -->
+  <rect x="24" y="24" width="22" height="22" rx="2" fill="#334155"/>
+  <rect x="49" y="24" width="22" height="22" rx="2" fill="#334155"/>
+  <rect x="74" y="24" width="22" height="22" rx="2" fill="#334155"/>
+  <!-- Row 2 (scores) -->
+  <rect x="24" y="49" width="22" height="22" rx="2" fill="#334155"/>
+  <rect x="49" y="49" width="22" height="22" rx="2" fill="#334155"/>
+  <rect x="74" y="49" width="22" height="22" rx="2" fill="#334155"/>
+  <!-- Row 3 (consensus — highlighted) -->
+  <rect x="24" y="74" width="22" height="22" rx="3" fill="#10b981" opacity="0.25" stroke="#10b981" stroke-width="2"/>
+  <rect x="49" y="74" width="22" height="22" rx="3" fill="#10b981" opacity="0.25" stroke="#10b981" stroke-width="2"/>
+  <rect x="74" y="74" width="22" height="22" rx="3" fill="#10b981" opacity="0.25" stroke="#10b981" stroke-width="2"/>
+  <!-- Score indicators in cells -->
+  <circle cx="35" cy="35" r="4" fill="#10b981" opacity="0.6"/>
+  <circle cx="60" cy="35" r="5" fill="#8b5cf6" opacity="0.6"/>
+  <circle cx="85" cy="35" r="3.5" fill="#f59e0b" opacity="0.6"/>
+  <circle cx="35" cy="60" r="5" fill="#10b981" opacity="0.6"/>
+  <circle cx="60" cy="60" r="4" fill="#8b5cf6" opacity="0.6"/>
+  <circle cx="85" cy="60" r="4.5" fill="#f59e0b" opacity="0.6"/>
+  <!-- Consensus dots (larger, brighter) -->
+  <circle cx="35" cy="85" r="5" fill="#10b981"/>
+  <circle cx="60" cy="85" r="5" fill="#10b981"/>
+  <circle cx="85" cy="85" r="5" fill="#10b981"/>
+</svg>

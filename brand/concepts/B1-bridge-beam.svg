@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <title>Concept B1: Bridge Beam — Two pillars with structured span</title>
+  <rect width="120" height="120" fill="none"/>
+  <!-- Left pillar -->
+  <rect x="18" y="25" width="14" height="70" rx="2" fill="none" stroke="#e2e8f0" stroke-width="2.5"/>
+  <!-- Right pillar -->
+  <rect x="88" y="25" width="14" height="70" rx="2" fill="none" stroke="#e2e8f0" stroke-width="2.5"/>
+  <!-- Bridge span beam -->
+  <rect x="18" y="38" width="84" height="12" rx="2" fill="none" stroke="#10b981" stroke-width="2.5"/>
+  <!-- Tick marks on span (data in transit) -->
+  <line x1="36" y1="40" x2="36" y2="48" stroke="#10b981" stroke-width="1.5"/>
+  <line x1="44" y1="40" x2="44" y2="48" stroke="#10b981" stroke-width="1.5"/>
+  <line x1="52" y1="40" x2="52" y2="48" stroke="#10b981" stroke-width="1.5"/>
+  <line x1="60" y1="40" x2="60" y2="48" stroke="#10b981" stroke-width="1.5"/>
+  <line x1="68" y1="40" x2="68" y2="48" stroke="#10b981" stroke-width="1.5"/>
+  <line x1="76" y1="40" x2="76" y2="48" stroke="#10b981" stroke-width="1.5"/>
+  <line x1="84" y1="40" x2="84" y2="48" stroke="#10b981" stroke-width="1.5"/>
+  <!-- Data indicator dots in left pillar -->
+  <circle cx="25" cy="58" r="2.5" fill="#64748b"/>
+  <circle cx="25" cy="68" r="2.5" fill="#64748b"/>
+  <circle cx="25" cy="78" r="2.5" fill="#64748b"/>
+  <!-- Data indicator dots in right pillar -->
+  <circle cx="95" cy="58" r="2.5" fill="#10b981"/>
+  <circle cx="95" cy="68" r="2.5" fill="#10b981"/>
+  <circle cx="95" cy="78" r="2.5" fill="#10b981"/>
+</svg>

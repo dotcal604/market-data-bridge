@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <title>Concept B2: Bracket Bridge — Code brackets connected by structured line</title>
+  <rect width="120" height="120" fill="none"/>
+  <!-- Left bracket [ -->
+  <path d="M 28 30 L 18 30 L 18 90 L 28 90" fill="none" stroke="#e2e8f0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Right bracket ] -->
+  <path d="M 92 30 L 102 30 L 102 90 L 92 90" fill="none" stroke="#e2e8f0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Three connecting bridge lines (data channels) -->
+  <line x1="28" y1="45" x2="92" y2="45" stroke="#10b981" stroke-width="2" stroke-dasharray="4,3"/>
+  <line x1="28" y1="60" x2="92" y2="60" stroke="#10b981" stroke-width="3"/>
+  <line x1="28" y1="75" x2="92" y2="75" stroke="#10b981" stroke-width="2" stroke-dasharray="4,3"/>
+  <!-- Center bridge node -->
+  <rect x="50" y="50" width="20" height="20" rx="3" fill="#10b981" opacity="0.15" stroke="#10b981" stroke-width="1.5"/>
+</svg>

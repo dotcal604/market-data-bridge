@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <title>Concept A3: Converge — Three arrows to center, one enriched arrow out</title>
+  <rect width="120" height="120" fill="none"/>
+  <!-- Three input arrows converging to center square -->
+  <line x1="15" y1="25" x2="42" y2="48" stroke="#64748b" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="15" y1="60" x2="42" y2="60" stroke="#64748b" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="15" y1="95" x2="42" y2="72" stroke="#64748b" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- Input dots (data sources) -->
+  <circle cx="12" cy="25" r="4" fill="#64748b"/>
+  <circle cx="12" cy="60" r="4" fill="#64748b"/>
+  <circle cx="12" cy="95" r="4" fill="#64748b"/>
+  <!-- Center bridge square -->
+  <rect x="42" y="45" width="30" height="30" rx="4" fill="#0f172a" stroke="#10b981" stroke-width="2.5"/>
+  <!-- Cross-hatch in bridge (grid/schema) -->
+  <line x1="52" y1="45" x2="52" y2="75" stroke="#10b981" stroke-width="1" opacity="0.5"/>
+  <line x1="62" y1="45" x2="62" y2="75" stroke="#10b981" stroke-width="1" opacity="0.5"/>
+  <line x1="42" y1="55" x2="72" y2="55" stroke="#10b981" stroke-width="1" opacity="0.5"/>
+  <line x1="42" y1="65" x2="72" y2="65" stroke="#10b981" stroke-width="1" opacity="0.5"/>
+  <!-- Output arrow (enriched — thicker, brighter) -->
+  <line x1="72" y1="60" x2="100" y2="60" stroke="#10b981" stroke-width="4" stroke-linecap="round"/>
+  <polygon points="100,52 112,60 100,68" fill="#10b981"/>
+</svg>

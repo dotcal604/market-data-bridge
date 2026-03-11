@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 80" width="400" height="80">
+  <title>Direction 2: The Ensemble Grid — Dark lockup</title>
+  <rect width="400" height="80" fill="#0f172a" rx="4"/>
+
+  <!-- Mark -->
+  <g transform="translate(16, 8)">
+    <rect x="0" y="0" width="16" height="16" rx="2" fill="#334155"/>
+    <rect x="20" y="0" width="16" height="16" rx="2" fill="#334155"/>
+    <rect x="40" y="0" width="16" height="16" rx="2" fill="#334155"/>
+    <rect x="0" y="20" width="16" height="16" rx="2" fill="#334155"/>
+    <rect x="20" y="20" width="16" height="16" rx="2" fill="#334155"/>
+    <rect x="40" y="20" width="16" height="16" rx="2" fill="#334155"/>
+    <rect x="0" y="40" width="16" height="16" rx="2.5" fill="#10b981" fill-opacity="0.2" stroke="#10b981" stroke-width="1.5"/>
+    <rect x="20" y="40" width="16" height="16" rx="2.5" fill="#10b981" fill-opacity="0.2" stroke="#10b981" stroke-width="1.5"/>
+    <rect x="40" y="40" width="16" height="16" rx="2.5" fill="#10b981" fill-opacity="0.2" stroke="#10b981" stroke-width="1.5"/>
+    <circle cx="8" cy="8" r="3" fill="#10b981" opacity="0.7"/>
+    <circle cx="28" cy="8" r="3" fill="#8b5cf6" opacity="0.7"/>
+    <circle cx="48" cy="8" r="3" fill="#f59e0b" opacity="0.7"/>
+    <circle cx="8" cy="28" r="3.5" fill="#10b981" opacity="0.5"/>
+    <circle cx="28" cy="28" r="3" fill="#8b5cf6" opacity="0.5"/>
+    <circle cx="48" cy="28" r="4" fill="#f59e0b" opacity="0.5"/>
+    <circle cx="8" cy="48" r="3.5" fill="#10b981"/>
+    <circle cx="28" cy="48" r="3.5" fill="#10b981"/>
+    <circle cx="48" cy="48" r="3.5" fill="#10b981"/>
+  </g>
+
+  <!-- Wordmark -->
+  <text x="85" y="38" font-family="'SF Mono', 'Cascadia Code', 'JetBrains Mono', 'Consolas', monospace" font-size="18" fill="#e2e8f0" font-weight="500" letter-spacing="-0.5">market-data-bridge</text>
+  <text x="85" y="54" font-family="'SF Mono', 'Cascadia Code', 'JetBrains Mono', 'Consolas', monospace" font-size="10" fill="#64748b" letter-spacing="0.5">structured data layer for AI trading tools</text>
+</svg>

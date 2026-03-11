@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <title>Direction 2, Iteration 1: Reframed as Bridge — Sources → Bridge → Output</title>
+  <!-- Same 3x3 grid structure, but reframed semantically:
+       Column 1: Three data sources (different opacities = different providers)
+       Column 2: Bridge processing (the transformation layer)
+       Column 3: Unified output (consensus green)
+       This reads as "three things go in on the left, get processed in the middle,
+       come out unified on the right" — which IS the bridge. -->
+
+  <!-- Column 1: Sources (varied, representing different providers) -->
+  <rect x="6" y="6" width="14" height="14" rx="2" fill="#64748b" opacity="0.5"/>
+  <rect x="6" y="24" width="14" height="14" rx="2" fill="#64748b" opacity="0.7"/>
+  <rect x="6" y="42" width="14" height="14" rx="2" fill="#64748b" opacity="0.9"/>
+
+  <!-- Column 2: Bridge layer (the processing/normalization) -->
+  <rect x="24" y="6" width="14" height="14" rx="2" fill="#334155" stroke="#10b981" stroke-width="1" opacity="0.7"/>
+  <rect x="24" y="24" width="14" height="14" rx="2" fill="#334155" stroke="#10b981" stroke-width="1" opacity="0.7"/>
+  <rect x="24" y="42" width="14" height="14" rx="2" fill="#334155" stroke="#10b981" stroke-width="1" opacity="0.7"/>
+
+  <!-- Column 3: Output (unified emerald — enriched, consistent) -->
+  <rect x="42" y="6" width="14" height="14" rx="2.5" fill="#10b981" fill-opacity="0.2" stroke="#10b981" stroke-width="1.5"/>
+  <rect x="42" y="24" width="14" height="14" rx="2.5" fill="#10b981" fill-opacity="0.2" stroke="#10b981" stroke-width="1.5"/>
+  <rect x="42" y="42" width="14" height="14" rx="2.5" fill="#10b981" fill-opacity="0.2" stroke="#10b981" stroke-width="1.5"/>
+
+  <!-- Small directional hints between columns (subtle arrows) -->
+  <line x1="20" y1="13" x2="23" y2="13" stroke="#64748b" stroke-width="1" opacity="0.4"/>
+  <line x1="20" y1="31" x2="23" y2="31" stroke="#64748b" stroke-width="1" opacity="0.4"/>
+  <line x1="20" y1="49" x2="23" y2="49" stroke="#64748b" stroke-width="1" opacity="0.4"/>
+  <line x1="38" y1="13" x2="41" y2="13" stroke="#10b981" stroke-width="1" opacity="0.5"/>
+  <line x1="38" y1="31" x2="41" y2="31" stroke="#10b981" stroke-width="1" opacity="0.5"/>
+  <line x1="38" y1="49" x2="41" y2="49" stroke="#10b981" stroke-width="1" opacity="0.5"/>
+
+  <!-- Enrichment indicators in output cells -->
+  <circle cx="49" cy="13" r="2.5" fill="#10b981"/>
+  <circle cx="49" cy="31" r="2.5" fill="#10b981"/>
+  <circle cx="49" cy="49" r="2.5" fill="#10b981"/>
+</svg>

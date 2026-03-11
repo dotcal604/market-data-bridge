@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <title>Direction 1, Iteration 1: Simplified — Grid bridge with implied convergence</title>
+  <!-- Removed explicit input lines. The grid IS the bridge.
+       Three subtle input indicators on left edge, output bar on right.
+       Fewer parts = more memorable. -->
+
+  <!-- The bridge grid (center, dominant element) -->
+  <rect x="14" y="14" width="24" height="36" rx="3" fill="none" stroke="#10b981" stroke-width="2"/>
+
+  <!-- Internal grid structure (schema alignment) -->
+  <line x1="22" y1="14" x2="22" y2="50" stroke="#10b981" stroke-width="0.75" opacity="0.4"/>
+  <line x1="30" y1="14" x2="30" y2="50" stroke="#10b981" stroke-width="0.75" opacity="0.4"/>
+  <line x1="14" y1="23" x2="38" y2="23" stroke="#10b981" stroke-width="0.75" opacity="0.4"/>
+  <line x1="14" y1="32" x2="38" y2="32" stroke="#10b981" stroke-width="0.75" opacity="0.4"/>
+  <line x1="14" y1="41" x2="38" y2="41" stroke="#10b981" stroke-width="0.75" opacity="0.4"/>
+
+  <!-- Three source indicators on left edge (subtle notches) -->
+  <rect x="8" y="18" width="6" height="3" rx="1" fill="#64748b"/>
+  <rect x="8" y="30.5" width="6" height="3" rx="1" fill="#64748b"/>
+  <rect x="8" y="43" width="6" height="3" rx="1" fill="#64748b"/>
+
+  <!-- Output bar on right (enriched data, thicker) -->
+  <rect x="38" y="24" width="18" height="16" rx="2" fill="#10b981" fill-opacity="0.15"/>
+  <rect x="38" y="24" width="18" height="16" rx="2" fill="none" stroke="#10b981" stroke-width="1.5"/>
+
+  <!-- Enrichment data lines inside output -->
+  <line x1="41" y1="29" x2="53" y2="29" stroke="#10b981" stroke-width="1.5"/>
+  <line x1="41" y1="35" x2="50" y2="35" stroke="#10b981" stroke-width="1.5"/>
+</svg>
