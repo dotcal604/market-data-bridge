@@ -1713,6 +1713,29 @@ def transform(df: pd.DataFrame) -> pd.DataFrame:
     ).round(2)
     df = df.sort_values("entry_time")
 
+    # ── Strategy-Sector-Direction prior win rate (no look-ahead) ─
+    if "sector" in df.columns and "direction" in df.columns:
+        df = df.sort_values("entry_time").reset_index(drop=True)
+        n = len(df)
+        _ssd_wr = np.full(n, np.nan)
+        _ssd_n = np.zeros(n, dtype=int)
+        _ssd_hist: dict = {}
+        for i in range(n):
+            cell = (df.loc[i, "strategy"], df.loc[i, "sector"], df.loc[i, "direction"])
+            win = bool(df.loc[i, "is_winner"])
+            if cell in _ssd_hist:
+                h = _ssd_hist[cell]
+                if len(h) >= 10:
+                    _ssd_wr[i] = sum(h) / len(h)
+                    _ssd_n[i] = len(h)
+            else:
+                _ssd_hist[cell] = []
+            _ssd_hist[cell].append(win)
+        df["strat_sector_prior_wr"] = np.round(_ssd_wr, 4)
+        df["strat_sector_prior_n"] = _ssd_n
+        logger.info(f"strat_sector_prior_wr coverage: "
+                     f"{np.isfinite(_ssd_wr).sum():,}/{n:,}")
+
     # ── Probability engine enrichment ────────────────────────────
     if PROB_JSON.exists():
         logger.info(f"Enriching with probability data from {PROB_JSON.name}")
