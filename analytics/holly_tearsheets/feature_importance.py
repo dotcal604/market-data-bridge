@@ -150,6 +150,7 @@ CANDIDATE_FEATURES = [
     "is_monday", "is_friday",
     # Regime/conditional stats from Holly
     "strat_win_rate", "sector_win_rate", "trend_cond_wr",
+    "strat_sector_prior_wr", "strat_sector_prior_n",
     # Probabilistic
     "prob_bayesian_wr", "prob_kelly", "prob_cohens_d",
     "prob_var95",
