@@ -156,10 +156,8 @@ async function main() {
     await startDivoomUpdater();
   }
 
-  // Start REST server
-  if (mode === "rest" || mode === "both") {
-    await startRestServer();
-  }
+  // Start REST server (always — tray app and external monitors poll /health)
+  await startRestServer();
 
   // Start MCP server on stdio
   if (mode === "mcp" || mode === "mcp-readonly" || mode === "both") {
