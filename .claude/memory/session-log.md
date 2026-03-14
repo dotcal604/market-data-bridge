@@ -295,3 +295,43 @@
 - **Silver layer now 224 columns** (up from 195), 5 Bronze sources, pipeline is 5-step (Extract → Indicators → Snapshots → Transform → Load)
 - Build: 28,875 rows, 17.1 MB DuckDB, 9.3 MB Parquet, 400s duration
 - Next: commit all changes
+
+## 2026-03-10 — worktree (naughty-satoshi) — Benzinga backfill + remaining datasets lift analysis
+
+- **Benzinga news backfill:**
+  - Narrow fetch (script 43) backfilled from 2021 to 2016: 4,846 → 6,251 articles (+29%)
+  - Rebuilt benzinga_features (script 45) with --since 2016-01-01: 7,056 → 28,875 trades
+  - Fixed DuckDB benzinga_news_broad: only had 2021+ loaded despite parquet having 2.7M from 2009. Reloaded full dataset.
+  - Benzinga ratings/earnings/guidance (script 78): all 403 NOT_AUTHORIZED — user hasn't purchased those Benzinga add-ons
+- **Script 95 (broad Benzinga features):** 12 features from 2.7M articles. Coverage: 24h=25%, 7d=54.4%, 30d=85.5%. KEY FINDING: ALL news features are noise (p>0.16). Prior apparent signal was time-period confound.
+- **Script 96 (remaining datasets lift):** Tested float, IPO, dividend, SEC filings, yield curve features.
+  - Fixed pandas nullable boolean `.astype(int)` crashes across all feature builders (NaN from LEFT JOIN)
+  - **Best OOS-stable features found:**
+    - `is_dividend_stock`: d=0.1054, d_test=0.1041 (strongest OOS stability)
+    - `days_since_ex_div`: d=-0.0512, d_test=-0.1089
+    - `log_days_since_ipo`: d=0.0760, d_test=0.0862
+    - `total_filings_30d`: d=0.0648, d_test=0.0568
+    - `free_float_percent`: d=0.1231, d_test=0.0555
+  - Yield curve features all FLIP or near-zero — no edge
+- **Commits:** a47e849 (script 95), 648e346 (script 96) — both pushed
+- Next: build composite model v15 incorporating dividend, IPO, SEC, float features
+
+## 2026-03-11 02:55 — desktop — Mega-fetch: hoard all API data before subscription cancel
+
+- Built script 97 (composite v15 fundamentals): Long MARGINAL (+0.002 d), Short IMPROVEMENT (+0.019 d, +$17 spread). Commit befc589.
+- Comprehensive audit of all 77 DuckDB tables: 51 mined, 26 infrastructure, 0 unaccounted
+- Built script 98 (mega-fetch): generic paginated fetcher for all unfetched Massive/Polygon endpoints
+- **Data hoarded (27 parquet files, 2.31 GB total in data/reference/):**
+  - Benzinga news: 2,400,000 articles (1.87 GB) — 2012 to 2026-03-11
+  - Benzinga ratings: 314,000 rows (13 MB) — 2012 to 2026-03-10
+  - Benzinga analysts: 6,225 rows (performance metrics, success rates)
+  - Benzinga firms: 657 rows
+  - Benzinga consensus: 5,815 rows (per-ticker from trading universe)
+  - Economy: inflation (949), inflation_expectations (530), labor_market (938)
+  - All active tickers: 12,368 rows
+  - Pre-existing: Polygon news (938K), financials (74K), SEC index (2M), shorts (794K), etc.
+- **Endpoints confirmed 403 (not in plan):** structured fundamentals (ratios, BS, IS, CF), benzinga earnings/guidance/insights, flat files
+- **Endpoints server-side broken:** 10-K sections (connection reset), 8-K text (502)
+- **Consensus ratings endpoint:** requires ticker in path (`/benzinga/v1/consensus-ratings/{ticker}`), not bulk — works fine per-ticker
+- **Commits:** befc589 (script 97), b372f70 (script 98) — both pushed to claude/naughty-satoshi
+- Next: all accessible API data has been hoarded. Remaining work is analysis/modeling only.
