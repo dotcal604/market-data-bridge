@@ -65,13 +65,14 @@ PENALTY_WR_THRESHOLD = 0.45
 SIGN_AGREEMENT_THRESHOLD = 0.50
 OVERLAY_CAP = 0.10
 
-# Verdict thresholds
-DEATH_DISCRIM = 0.02
-DEATH_COVERAGE = 0.20
+# Verdict thresholds (S5: OR logic — signal dies if EITHER is too weak)
+DEATH_DISCRIM = 0.03
+DEATH_COVERAGE = 0.25
 PROBATION_DISCRIM = 0.05
 PROBATION_COVERAGE = 0.40
 SURVIVAL_DISCRIM = 0.05
 SURVIVAL_COVERAGE = 0.30
+MIN_WF_FOLDS = 4  # Q3: minimum folds for walk-forward stability to be meaningful
 
 # Global data source tracker
 DATA_SOURCE = "UNKNOWN"
@@ -330,7 +331,7 @@ def detect_changepoints(df: pd.DataFrame) -> pd.DataFrame:
             p1, p2 = pre.mean(), post.mean()
             n1, n2 = len(pre), len(post)
             p_pool = (p1 * n1 + p2 * n2) / (n1 + n2)
-            if p_pool in (0, 1):
+            if p_pool < 0.01 or p_pool > 0.99:
                 continue
             se = np.sqrt(p_pool * (1 - p_pool) * (1/n1 + 1/n2))
             z = (p1 - p2) / se
@@ -338,12 +339,18 @@ def detect_changepoints(df: pd.DataFrame) -> pd.DataFrame:
             if pval < best_pval:
                 best_pval, best_date, best_delta = pval, cp_date, p1 - p2
 
-        rolling_std = pd.Series(wins).rolling(20, min_periods=15).mean().std() if len(wins) >= 20 else np.nan
+        # Rolling WR volatility: mean of rolling std of 20-trade win rate windows
+        rolling_std = pd.Series(wins).rolling(20, min_periods=15).std().mean() if len(wins) >= 20 else np.nan
 
         results.append({
             "strategy": strat, "sector": sector, "direction": direction,
             "n_trades": len(cell_df),
             "cusum_ratio": round(cusum_ratio, 3),
+            # 1.36 = Kolmogorov-Smirnov critical value at alpha=0.05.
+            # Used here as an approximate threshold for the rescaled CUSUM range.
+            # Strictly, K-S tables assume i.i.d. uniform, so this is conservative
+            # for binary win/loss series. For production, consider calibrating via
+            # permutation (shuffle wins, compute CUSUM 1000x, take 95th pct).
             "cusum_significant": cusum_ratio > 1.36,
             "best_cp_date": best_date,
             "best_cp_pval": round(best_pval, 4) if best_pval < 1 else np.nan,
@@ -633,6 +640,12 @@ def analyze_stability(df: pd.DataFrame, decay_map: pd.DataFrame) -> dict[str, An
     df["year"] = df["entry_date"].dt.year
     results: dict[str, Any] = {}
 
+    # Pre-compute sector stats for Policy F baseline in walk-forward folds
+    _sector_stats_full = df.groupby("sector").agg(
+        sector_wr=("is_winner", "mean"),
+        sector_n=("is_winner", "count"),
+    ).round(4)
+
     # --- By year ---
     year_results = []
     for year in sorted(df["year"].unique()):
@@ -731,10 +744,15 @@ def analyze_stability(df: pd.DataFrame, decay_map: pd.DataFrame) -> dict[str, An
 
         train_decay = build_cell_decay_map(train)
         train_dm = train_decay.set_index(["strategy", "sector", "direction"])
+        # Compute sector stats from training fold for Policy F baseline
+        fold_sector_stats = train.groupby("sector").agg(
+            sector_wr=("is_winner", "mean"),
+            sector_n=("is_winner", "count"),
+        ).round(4)
         fn = _make_policy_fn("E", {})
         metrics = _eval_policy_on_oos(
             f"WF {fold_start.strftime('%Y-%m')}",
-            fn, test, train_dm,
+            fn, test, train_dm, sector_stats=fold_sector_stats,
         )
         wf_results.append({
             "fold_start": fold_start.strftime("%Y-%m"),
@@ -818,8 +836,167 @@ def bootstrap_discrimination_ci(
 
 
 # ---------------------------------------------------------------------------
+# 8b. Permutation test (null distribution for discrimination)
+# ---------------------------------------------------------------------------
+def permutation_test_discrimination(
+    df: pd.DataFrame,
+    decay_map: pd.DataFrame,
+    n_perms: int = 1000,
+) -> dict:
+    """Shuffle is_winner labels to build null distribution for discrimination.
+
+    This tests whether the observed discrimination could arise from random
+    label assignment, providing a true null distribution (unlike bootstrap CI
+    which only tests if discrimination differs from zero).
+    """
+    df = df.copy()
+    df["entry_date"] = pd.to_datetime(df["entry_time"])
+    latest = df["entry_date"].max()
+    oos_start = latest - pd.DateOffset(months=3)
+    oos = df[df["entry_date"] >= oos_start]
+    is_df = df[df["entry_date"] < oos_start]
+
+    if len(oos) < 50:
+        split_idx = int(len(df) * 0.8)
+        df_sorted = df.sort_values("entry_date")
+        is_df, oos = df_sorted.iloc[:split_idx], df_sorted.iloc[split_idx:]
+
+    is_decay = build_cell_decay_map(is_df)
+    is_dm = is_decay.set_index(["strategy", "sector", "direction"])
+    fn = _make_policy_fn("E", {})
+
+    # Compute bonuses (these don't change — they're based on IS data)
+    oos = oos.copy()
+    bonuses = []
+    for _, row in oos.iterrows():
+        cell = (row["strategy"], row["sector"], row["direction"])
+        if cell in is_dm.index:
+            cd = is_dm.loc[cell]
+            if isinstance(cd, pd.DataFrame):
+                cd = cd.iloc[0]
+            bonuses.append(fn(cd.to_dict()))
+        else:
+            bonuses.append(0.0)
+    oos["bonus"] = bonuses
+
+    # Observed discrimination
+    fav = oos[oos["bonus"] > 0]
+    unf = oos[oos["bonus"] < 0]
+    if len(fav) < 5 or len(unf) < 5:
+        return {"observed_disc": np.nan, "perm_pval": np.nan, "n_perms": 0,
+                "null_mean": np.nan, "null_std": np.nan}
+    observed_disc = fav["is_winner"].mean() - unf["is_winner"].mean()
+
+    # Permute: shuffle outcome labels, recompute discrimination
+    rng = np.random.default_rng(42)
+    null_discs = []
+    outcomes = oos["is_winner"].values.copy()
+    bonus_arr = oos["bonus"].values
+    fav_mask = bonus_arr > 0
+    unf_mask = bonus_arr < 0
+
+    for _ in range(n_perms):
+        rng.shuffle(outcomes)
+        perm_fav_wr = outcomes[fav_mask].mean()
+        perm_unf_wr = outcomes[unf_mask].mean()
+        null_discs.append(perm_fav_wr - perm_unf_wr)
+
+    null_discs = np.array(null_discs)
+    # Two-sided p-value: fraction of permutations with |disc| >= |observed|
+    perm_pval = (np.abs(null_discs) >= abs(observed_disc)).mean()
+
+    logger.info(f"Permutation test: observed={observed_disc:+.4f}, "
+                f"p={perm_pval:.4f}, null_mean={null_discs.mean():+.4f}")
+    return {
+        "observed_disc": round(observed_disc, 4),
+        "perm_pval": round(perm_pval, 4),
+        "n_perms": n_perms,
+        "null_mean": round(null_discs.mean(), 4),
+        "null_std": round(null_discs.std(), 4),
+        "null_95pct": round(np.percentile(np.abs(null_discs), 95), 4),
+        "significant_at_005": perm_pval < 0.05,
+    }
+
+
+# ---------------------------------------------------------------------------
+# 8c. Information Coefficient (Spearman rank correlation)
+# ---------------------------------------------------------------------------
+def compute_information_coefficient(df: pd.DataFrame) -> dict:
+    """Compute IC: Spearman correlation between strat_sector_prior_wr and outcome.
+
+    IC measures monotonic predictive power of the continuous signal,
+    a stronger test than binary discrimination (high vs low).
+    """
+    if "strat_sector_prior_wr" not in df.columns:
+        return {"ic": np.nan, "ic_pval": np.nan, "monthly_ic": []}
+
+    valid = df[df["strat_sector_prior_wr"].notna()].copy()
+    if len(valid) < 30:
+        return {"ic": np.nan, "ic_pval": np.nan, "monthly_ic": []}
+
+    # Overall IC
+    ic, ic_pval = stats.spearmanr(valid["strat_sector_prior_wr"], valid["is_winner"])
+
+    # Monthly rolling IC
+    valid["entry_date"] = pd.to_datetime(valid["entry_time"])
+    valid["year_month"] = valid["entry_date"].dt.to_period("M")
+    monthly = []
+    for ym, group in valid.groupby("year_month"):
+        if len(group) < 20:
+            continue
+        m_ic, m_pval = stats.spearmanr(group["strat_sector_prior_wr"], group["is_winner"])
+        monthly.append({
+            "period": str(ym),
+            "ic": round(m_ic, 4) if np.isfinite(m_ic) else 0.0,
+            "pval": round(m_pval, 4) if np.isfinite(m_pval) else 1.0,
+            "n": len(group),
+        })
+
+    # Trailing 3m IC
+    latest = valid["entry_date"].max()
+    recent = valid[valid["entry_date"] >= latest - pd.DateOffset(months=3)]
+    recent_ic = np.nan
+    if len(recent) >= 20:
+        recent_ic, _ = stats.spearmanr(recent["strat_sector_prior_wr"], recent["is_winner"])
+
+    recent_str = f"{recent_ic:+.4f}" if np.isfinite(recent_ic) else "N/A"
+    logger.info(f"IC: overall={ic:+.4f} (p={ic_pval:.4f}), "
+                f"trailing_3m={recent_str}, "
+                f"{len(monthly)} monthly observations")
+    return {
+        "ic": round(ic, 4),
+        "ic_pval": round(ic_pval, 4),
+        "ic_significant": ic_pval < 0.05,
+        "recent_3m_ic": round(recent_ic, 4) if np.isfinite(recent_ic) else None,
+        "monthly_ic": monthly,
+        "ic_positive_months_pct": round(
+            sum(1 for m in monthly if m["ic"] > 0) / max(len(monthly), 1), 2
+        ),
+    }
+
+
+# ---------------------------------------------------------------------------
 # 9. Survivor / Kill tables
 # ---------------------------------------------------------------------------
+def _benjamini_hochberg(pvals: np.ndarray, alpha: float = 0.10) -> np.ndarray:
+    """Apply Benjamini-Hochberg FDR correction. Returns boolean array of rejections."""
+    n = len(pvals)
+    if n == 0:
+        return np.array([], dtype=bool)
+    finite_mask = np.isfinite(pvals)
+    sorted_idx = np.argsort(pvals)
+    rejections = np.zeros(n, dtype=bool)
+    for rank, idx in enumerate(sorted_idx, 1):
+        if not finite_mask[idx]:
+            continue
+        bh_threshold = alpha * rank / n
+        if pvals[idx] <= bh_threshold:
+            rejections[idx] = True
+        else:
+            break  # All subsequent p-values are larger
+    return rejections
+
+
 def build_survivor_kill_tables(
     decay_map: pd.DataFrame,
     sign_map: pd.DataFrame,
@@ -841,21 +1018,40 @@ def build_survivor_kill_tables(
         dm["best_cp_delta"] = 0.0
         dm["cusum_significant"] = False
 
+    # Apply Benjamini-Hochberg FDR correction to change-point p-values
+    if "best_cp_pval" in dm.columns:
+        cp_pvals = dm["best_cp_pval"].values.astype(float)
+        fdr_rejections = _benjamini_hochberg(cp_pvals, alpha=0.10)
+        dm["cp_significant_fdr"] = fdr_rejections
+        n_raw = dm["cp_significant"].sum()
+        n_fdr = fdr_rejections.sum()
+        logger.info(f"FDR correction: {n_raw} raw significant -> {n_fdr} after BH (alpha=0.10)")
+    else:
+        dm["cp_significant_fdr"] = False
+
+    # NaN in agree_full_3m: only treat as True when we lack recent data
+    # (i.e., trail_3m_n < MIN_CELL_TRADES_RECENT). Otherwise, NaN is unknown.
+    has_recent_data = dm["trail_3m_n"] >= MIN_CELL_TRADES_RECENT
+    agreement_ok = dm["agree_full_3m"].fillna(False) | ~has_recent_data
+
     survivors_mask = (
         (dm["full_n"] >= MIN_CELL_TRADES_DEPLOY)
         & (dm["full_wr"] > BREAKEVEN_WR)
-        & (dm["agree_full_3m"].fillna(True) | (dm["trail_3m_n"] < MIN_CELL_TRADES_RECENT))
-        & ~(dm["cp_significant"].fillna(False) & (dm["best_cp_delta"] > 0.05))
+        & agreement_ok
+        & ~(dm["cp_significant_fdr"].fillna(False) & (dm["best_cp_delta"] > 0.05))
         & (dm["shrunk_wr"] >= SAFE_WR_THRESHOLD)
     )
 
     kill_mask = (
         dm["decayed_3m"].fillna(False)
-        | (dm["decayed_6m"].fillna(False) & dm["decayed_3m"].fillna(False))
-        | (dm["cp_significant"].fillna(False) & (dm["best_cp_delta"] > 0.08))
+        | (dm["decayed_6m"].fillna(False) & ~dm["decayed_3m"].fillna(False))  # B3: 6m decay without 3m recovery
+        | (dm["cp_significant_fdr"].fillna(False) & (dm["best_cp_delta"] > 0.08))
         | (dm["full_n"] < MIN_CELL_TRADES_DEPLOY)
         | (dm["trail_3m_wr"] < PENALTY_WR_THRESHOLD)
     )
+
+    # Q5: Ensure kills take precedence over survivors (no overlap)
+    survivors_mask = survivors_mask & ~kill_mask
 
     survivors = dm[survivors_mask].sort_values("shrunk_wr", ascending=False)
     kills = dm[kill_mask].sort_values("trail_3m_wr", ascending=True)
@@ -898,6 +1094,8 @@ def generate_report(
     stability: dict,
     bootstrap_ci: dict,
     data_source: str,
+    permutation: dict | None = None,
+    ic_results: dict | None = None,
 ) -> str:
     L = []  # line accumulator
 
@@ -948,9 +1146,9 @@ def generate_report(
     L.append("")
 
     L.append("VERDICT CRITERIA:")
-    L.append(f"  DEATH:     discrimination < {DEATH_DISCRIM} AND coverage < {DEATH_COVERAGE:.0%}")
+    L.append(f"  DEATH:     discrimination < {DEATH_DISCRIM} OR coverage < {DEATH_COVERAGE:.0%}")
     L.append(f"  PROBATION: discrimination {DEATH_DISCRIM}..{PROBATION_DISCRIM} OR coverage {DEATH_COVERAGE:.0%}..{PROBATION_COVERAGE:.0%}")
-    L.append(f"  SURVIVAL:  discrimination >= {SURVIVAL_DISCRIM} AND coverage >= {SURVIVAL_COVERAGE:.0%} AND stable across folds")
+    L.append(f"  SURVIVAL:  discrimination >= {SURVIVAL_DISCRIM} AND coverage >= {SURVIVAL_COVERAGE:.0%} AND stable across >={MIN_WF_FOLDS} folds")
     L.append("")
 
     # Compute preliminary verdict
@@ -963,16 +1161,17 @@ def generate_report(
         default=0,
     )
 
-    # Walk-forward stability check
+    # Walk-forward stability check (Q3: require minimum fold count)
     wf_folds = stability.get("walk_forward_folds", [])
     wf_stable = False
     if wf_folds:
         wf_discs = [f["discrimination"] for f in wf_folds if np.isfinite(f.get("discrimination", np.nan))]
-        if len(wf_discs) >= 3:
+        if len(wf_discs) >= MIN_WF_FOLDS:
             wf_positive = sum(1 for d in wf_discs if d > 0)
             wf_stable = wf_positive / len(wf_discs) >= 0.6
 
-    if best_disc < DEATH_DISCRIM and best_coverage < DEATH_COVERAGE:
+    # S5: OR logic — signal dies if EITHER discrimination or coverage is too weak
+    if best_disc < DEATH_DISCRIM or best_coverage < DEATH_COVERAGE:
         prelim_verdict = "DEAD"
     elif best_disc >= SURVIVAL_DISCRIM and best_coverage >= SURVIVAL_COVERAGE and wf_stable:
         prelim_verdict = "SURVIVES (conditional)"
@@ -1103,9 +1302,50 @@ def generate_report(
         L.append("  -> Discrimination is statistically significant at 95% level")
     L.append("")
 
+    # --- Permutation test ---
+    L.append("-" * 78)
+    L.append("2.8 PERMUTATION TEST (null distribution)")
+    L.append("-" * 78)
+    if permutation and np.isfinite(permutation.get("observed_disc", np.nan)):
+        L.append(f"  Observed discrimination: {permutation['observed_disc']:+.4f}")
+        L.append(f"  Null mean (shuffled labels): {permutation['null_mean']:+.4f}")
+        L.append(f"  Null std: {permutation['null_std']:.4f}")
+        L.append(f"  Null 95th percentile (|disc|): {permutation['null_95pct']:.4f}")
+        L.append(f"  Permutation p-value: {permutation['perm_pval']:.4f} ({permutation['n_perms']} permutations)")
+        if permutation.get("significant_at_005"):
+            L.append("  -> SIGNIFICANT: observed discrimination exceeds null distribution")
+        else:
+            L.append("  -> NOT SIGNIFICANT: observed discrimination is within null distribution")
+            L.append("     Signal may be indistinguishable from random label assignment.")
+    else:
+        L.append("  Permutation test not computed (insufficient data)")
+    L.append("")
+
+    # --- Information Coefficient ---
+    L.append("-" * 78)
+    L.append("2.9 INFORMATION COEFFICIENT (Spearman rank correlation)")
+    L.append("-" * 78)
+    if ic_results and np.isfinite(ic_results.get("ic", np.nan)):
+        L.append(f"  Overall IC: {ic_results['ic']:+.4f} (p={ic_results['ic_pval']:.4f})")
+        if ic_results.get("recent_3m_ic") is not None:
+            L.append(f"  Trailing 3m IC: {ic_results['recent_3m_ic']:+.4f}")
+        L.append(f"  Positive IC months: {ic_results.get('ic_positive_months_pct', 0):.0%}")
+        if ic_results.get("ic_significant"):
+            L.append("  -> IC is statistically significant")
+        else:
+            L.append("  -> IC is NOT statistically significant")
+            L.append("     Signal lacks monotonic predictive power.")
+        if ic_results.get("monthly_ic"):
+            L.append("  Monthly IC trend (last 6):")
+            for m in ic_results["monthly_ic"][-6:]:
+                L.append(f"    {m['period']}: IC={m['ic']:+.4f} n={m['n']}")
+    else:
+        L.append("  IC not computed (strat_sector_prior_wr column missing)")
+    L.append("")
+
     # --- Survivor table ---
     L.append("-" * 78)
-    L.append("2.8 SURVIVOR TABLE")
+    L.append("2.10 SURVIVOR TABLE")
     L.append("-" * 78)
     if len(survivors) > 0:
         L.append(f"  {len(survivors)} cells survive")
@@ -1120,7 +1360,7 @@ def generate_report(
 
     # --- Kill table ---
     L.append("-" * 78)
-    L.append("2.9 KILL TABLE")
+    L.append("2.11 KILL TABLE")
     L.append("-" * 78)
     if len(kills) > 0:
         L.append(f"  {len(kills)} cells killed")
@@ -1147,6 +1387,14 @@ def generate_report(
         L.append("     Signal discrimination may be entirely due to sampling noise.")
     else:
         L.append(f"  -> NO. 95% CI [{bootstrap_ci.get('ci_lower')}, {bootstrap_ci.get('ci_upper')}] excludes zero.")
+    # Permutation test cross-check
+    if permutation and permutation.get("significant_at_005") is not None:
+        if not permutation["significant_at_005"]:
+            L.append(f"  -> PERMUTATION CROSS-CHECK: FAILS (p={permutation['perm_pval']:.4f})")
+            L.append("     Even if bootstrap CI excludes zero, permutation test shows")
+            L.append("     discrimination is within range of random label assignment.")
+        else:
+            L.append(f"  -> PERMUTATION CROSS-CHECK: PASSES (p={permutation['perm_pval']:.4f})")
     L.append("")
 
     # Q2: Cross-product vs sector-only?
@@ -1193,6 +1441,24 @@ def generate_report(
         L.append("     Consider keeping the simpler version and killing the cross-product.")
     L.append("")
 
+    # Q6: Does the signal have monotonic predictive power?
+    L.append("Q6: Does the continuous signal have monotonic predictive power (IC)?")
+    if ic_results and np.isfinite(ic_results.get("ic", np.nan)):
+        ic_val = ic_results["ic"]
+        if abs(ic_val) < 0.02:
+            L.append(f"  -> NO. IC={ic_val:+.4f} is near zero. No monotonic relationship.")
+        elif ic_results.get("ic_significant"):
+            L.append(f"  -> YES. IC={ic_val:+.4f} (p={ic_results['ic_pval']:.4f}). Significant monotonic signal.")
+        else:
+            L.append(f"  -> WEAK. IC={ic_val:+.4f} but not significant (p={ic_results['ic_pval']:.4f}).")
+        if ic_results.get("recent_3m_ic") is not None:
+            r3m = ic_results["recent_3m_ic"]
+            if r3m < 0:
+                L.append(f"     Recent 3m IC={r3m:+.4f} is NEGATIVE — signal may have inverted.")
+    else:
+        L.append("  -> Not computed.")
+    L.append("")
+
     # ===== FINAL VERDICT =====
     L.append("-" * 78)
     L.append("FINAL VERDICT")
@@ -1200,6 +1466,9 @@ def generate_report(
 
     # Determine final verdict
     ci_significant = not bootstrap_ci.get("includes_zero", True)
+    perm_significant = permutation.get("significant_at_005", False) if permutation else False
+    # Signal must pass BOTH bootstrap CI and permutation test
+    statistically_significant = ci_significant and perm_significant
     cross_adds_value = np.isfinite(e_disc) and np.isfinite(f_disc) and e_disc > f_disc + 0.02
 
     if data_source == "SYNTHETIC":
@@ -1209,7 +1478,7 @@ def generate_report(
         L.append(f"  DEPLOYMENT: {deployment_mode}")
         L.append("  The investigation framework is validated and ready.")
         L.append("  Re-run with real Holly data to obtain actionable conclusions.")
-    elif not ci_significant:
+    elif not statistically_significant:
         final_verdict = "DEAD -- discrimination not significant"
         deployment_mode = "KILL"
         L.append(f"  VERDICT: {final_verdict}")
@@ -1297,7 +1566,7 @@ def main():
     print("=" * 60)
 
     # 1. Load
-    print("\n[1/10] Loading trade data...")
+    print("\n[1/13] Loading trade data...")
     df, DATA_SOURCE = load_trades()
     print(f"  *** DATA SOURCE: {DATA_SOURCE} ***")
     if DATA_SOURCE == "SYNTHETIC":
@@ -1316,50 +1585,64 @@ def main():
           f"{df['sector'].nunique()} sectors | {df['direction'].nunique()} directions")
 
     # 2. Compute signal
-    print("\n[2/10] Computing strat_sector_prior_wr (no look-ahead)...")
+    print("\n[2/13] Computing strat_sector_prior_wr (no look-ahead)...")
     df = compute_strat_sector_prior_wr(df)
 
     # 3. Decay map
-    print("\n[3/10] Building cell-level decay map...")
+    print("\n[3/13] Building cell-level decay map...")
     decay_map = build_cell_decay_map(df)
 
     # 4. Sign agreement
-    print("\n[4/10] Analyzing sign agreement...")
+    print("\n[4/13] Analyzing sign agreement...")
     sign_map = analyze_sign_agreement(decay_map)
 
     # 5. Change-points
-    print("\n[5/10] Running change-point detection...")
+    print("\n[5/13] Running change-point detection...")
     cp_df = detect_changepoints(df)
 
     # 6. Policy evaluation
-    print("\n[6/10] Evaluating 6 deployment policies (walk-forward OOS)...")
+    print("\n[6/13] Evaluating 6 deployment policies (walk-forward OOS)...")
     policies = evaluate_deployment_policies(df, decay_map)
 
     # 7. Threshold sensitivity
-    print("\n[7/10] Stress-testing thresholds...")
+    print("\n[7/13] Stress-testing thresholds...")
     threshold_sens = stress_test_thresholds(df)
 
     # 8. Stability
-    print("\n[8/10] Analyzing stability decompositions...")
+    print("\n[8/13] Analyzing stability decompositions...")
     stability = analyze_stability(df, decay_map)
 
     # 9. Bootstrap CI
     if args.skip_bootstrap:
-        print("\n[9/10] Skipping bootstrap CI...")
+        print("\n[9/13] Skipping bootstrap CI...")
         boot_ci = {"ci_lower": np.nan, "ci_upper": np.nan, "mean": np.nan,
                    "includes_zero": True, "n_boot": 0}
     else:
-        print("\n[9/10] Computing bootstrap CI (1000 resamples)...")
+        print("\n[9/13] Computing bootstrap CI (1000 resamples)...")
         boot_ci = bootstrap_discrimination_ci(df, decay_map)
 
-    # 10. Survivor/kill tables
-    print("\n[10/10] Building survivor and kill tables...")
+    # 10. Permutation test
+    if args.skip_bootstrap:
+        print("\n[10/13] Skipping permutation test...")
+        perm_result = None
+    else:
+        print("\n[10/13] Running permutation test (1000 permutations)...")
+        perm_result = permutation_test_discrimination(df, decay_map)
+
+    # 11. Information Coefficient
+    print("\n[11/13] Computing Information Coefficient...")
+    ic_result = compute_information_coefficient(df)
+
+    # 12. Survivor/kill tables (with FDR correction)
+    print("\n[12/13] Building survivor and kill tables...")
     survivors, kills = build_survivor_kill_tables(decay_map, sign_map, cp_df)
 
-    # Generate report
+    # 13. Generate report
+    print("\n[13/13] Generating report...")
     report = generate_report(
         df, decay_map, sign_map, cp_df, policies, survivors, kills,
         threshold_sens, stability, boot_ci, DATA_SOURCE,
+        permutation=perm_result, ic_results=ic_result,
     )
     print("\n")
     print(report)
@@ -1404,6 +1687,8 @@ def main():
             "threshold_sensitivity": threshold_sens.to_dict("records"),
             "stability": stability,
             "bootstrap_ci": boot_ci,
+            "permutation_test": perm_result if perm_result else {},
+            "information_coefficient": ic_result,
             "survivors": survivors[["strategy", "sector", "direction", "shrunk_wr", "trail_3m_wr"]].head(30).to_dict("records") if len(survivors) > 0 else [],
             "kills": kills[["strategy", "sector", "direction", "trail_3m_wr"]].head(30).to_dict("records") if len(kills) > 0 else [],
         }
