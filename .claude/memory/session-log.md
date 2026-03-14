@@ -335,3 +335,32 @@
 - **Consensus ratings endpoint:** requires ticker in path (`/benzinga/v1/consensus-ratings/{ticker}`), not bulk — works fine per-ticker
 - **Commits:** befc589 (script 97), b372f70 (script 98) — both pushed to claude/naughty-satoshi
 - Next: all accessible API data has been hoarded. Remaining work is analysis/modeling only.
+
+## 2026-03-12 — worktree (naughty-satoshi) — SSP overlay + adversarial validation + workbook v1
+
+- **Script 99 (shrunk sector overlay):** Hierarchical Bayes shrinkage for strategy-sector WR
+  - Shrinks cell -> strategy prior -> global prior (alpha = min_cell / (min_cell + cell_n))
+  - 96% coverage (vs 28% raw), Cohen's d = +0.352
+  - AQS v2+overlay spread: $2,318 vs baseline $1,449 (+60%)
+- **Script 100 (adversarial SSP test):** 5/5 PASS
+  - Permutation (p=0.005), walk-forward (5/5 folds positive), worst-regime (0/6 hurt)
+  - Parameter sensitivity (CV=0.05), bootstrap CI [$634, $1,299]
+- **Script 101 (workbook v1):** 6-sheet holly_analysis_lab.xlsx
+  - README, DATA_DICTIONARY, PRETRADE_FEATURES, STRATEGY_LAB, REGIME_LAB, SCORECARD
+  - 31 pretrade features ranked by |Cohen's d| with OOS validation
+  - 152 strategy-direction combos with Bayesian WR and temporal stability
+  - Tier 1: ssp_delta (d=+0.647), ssp_bonus (d=+0.598) — only real signals
+  - Tier 2: market_cap (d=+0.103) — conditional
+  - Tier 3: 28 features classified as noise
+- **Key decision:** sector_prior_wr KILLED (sign flips by direction, dead in recent data). strat_sector_prior_wr PROMOTED as SSP overlay.
+- **PR #419 squash-merged to main** — 59 files, 27,664 lines added
+- Next: documentation update (SCRIPTS_MANIFEST, ANALYTICS-PIPELINE, README, architecture)
+
+## 2026-03-13 — worktree (naughty-satoshi) — Documentation overhaul
+
+- Audited all project documentation: 53 files, identified critical gaps post-analytics-merge
+- Created `docs/ANALYTICS-PIPELINE.md`: end-to-end flow diagram, data sources, key findings, SSP methodology
+- Updated `docs/02-ARCHITECTURE.md`: new Section 7 covering Holly pipeline, DuckDB, SSP overlay, workbook
+- Updated `README.md`: new Analytics Pipeline section with phase breakdown, key outputs, key findings
+- Created `analytics/holly_exit/SCRIPTS_MANIFEST.md`: full table of all 122 scripts
+- All docs now reflect the post-merge state (scripts 45-101, SSP overlay, workbook)
