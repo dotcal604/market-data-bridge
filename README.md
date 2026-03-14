@@ -254,6 +254,24 @@ curl "http://localhost:3000/api/search?q=Apple"
 | `IBKR_CLIENT_ID` | `0` | API client ID |
 | `REST_PORT` | `3000` | REST API port |
 
+## Analytics Pipeline (Holly Exit Optimizer)
+
+Offline Python research pipeline analyzing 28,875 Holly AI trades. 122 scripts across 3 phases:
+
+- **Phase A** (01-44): Data ingest — trades, Polygon bars, reference data, Benzinga news, FRED macro, SEC filings
+- **Phase B** (45-78): Feature engineering — lift analysis, composite edge scores (v1-v7), GBT models
+- **Phase C** (79-101): Research — modern-era composites (v8-v15), SSP overlay, adversarial validation, analytical workbook
+
+**Key outputs:**
+- `analytics/holly_exit/data/duckdb/holly.ddb` — 89-table Bronze DuckDB (2.31 GB reference data)
+- `analytics/holly_exit/output/holly_analysis_lab.xlsx` — 6-sheet analytical workbook (feature ranking, strategy lab, regime heatmaps, scorecard)
+
+**Key finding:** Strategy-sector prior win rate (hierarchical Bayes shrinkage) is the only Tier 1 signal (Cohen's d = +0.647, adversarially validated 5/5 tests). All Benzinga news counting features are noise.
+
+See [`docs/ANALYTICS-PIPELINE.md`](docs/ANALYTICS-PIPELINE.md) for full architecture and data flow.
+
+---
+
 ## Troubleshooting
 
 | Problem | Fix |

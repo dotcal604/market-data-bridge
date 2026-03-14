@@ -95,12 +95,32 @@ Main UX surfaces:
 
 ---
 
-## 7) Analytics scripts (Python)
+## 7) Analytics pipeline (Python)
 
-Offline analytics workflows are used for:
+### Eval engine analytics (`analytics/`, `scripts/`)
 - Weight recalibration after sufficient labeled outcomes
-- Drift analysis support
+- Drift analysis and statistical probability engine
 - Export-driven research loops
+
+### Holly Exit Optimizer (`analytics/holly_exit/`)
+
+122-script research pipeline analyzing 28,875 Holly AI trades across 89 DuckDB tables.
+
+```
+Phase A (01-44): Ingest trades, fetch bars/reference/news/macro, build Bronze layer
+Phase B (45-78): Feature engineering, lift analysis, composite edge scores v1-v7, GBT models
+Phase C (79-101): Modern-era composites v8-v15, SSP overlay, adversarial validation, workbook
+```
+
+**Key components:**
+- **DuckDB Bronze** (`analytics/holly_exit/data/duckdb/holly.ddb`): 89 tables, 2.31 GB reference data
+- **Silver layer** (`data/silver/holly_trades.duckdb`): 250+ columns, canonical analytics table
+- **SSP overlay** (script 99): Hierarchical Bayes shrinkage on strategy-sector win rate — only Tier 1 signal (d=+0.647***)
+- **Workbook** (script 101): 6-sheet analytical Excel workbook with feature ranking, strategy lab, regime heatmaps
+
+Data sources: Polygon (bars, indicators, reference), Benzinga (2.7M news articles, ratings), FRED (macro), SEC (filings), Massive.com (shorts).
+
+See `docs/ANALYTICS-PIPELINE.md` for full architecture and data flow.
 
 These scripts are intentionally offline so production scoring remains deterministic and fast during trading sessions.
 
