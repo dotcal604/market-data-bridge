@@ -1,0 +1,69 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#10b981'}}}%%
+flowchart TB
+    subgraph Input["Evaluation Input"]
+        Symbol["Symbol + Direction"]
+        Quote["Live Quote Data"]
+        History["Historical Bars"]
+    end
+
+    subgraph Guardrails["Pre-flight Guardrails"]
+        Prefilter["prefilter.ts<br/><i>Spread, Volume,<br/>Market Cap checks</i>"]
+    end
+
+    subgraph Features["Feature Extraction (30+)"]
+        direction LR
+        Gap["Gap %"]
+        RSI["RSI"]
+        RVOL["Rel Volume"]
+        ATR["ATR"]
+        VWAP["VWAP"]
+        Stoch["Stochastic"]
+        VolRegime["Vol Regime"]
+        MktAlign["Market Alignment"]
+        OBI["Order Book<br/>Imbalance"]
+        TickVel["Tick Velocity"]
+        FloatRot["Float Rotation"]
+        Spread["Spread Quality"]
+        More["... 18 more"]
+    end
+
+    subgraph Models["3-Model Ensemble"]
+        direction LR
+        ClaudeM["Claude<br/><i>claude.ts</i>"]
+        GPTM["GPT<br/><i>openai.ts</i>"]
+        GeminiM["Gemini<br/><i>gemini.ts</i>"]
+    end
+
+    subgraph Scoring["Consensus Scoring"]
+        Weights["Dynamic Weights<br/><i>weights.ts</i><br/>Hot-reloadable"]
+        Scorer["Ensemble Scorer<br/><i>scorer.ts</i>"]
+        Reasoning["Reasoning Extractor<br/><i>extractor.ts</i>"]
+    end
+
+    subgraph Output["Output"]
+        Score["Consensus Score<br/><i>1-10 with confidence</i>"]
+        Drift["Drift Detection<br/><i>drift.ts</i>"]
+        Bayesian["Bayesian Updater<br/><i>Auto-recalibration</i>"]
+    end
+
+    Symbol --> Prefilter
+    Quote --> Prefilter
+    History --> Prefilter
+
+    Prefilter -->|"Pass"| Features
+    Prefilter -->|"Reject"| Reject["Rejected<br/><i>with reason</i>"]
+
+    Features --> ClaudeM
+    Features --> GPTM
+    Features --> GeminiM
+
+    ClaudeM --> Scorer
+    GPTM --> Scorer
+    GeminiM --> Scorer
+    Weights --> Scorer
+    Scorer --> Reasoning
+
+    Reasoning --> Score
+    Score --> Drift
+    Score --> Bayesian
+    Bayesian -->|"Update"| Weights

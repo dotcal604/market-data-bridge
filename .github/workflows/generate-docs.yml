@@ -1,0 +1,83 @@
+# ──────────────────────────────────────────────────────────────────────────
+# generate-docs.yml — Auto-generate and deploy documentation to GitHub Pages
+#
+# Triggers:
+#   - Push to main branch
+#   - Manual workflow dispatch
+#
+# Pipeline:
+#   1. Install dependencies (root, frontend, docs-site)
+#   2. Run generate-docs.mjs (TypeDoc + Mermaid + Puppeteer + Docusaurus build)
+#   3. Deploy docs-site/build/ to GitHub Pages
+# ──────────────────────────────────────────────────────────────────────────
+
+name: Generate & Deploy Docs
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Grant GITHUB_TOKEN permissions needed for Pages deployment
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only allow one deployment at a time
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  generate-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      # ── Checkout ──────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── Node.js Setup ─────────────────────────────────────────────────
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # ── Install Dependencies ──────────────────────────────────────────
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install frontend dependencies
+        run: cd frontend && npm ci
+
+      - name: Install docs-site dependencies
+        run: cd docs-site && npm ci
+
+      # ── Install Puppeteer Chrome ──────────────────────────────────────
+      # Puppeteer needs a browser binary for screenshot capture.
+      - name: Install Chrome for Puppeteer
+        run: npx puppeteer browsers install chrome
+
+      # ── Generate Documentation ────────────────────────────────────────
+      # Runs the full pipeline: TypeDoc + Mermaid + Puppeteer + Docusaurus build.
+      # Each step is independent — failures are logged but don't block others.
+      - name: Generate documentation
+        run: node scripts/generate-docs.mjs
+
+      # ── Deploy to GitHub Pages ────────────────────────────────────────
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs-site/build
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,48 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#10b981'}}}%%
+flowchart LR
+    subgraph Sources["Data Sources"]
+        YahooAPI["Yahoo Finance API"]
+        IBKRTWS["IBKR TWS/Gateway"]
+        TradeIdeas["Trade Ideas (CSV)"]
+    end
+
+    subgraph Providers["Provider Layer"]
+        YP["yahoo.ts<br/><i>Quotes, History,<br/>Screeners, Options</i>"]
+        IP["ibkr/marketdata.ts<br/><i>Real-time Ticks,<br/>Snapshots</i>"]
+        HP["holly/watcher.ts<br/><i>File Polling</i>"]
+    end
+
+    subgraph Routing["Smart Routing"]
+        Router["get_quote Tool<br/><i>Auto-routes based on<br/>IBKR connection status</i>"]
+    end
+
+    subgraph Storage["Persistence"]
+        SQLite["SQLite DB<br/><i>Orders, Evals,<br/>Journal, Sessions</i>"]
+        EvStore["Event Store<br/><i>Append-only Log</i>"]
+    end
+
+    subgraph Consumers["Consumers"]
+        MCPTool["MCP Tools<br/><i>56 tools</i>"]
+        RESTEnd["REST Endpoints"]
+        EvalEng["Eval Engine<br/><i>Feature Extraction</i>"]
+        DivoomDisp["Divoom Display<br/><i>Widget Rendering</i>"]
+        WSFeed["WebSocket Feed<br/><i>Real-time Updates</i>"]
+    end
+
+    YahooAPI --> YP
+    IBKRTWS --> IP
+    TradeIdeas --> HP
+
+    YP --> Router
+    IP --> Router
+
+    Router --> MCPTool
+    Router --> RESTEnd
+    Router --> EvalEng
+    Router --> DivoomDisp
+    Router --> WSFeed
+
+    HP --> SQLite
+    MCPTool --> SQLite
+    RESTEnd --> SQLite
+    SQLite --> EvStore

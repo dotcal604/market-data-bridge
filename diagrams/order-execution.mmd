@@ -1,0 +1,48 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#10b981'}}}%%
+sequenceDiagram
+    participant User as AI Client
+    participant MCP as MCP Server
+    participant Val as Validation Layer
+    participant Risk as Risk Gate
+    participant IBKR as IBKR Orders
+    participant TWS as TWS/Gateway
+    participant DB as SQLite DB
+
+    User->>MCP: place_advanced_bracket<br/>(symbol, qty, entry, TP, SL)
+
+    MCP->>Val: Validate order params
+    Val->>Val: Check contract details
+    Val->>Val: Verify order type & limits
+
+    Val->>Risk: Check session state
+    Risk->>Risk: Verify session unlocked
+    Risk->>Risk: Check daily loss limit
+    Risk->>Risk: Validate position size
+
+    alt Session Locked
+        Risk-->>MCP: Reject (session locked)
+        MCP-->>User: Error: Session locked
+    end
+
+    Risk->>IBKR: Submit bracket order
+    IBKR->>TWS: Place parent order
+    TWS-->>IBKR: Order ID assigned
+    IBKR->>DB: Record order
+
+    TWS-->>IBKR: Parent FILLED
+    IBKR->>TWS: Attach TP order (LMT)
+    IBKR->>TWS: Attach SL order (STP)
+    IBKR->>DB: Update fill record
+
+    alt Take Profit Hit
+        TWS-->>IBKR: TP FILLED
+        IBKR->>DB: Record P&L
+        IBKR->>Risk: Update session P&L
+    else Stop Loss Hit
+        TWS-->>IBKR: SL FILLED
+        IBKR->>DB: Record P&L
+        IBKR->>Risk: Update session P&L
+    end
+
+    IBKR-->>MCP: Order result
+    MCP-->>User: Execution summary

@@ -1,0 +1,68 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#10b981', 'edgeLabelBackground': '#f0fdf4'}}}%%
+graph TB
+    subgraph Clients["AI Clients"]
+        Claude["Claude Desktop / Claude Code"]
+        ChatGPT["ChatGPT Actions"]
+        Browser["Web Browser"]
+    end
+
+    subgraph Server["Market Data Bridge (Node.js)"]
+        MCP["MCP Server<br/><i>stdio + HTTP transport</i><br/>src/mcp/server.ts"]
+        REST["REST API<br/><i>Express + OpenAPI</i><br/>src/rest/server.ts"]
+        WS["WebSocket Server<br/>src/ws/"]
+
+        subgraph Core["Core Systems"]
+            Config["Config & Logging<br/>src/config.ts"]
+            Scheduler["Scheduler<br/><i>Cron, Flatten, Reconcile</i><br/>src/scheduler.ts"]
+            Orchestrator["Orchestrator<br/>src/orchestrator.ts"]
+        end
+
+        subgraph Data["Data Layer"]
+            IBKR["IBKR Integration<br/><i>TWS/Gateway Socket</i><br/>src/ibkr/"]
+            Yahoo["Yahoo Finance<br/><i>Quotes, History, Screeners</i><br/>src/providers/yahoo.ts"]
+            DB["SQLite Database<br/>src/db/"]
+        end
+
+        subgraph Intelligence["Intelligence Layer"]
+            Eval["Eval Engine<br/><i>30+ Features, 3 Models</i><br/>src/eval/"]
+            Holly["Holly Trade Ideas<br/><i>CSV Alert Parsing</i><br/>src/holly/"]
+            Risk["Risk Gate<br/><i>Session Guardrails</i><br/>src/ibkr/risk-gate.ts"]
+        end
+
+        subgraph Display["Display & Analytics"]
+            Divoom["Divoom LED Display<br/><i>Widget Engine, Charts</i><br/>src/divoom/"]
+            Ops["Ops Monitoring<br/><i>Prometheus, Health Checks</i><br/>src/ops/"]
+        end
+    end
+
+    subgraph External["External Services"]
+        TWS["Interactive Brokers<br/>TWS / Gateway"]
+        YahooAPI["Yahoo Finance API"]
+        ClaudeAPI["Anthropic Claude API"]
+        OpenAI["OpenAI GPT API"]
+        GeminiAPI["Google Gemini API"]
+        Sentry["Sentry Error Tracking"]
+    end
+
+    subgraph Frontend["Frontend (Next.js 16)"]
+        Dashboard["Dashboard<br/>React 19 + shadcn/ui"]
+    end
+
+    Claude -->|"MCP stdio"| MCP
+    ChatGPT -->|"REST + OpenAPI"| REST
+    Browser --> Dashboard
+    Dashboard -->|"HTTP API"| REST
+    Dashboard -->|"Real-time"| WS
+
+    MCP --> Core
+    REST --> Core
+    Core --> Data
+    Core --> Intelligence
+    Core --> Display
+
+    IBKR -->|"Socket"| TWS
+    Yahoo --> YahooAPI
+    Eval -->|"Claude"| ClaudeAPI
+    Eval -->|"GPT"| OpenAI
+    Eval -->|"Gemini"| GeminiAPI
+    Ops --> Sentry

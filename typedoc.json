@@ -1,0 +1,18 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPointStrategy": "expand",
+  "entryPoints": ["src"],
+  "tsconfig": "./tsconfig.json",
+  "out": "docs-site/docs/api",
+  "plugin": ["typedoc-plugin-markdown"],
+  "exclude": ["**/__tests__/**", "**/*.test.ts", "**/probe-*.ts", "**/poc-*.ts"],
+  "excludePrivate": true,
+  "excludeInternal": true,
+  "categorizeByGroup": true,
+  "readme": "none",
+  "name": "Market Data Bridge API",
+  "outputFileStrategy": "modules",
+  "hidePageHeader": false,
+  "hideBreadcrumbs": false,
+  "useCodeBlocks": true
+}

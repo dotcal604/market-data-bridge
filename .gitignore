@@ -82,3 +82,11 @@ data/silver/
 # Power BI data files (binary, too large for git)
 powerbi/*.xlsx
 best_practices.md
+
+# Docusaurus generated output
+docs-site/build/
+docs-site/.docusaurus/
+docs-site/node_modules/
+docs-site/docs/api/
+docs-site/static/diagrams/
+docs-site/static/previews/
