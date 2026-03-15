@@ -1,0 +1,9 @@
+File,Source Branch,Action,Reason,Source of Truth,Maintenance Cost,Risk if Merged,Risk if Deferred
+scripts/generate-docs.mjs,docs-automation-mvp,merge with fixes,"Core value: MCP extraction + OpenAPI + architecture embed. Remove guide page generation and custom markdown parser to minimize scope.",src/mcp/server.ts + openapi-chatgpt.json + architecture-diagram.html,Low (single script),Low — proven to work,High — no docs automation at all
+.github/workflows/docs.yml,docs-automation-mvp,merge with fixes,"Add setup-node and configure-pages steps",n/a,Very low,Low,Medium — no deployment
+.gitignore (3 lines),docs-automation-mvp,merge as-is,Correct entries for docs-site/ output,n/a,Zero,None,None
+package.json (+1 line),docs-automation-mvp,merge as-is,"Adds docs:generate script",n/a,Zero,None,None
+docs/DOCS_AUTOMATION_PLAN.md,docs-automation-mvp,do not merge,"Planning artifact, not operational. Adds noise to docs/.",n/a,n/a,Stale planning doc in docs/,None
+Guide page generation (in generate-docs.mjs),docs-automation-mvp,defer,"Custom markdown parser drops 70 blockquotes and flattens 37 nested lists. Imperfect output not worth the 160-line parser maintenance.",docs/01-06*.md,Moderate (parser bugs),Visible rendering errors in guide pages,Low — guides exist as raw markdown in repo
+Guide page CSS/HTML templates (in generate-docs.mjs),docs-automation-mvp,trim,"Remove ~200 lines of guide-specific templates and CSS if guide pages are deferred",n/a,n/a,n/a,n/a
+All Branch A files,automate-docs-generation,do not merge,"Wrong tools for the job. TypeDoc doesn't extract MCP tools. 25K lines for docs that miss the primary use cases.",n/a,High,TypeDoc noise deployed as API docs,None
