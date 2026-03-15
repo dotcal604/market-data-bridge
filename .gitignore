@@ -36,6 +36,9 @@ analytics/holly_tearsheets/output/
 __pycache__/
 *.pyc
 
+# Generated docs site (built by scripts/generate-docs.mjs)
+docs-site/
+
 # Recent Build Artifacts & Logs
 deploy/
 logs/

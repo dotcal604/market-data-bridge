@@ -33,6 +33,7 @@
     "ops:backup": "node scripts/db-backup.mjs",
     "ops:backup:prune": "node scripts/db-backup.mjs --prune 7",
     "ops:deploy": "bash scripts/deploy.sh",
+    "docs:generate": "node scripts/generate-docs.mjs",
     "generate:schema": "node scripts/generate-python-schema.mjs",
     "tray": "npm start --prefix tray-app",
     "tray:install": "npm install --prefix tray-app"

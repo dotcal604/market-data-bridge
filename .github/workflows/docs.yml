@@ -1,0 +1,57 @@
+# Docs generation and GitHub Pages deployment.
+# Generates docs from source (MCP tools, OpenAPI spec, guide markdown)
+# and deploys to GitHub Pages.
+#
+# Trigger: push to main, or manual dispatch.
+# Output: static site at https://<owner>.github.io/market-data-bridge/
+
+name: Deploy Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/mcp/server.ts"
+      - "src/rest/agent.ts"
+      - "openapi-chatgpt.json"
+      - "docs/**"
+      - "architecture-diagram.html"
+      - "scripts/generate-docs.mjs"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+# Allow only one concurrent deployment
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate docs site
+        run: node scripts/generate-docs.mjs
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs-site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
