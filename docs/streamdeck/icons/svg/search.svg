@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 144 144" width="144" height="144">
+  <!-- MDB StreamDeck icon: search (market) -->
+  <rect width="144" height="144" rx="16" fill="#1e293b"/>
+  <rect y="0" width="144" height="5" rx="2.5" fill="#64748b"/>
+  <circle cx="64" cy="64" r="18" fill="none" stroke="#e2e8f0" stroke-width="4"/>
+           <line x1="77" y1="77" x2="100" y2="100" stroke="#e2e8f0" stroke-width="4" stroke-linecap="round"/>
+</svg>

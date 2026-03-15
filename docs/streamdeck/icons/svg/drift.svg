@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 144 144" width="144" height="144">
+  <!-- MDB StreamDeck icon: drift (eval) -->
+  <rect width="144" height="144" rx="16" fill="#1e293b"/>
+  <rect y="0" width="144" height="5" rx="2.5" fill="#8b5cf6"/>
+  <path d="M36,72 Q52,48 72,72 Q92,96 108,72" fill="none" stroke="#e2e8f0" stroke-width="4" stroke-linecap="round"/>
+           <path d="M36,72 Q52,96 72,72 Q92,48 108,72" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="4,4" stroke-linecap="round"/>
+</svg>

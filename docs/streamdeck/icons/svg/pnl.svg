@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 144 144" width="144" height="144">
+  <!-- MDB StreamDeck icon: pnl (portfolio) -->
+  <rect width="144" height="144" rx="16" fill="#1e293b"/>
+  <rect y="0" width="144" height="5" rx="2.5" fill="#f59e0b"/>
+  <rect x="48" y="80" width="12" height="16" rx="2" fill="#e2e8f0" opacity="0.5"/>
+           <rect x="66" y="60" width="12" height="36" rx="2" fill="#e2e8f0" opacity="0.7"/>
+           <rect x="84" y="48" width="12" height="48" rx="2" fill="#e2e8f0"/>
+</svg>

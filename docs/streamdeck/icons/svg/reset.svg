@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 144 144" width="144" height="144">
+  <!-- MDB StreamDeck icon: reset (orders) -->
+  <rect width="144" height="144" rx="16" fill="#1e293b"/>
+  <rect y="0" width="144" height="5" rx="2.5" fill="#ef4444"/>
+  <path d="M96,72 A24,24 0 1 1 72,48" fill="none" stroke="#e2e8f0" stroke-width="4" stroke-linecap="round"/>
+           <polyline points="72,36 72,52 86,52" fill="none" stroke="#e2e8f0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

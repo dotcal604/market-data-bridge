@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 144 144" width="144" height="144">
+  <!-- MDB StreamDeck icon: tradersync (eval) -->
+  <rect width="144" height="144" rx="16" fill="#1e293b"/>
+  <rect y="0" width="144" height="5" rx="2.5" fill="#8b5cf6"/>
+  <path d="M48,72 A24,24 0 0 1 96,72" fill="none" stroke="#e2e8f0" stroke-width="4"/>
+           <path d="M48,72 A24,24 0 0 0 96,72" fill="none" stroke="#94a3b8" stroke-width="4" stroke-dasharray="6,4"/>
+           <circle cx="72" cy="72" r="4" fill="#e2e8f0"/>
+</svg>

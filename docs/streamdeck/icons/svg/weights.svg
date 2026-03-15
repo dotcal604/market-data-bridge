@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 144 144" width="144" height="144">
+  <!-- MDB StreamDeck icon: weights (eval) -->
+  <rect width="144" height="144" rx="16" fill="#1e293b"/>
+  <rect y="0" width="144" height="5" rx="2.5" fill="#8b5cf6"/>
+  <line x1="72" y1="40" x2="72" y2="52" stroke="#e2e8f0" stroke-width="4" stroke-linecap="round"/>
+           <line x1="48" y1="64" x2="96" y2="64" stroke="#e2e8f0" stroke-width="4" stroke-linecap="round"/>
+           <circle cx="48" cy="80" r="10" fill="none" stroke="#e2e8f0" stroke-width="3"/>
+           <circle cx="96" cy="80" r="10" fill="none" stroke="#e2e8f0" stroke-width="3"/>
+</svg>

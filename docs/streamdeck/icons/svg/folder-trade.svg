@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 144 144" width="144" height="144">
+  <!-- MDB StreamDeck icon: folder-trade (nav) -->
+  <rect width="144" height="144" rx="16" fill="#1e293b"/>
+  <rect y="0" width="144" height="5" rx="2.5" fill="#94a3b8"/>
+  <path d="M40,56 L40,96 L104,96 L104,56 L76,56 L72,48 L40,48 Z" fill="none" stroke="#e2e8f0" stroke-width="4" stroke-linejoin="round"/>
+           <line x1="64" y1="68" x2="80" y2="68" stroke="#ef4444" stroke-width="4" stroke-linecap="round"/>
+           <line x1="72" y1="60" x2="72" y2="76" stroke="#ef4444" stroke-width="4" stroke-linecap="round"/>
+</svg>

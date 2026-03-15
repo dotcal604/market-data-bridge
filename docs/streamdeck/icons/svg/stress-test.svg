@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 144 144" width="144" height="144">
+  <!-- MDB StreamDeck icon: stress-test (portfolio) -->
+  <rect width="144" height="144" rx="16" fill="#1e293b"/>
+  <rect y="0" width="144" height="5" rx="2.5" fill="#f59e0b"/>
+  <polyline points="40,48 56,80 72,56 88,88 104,52" fill="none" stroke="#e2e8f0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+           <line x1="40" y1="96" x2="104" y2="96" stroke="#e2e8f0" stroke-width="2" stroke-dasharray="4,4"/>
+</svg>

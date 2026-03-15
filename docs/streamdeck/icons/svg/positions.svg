@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 144 144" width="144" height="144">
+  <!-- MDB StreamDeck icon: positions (portfolio) -->
+  <rect width="144" height="144" rx="16" fill="#1e293b"/>
+  <rect y="0" width="144" height="5" rx="2.5" fill="#f59e0b"/>
+  <rect x="44" y="48" width="24" height="20" rx="3" fill="none" stroke="#e2e8f0" stroke-width="3"/>
+           <rect x="76" y="48" width="24" height="20" rx="3" fill="none" stroke="#e2e8f0" stroke-width="3"/>
+           <rect x="44" y="76" width="24" height="20" rx="3" fill="none" stroke="#e2e8f0" stroke-width="3"/>
+           <rect x="76" y="76" width="24" height="20" rx="3" fill="none" stroke="#e2e8f0" stroke-width="3"/>
+</svg>

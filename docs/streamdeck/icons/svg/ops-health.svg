@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 144 144" width="144" height="144">
+  <!-- MDB StreamDeck icon: ops-health (connection) -->
+  <rect width="144" height="144" rx="16" fill="#1e293b"/>
+  <rect y="0" width="144" height="5" rx="2.5" fill="#10b981"/>
+  <rect x="44" y="44" width="56" height="56" rx="6" fill="none" stroke="#e2e8f0" stroke-width="4"/>
+           <line x1="72" y1="56" x2="72" y2="72" stroke="#e2e8f0" stroke-width="4" stroke-linecap="round"/>
+           <line x1="72" y1="72" x2="84" y2="64" stroke="#e2e8f0" stroke-width="3" stroke-linecap="round"/>
+</svg>
