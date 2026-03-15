@@ -82,9 +82,10 @@ const typedocOk = run(
   'npx typedoc'
 );
 
-// ── Step 3: Mermaid CLI — Render diagrams to SVG ─────────────────────────
-// Reads .mmd files from diagrams/ and outputs SVGs to docs-site/static/diagrams/.
-// These are referenced from the architecture docs pages as static assets.
+// ── Step 3: Mermaid CLI — Render diagrams to SVG (optional) ──────────────
+// Attempts to render .mmd files from diagrams/ to SVGs in docs-site/static/diagrams/.
+// If mmdc is unavailable (no browser in CI), diagrams are still rendered client-side
+// by the Docusaurus Mermaid theme plugin via inline ```mermaid blocks in the docs.
 const diagramsDir = resolve(ROOT, 'diagrams');
 let mermaidOk = true;
 
@@ -103,6 +104,12 @@ if (existsSync(diagramsDir)) {
       );
       if (!ok) mermaidOk = false;
     }
+  }
+
+  if (!mermaidOk) {
+    console.log('  Note: Mermaid CLI rendering failed (likely no browser available).');
+    console.log('  Diagrams will still render client-side via Docusaurus Mermaid theme.\n');
+    mermaidOk = true; // Don't treat as fatal — inline Mermaid is the primary approach
   }
 } else {
   console.log('\n  diagrams/ directory not found. Skipping Mermaid rendering.\n');

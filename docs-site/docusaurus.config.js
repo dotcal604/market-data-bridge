@@ -16,7 +16,17 @@ const config = {
 
   // ── Build Settings ─────────────────────────────────────────────────────
   onBrokenLinks: 'warn',
-  onBrokenMarkdownLinks: 'warn',
+  onBrokenAnchors: 'warn',
+
+  markdown: {
+    // Use CommonMark format to avoid MDX parsing errors on angle brackets,
+    // generics, and JSX-like syntax in TypeDoc-generated API docs.
+    format: 'md',
+    mermaid: true,
+    hooks: {
+      onBrokenMarkdownImages: 'warn',
+    },
+  },
 
   i18n: {
     defaultLocale: 'en',
@@ -24,10 +34,7 @@ const config = {
   },
 
   // ── Mermaid Support ────────────────────────────────────────────────────
-  // Enables ```mermaid code blocks to render as diagrams inline.
-  markdown: {
-    mermaid: true,
-  },
+  // Enabled via markdown.mermaid above. Theme provides client-side rendering.
   themes: ['@docusaurus/theme-mermaid'],
 
   // ── Presets ────────────────────────────────────────────────────────────

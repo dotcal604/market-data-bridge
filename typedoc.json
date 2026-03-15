@@ -14,5 +14,6 @@
   "outputFileStrategy": "modules",
   "hidePageHeader": false,
   "hideBreadcrumbs": false,
-  "useCodeBlocks": true
+  "useCodeBlocks": true,
+  "sanitizeComments": true
 }

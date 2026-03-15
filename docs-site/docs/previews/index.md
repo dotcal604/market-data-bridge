@@ -7,48 +7,38 @@ title: Frontend Previews
 
 Auto-captured screenshots of the Market Data Bridge frontend dashboard (Next.js 16 + React 19 + shadcn/ui).
 
-:::info
-These screenshots are generated automatically by Puppeteer against the static Next.js export. They show the UI shell and layout — live data requires a running backend.
-:::
+> **Note:** Screenshots are generated automatically by running `npm run docs:generate`. If images are missing below, run the full pipeline with Puppeteer available: `node scripts/capture-ui.mjs`
 
-## Dashboard
+## Pages
 
-The main dashboard provides an at-a-glance view of market status, positions, and recent evaluations.
+The frontend includes 26+ pages organized by function:
 
-![Dashboard](/previews/dashboard.png)
+| Page | Route | Description |
+|------|-------|-------------|
+| Dashboard | `/` | At-a-glance market status, positions, recent evaluations |
+| Evaluations | `/evals` | Ensemble model results, consensus scores, drift indicators |
+| Orders | `/orders` | Active and completed orders with bracket visualization |
+| Account | `/account` | Positions, buying power, portfolio exposure |
+| Market Research | `/market` | Quote lookup, historical charts, options chains |
+| Trade Journal | `/journal` | Trade reasoning, outcome tracking, performance analytics |
+| Divoom Settings | `/divoom` | LED display widget layout and live preview |
+| Holly Analytics | `/holly` | Trade Ideas alert analysis and backtesting |
+| Screener | `/screener` | Market screener with real-time quotes |
+| Model Stats | `/model-stats` | Ensemble model performance statistics |
+| Drift Detection | `/drift` | Model drift monitoring and alerts |
+| Weight Tuning | `/weights` | Dynamic model weight management |
+| Session | `/session` | Risk guardrails and session controls |
 
-## Evaluations
+## Generating Screenshots
 
-The evaluations page displays ensemble model results with consensus scores, individual model ratings, and drift indicators.
+To capture fresh screenshots locally:
 
-![Evaluations](/previews/evals.png)
+```bash
+# Full pipeline (requires Chrome/Puppeteer)
+npm run docs:generate
 
-## Orders
+# Screenshots only
+node scripts/capture-ui.mjs
+```
 
-Active and completed orders with bracket visualization and P&L tracking.
-
-![Orders](/previews/orders.png)
-
-## Account
-
-Account summary showing positions, buying power, and portfolio exposure.
-
-![Account](/previews/account.png)
-
-## Market Research
-
-Quote lookup with historical charts, options chains, and financials.
-
-![Market](/previews/market.png)
-
-## Trade Journal
-
-Trade journal with reasoning tags, outcome tracking, and performance analytics.
-
-![Journal](/previews/journal.png)
-
-## Divoom Settings
-
-Divoom LED display configuration with widget layout management and live preview.
-
-![Divoom](/previews/divoom.png)
+Screenshots are saved to `docs-site/static/previews/` and embedded in this page automatically.
