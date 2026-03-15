@@ -1,0 +1,24 @@
+Branch,File Path,Purpose,Type,Necessary,Reuses Source of Truth,Red Flags
+automate-docs-generation,.github/workflows/generate-docs.yml,CI/CD: build and deploy docs to GitHub Pages,workflow,yes,n/a,"No path filtering — rebuilds on every push to main; installs Puppeteer Chrome in CI"
+automate-docs-generation,diagrams/data-flow.mmd,Mermaid diagram: data flow,docs content (new),maybe,"no — hand-written, not extracted from source","May go stale; not auto-generated"
+automate-docs-generation,diagrams/eval-engine.mmd,Mermaid diagram: eval engine,docs content (new),maybe,"no — hand-written, not extracted from source","May go stale; not auto-generated"
+automate-docs-generation,diagrams/order-execution.mmd,Mermaid diagram: order execution,docs content (new),maybe,"no — hand-written, not extracted from source","May go stale; not auto-generated"
+automate-docs-generation,diagrams/system-architecture.mmd,Mermaid diagram: system architecture,docs content (new),maybe,"no — hand-written, not extracted from source","Duplicates architecture-diagram.html; may go stale"
+automate-docs-generation,docs-site/docs/architecture/index.md,Architecture page with inline Mermaid diagrams,docs content (new),yes,"partially — embeds Mermaid but content is hand-written","280 lines of hand-written architecture prose; parallel to existing docs/02-ARCHITECTURE.md"
+automate-docs-generation,docs-site/docs/previews/index.md,UI preview table (no screenshots),docs content (new),no,"no — just a static table of page names","Low value; screenshots never captured in CI without Chrome"
+automate-docs-generation,docs-site/docusaurus.config.js,Docusaurus site configuration,config,yes,n/a,"Hardcoded org/repo URLs; onBrokenLinks set to 'warn' not 'throw'"
+automate-docs-generation,docs-site/package.json,Docusaurus dependencies,config,yes,n/a,"8 npm deps including React; heavy for docs"
+automate-docs-generation,docs-site/package-lock.json,Lockfile for Docusaurus,generated artifact,no,n/a,"19706 lines committed; should be generated in CI"
+automate-docs-generation,docs-site/sidebars.js,Docusaurus sidebar config,config,yes,n/a,"Does not reference guide pages; only API/Architecture/Previews"
+automate-docs-generation,docs-site/src/css/custom.css,Docusaurus custom styles,config,yes,n/a,Minimal — 25 lines
+automate-docs-generation,docs-site/src/pages/index.md,Landing page,docs content (new),yes,no — hand-written,"Generic; doesn't reflect repo identity strongly"
+automate-docs-generation,docs-site/static/img/.gitkeep,Placeholder for images,config,no,n/a,Empty placeholder
+automate-docs-generation,package.json (diff),Added devDeps: typedoc + mermaid-cli + puppeteer + typedoc-plugin-markdown; added scripts,config,yes,n/a,"4 new devDeps; +4540 lines to root package-lock.json"
+automate-docs-generation,scripts/capture-ui.mjs,Puppeteer frontend screenshot capture,script,no,"partially — captures actual frontend","Requires running frontend + Chrome; fragile in CI; 172 lines"
+automate-docs-generation,scripts/generate-docs.mjs,Orchestrator: runs TypeDoc + Mermaid + Puppeteer + Docusaurus,script,yes,n/a,"Thin orchestrator; delegates everything to tools"
+automate-docs-generation,typedoc.json,TypeDoc configuration for API docs,config,yes,"yes — points at src/","Generates raw TypeScript API docs; NOT MCP tool docs"
+docs-automation-mvp,.github/workflows/docs.yml,CI/CD: generate and deploy docs to GitHub Pages,workflow,yes,n/a,"Missing setup-node step; no npm ci needed (zero deps)"
+docs-automation-mvp,.gitignore (diff),Ignores docs-site/ output,config,yes,n/a,Clean
+docs-automation-mvp,docs/DOCS_AUTOMATION_PLAN.md,Architecture decision record,docs content (new),optional,n/a,"Planning doc in docs/; could live in .claude/memory/"
+docs-automation-mvp,package.json (diff),Added docs:generate script,config,yes,n/a,Single line addition
+docs-automation-mvp,scripts/generate-docs.mjs,"Zero-dep generator: MCP extraction + OpenAPI copy + guide conversion + architecture embed",script,yes,"yes — reads server.ts, openapi-chatgpt.json, docs/01-06*.md, architecture-diagram.html","943 lines; hardcoded /market-data-bridge/ base path; regex MCP extraction; custom markdown parser; ignores 28 Mintlify MDX files; hardcoded '135' action count"

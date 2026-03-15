@@ -1,0 +1,22 @@
+Branch,Validation Item,Result,Notes
+docs-automation-mvp,Script execution (node scripts/generate-docs.mjs),PASS,Zero errors; zero warnings; clean run
+docs-automation-mvp,MCP tool extraction count,PASS,"152 tools extracted, matches 152 server.tool() calls in source"
+docs-automation-mvp,MCP tool parameter extraction,PASS (partial),"Top-level Zod params extracted; nested z.object() and multi-line .describe() may be incomplete"
+docs-automation-mvp,OpenAPI spec copy,PASS,"openapi-chatgpt.json copied identically to docs-site/openapi.json; diff produces no output"
+docs-automation-mvp,Redoc API page rendering,CANNOT VALIDATE,"Requires browser to verify CDN-loaded Redoc renders correctly; page structure looks correct"
+docs-automation-mvp,Guide page conversion (01-06),PASS,"All 6 guide .md files converted to HTML; output sizes: 10-29KB each"
+docs-automation-mvp,Architecture diagram embed,PASS,"architecture-diagram.html copied to docs-site/architecture/diagram.html; iframe wrapper generated"
+docs-automation-mvp,Landing page generation,PASS,"index.html generated with nav cards pointing to all 4 sections"
+docs-automation-mvp,CSS generation,PASS,"style.css generated; 6,189 bytes; dark theme with responsive breakpoints"
+docs-automation-mvp,.nojekyll marker,PASS,Empty file created for GitHub Pages compatibility
+docs-automation-mvp,Total output files,PASS,14 files generated in docs-site/
+docs-automation-mvp,Output directory clean,FAIL,"No stale file cleanup — old files persist if guides are renamed or removed"
+docs-automation-mvp,Markdown parser fidelity,PARTIAL,"Handles headers/tables/code/bold/links/lists; missing nested lists, blockquotes, images, HTML passthrough"
+automate-docs-generation,Script execution (node scripts/generate-docs.mjs),CANNOT VALIDATE,"Requires npm ci for TypeDoc, Mermaid CLI, Puppeteer dependencies"
+automate-docs-generation,TypeDoc generation,CANNOT VALIDATE,"Requires typedoc + typedoc-plugin-markdown installed via npm ci"
+automate-docs-generation,Mermaid rendering,CANNOT VALIDATE,"Requires @mermaid-js/mermaid-cli + Chrome/Puppeteer"
+automate-docs-generation,Puppeteer screenshots,CANNOT VALIDATE,"Requires running frontend dev server + Chrome binary"
+automate-docs-generation,Docusaurus build,CLAIMED PASS,"Commit message says '184 HTML pages'; could not independently verify in this audit"
+automate-docs-generation,MCP tool documentation,FAIL,"TypeDoc generates TypeScript module docs, NOT MCP tool-level reference. Zero server.tool() extraction."
+automate-docs-generation,REST API documentation,FAIL,"No OpenAPI spec integration. No REST endpoint docs."
+automate-docs-generation,Guide content inclusion,FAIL,"docs/01-06*.md not included in Docusaurus site"
